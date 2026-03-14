@@ -1,6 +1,5 @@
-// app/components/lib/nav.ts
 import type { ComponentType, SVGProps } from "react";
-import { Home, Users, Compass, Bookmark, User } from "lucide-react";
+import { Home, Users, Compass, Bookmark, User, Info, Heart, X } from "lucide-react";
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 export type NavItem = {
@@ -18,3 +17,11 @@ export const navItems: NavItem[] = [
   { href: "/watchlist", label: "Watchlist",       short: "Watch",  icon: Bookmark, activeStartsWith: "/watchlist" },
   { href: "/profile",   label: "Profile",         short: "Profile",icon: User,     activeStartsWith: "/profile" },
 ];
+
+// Exporterar ikonerna så vi kan använda dem i ActionDock senare
+export const ActionIcons = {
+    Info,
+    Heart,
+    X,
+    Bookmark
+};

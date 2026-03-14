@@ -1,6 +1,6 @@
-// app/api/recs/unified/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { prisma } from "../../../../lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,33 +33,9 @@ type TMDBDetailsWithAppends = TMDBListItem & {
   keywords?: TMDBKeywords | TMDBKeywordsTV;
   credits?: TMDBCredits;
 };
-
-type TMDBWatchProviders = {
-  id: number;
-  results: Record<
-    string,
-    {
-      link?: string;
-      flatrate?: { provider_name: string; logo_path: string | null }[];
-      rent?: { provider_name: string; logo_path: string | null }[];
-      buy?: { provider_name: string; logo_path: string | null }[];
-    }
-  >;
-};
 /* -------------------------------------- */
 
 type FavoriteItem = { id: number; title: string; year?: string | number | null; poster?: string | null };
-type ProfileDTO = {
-  displayName: string | null;
-  uiLanguage: string;
-  region: string;
-  locale: string;
-  favoriteMovie: FavoriteItem | null;
-  favoriteShow: FavoriteItem | null;
-  favoriteGenres: string[];
-  dislikedGenres: string[];
-  providers: string[];
-};
 
 type UnifiedItem = {
   id: number;
@@ -69,6 +45,7 @@ type UnifiedItem = {
   poster_path?: string | null;
   vote_average?: number;
 };
+
 type UnifiedOk = {
   ok: true;
   mode: "group" | "individual";
@@ -80,14 +57,38 @@ type UnifiedOk = {
 };
 type UnifiedErr = { ok: false; message: string };
 
-function fail(message: string, status = 200) {
-  return NextResponse.json<UnifiedErr>({ ok: false, message }, { status });
+/* ---------- Provider Mapping ---------- */
+const PROVIDER_MAP: Record<string, number> = {
+  netflix: 8,
+  "prime video": 119,
+  "amazon prime video": 119,
+  "disney+": 337,
+  "apple tv+": 350,
+  "apple tv plus": 350,
+  viaplay: 73,
+  "svt play": 383,
+  hbo: 1899,
+  max: 1899,
+  "hbo max": 1899,
+  "tv4 play": 113,
+  "c more": 75,
+  "discovery+": 415,
+  skyshowtime: 1773,
+  "tele2 play": 323,
+};
+
+function getProviderIds(providerStrings: string[]): number[] {
+  const ids = new Set<number>();
+  for (const p of providerStrings) {
+    const normalized = p.toLowerCase().trim();
+    const id = PROVIDER_MAP[normalized];
+    if (id) ids.add(id);
+  }
+  return Array.from(ids);
 }
 
-function getCookieString(all: Map<string, string>): string {
-  const pairs: string[] = [];
-  all.forEach((v, k) => pairs.push(`${k}=${encodeURIComponent(v)}`));
-  return pairs.join("; ");
+function fail(message: string, status = 200) {
+  return NextResponse.json<UnifiedErr>({ ok: false, message }, { status });
 }
 
 /* ---------------- TMDB helpers ---------------- */
@@ -101,7 +102,9 @@ async function tmdbGet<T>(
   const v3 = process.env.TMDB_API_KEY;
 
   const usp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) usp.set(k, String(v));
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) usp.set(k, String(v));
+  }
   if (!v4 && v3) usp.set("api_key", v3);
 
   const url = `https://api.themoviedb.org/3${path}${usp.toString() ? `?${usp.toString()}` : ""}`;
@@ -113,17 +116,20 @@ async function tmdbGet<T>(
 function pickTitle(x: TMDBListItem): string {
   return (x.title || x.name || "Untitled").trim();
 }
+
 function yearFrom(item: TMDBListItem): string | undefined {
   const d = item.release_date || item.first_air_date;
   if (!d) return undefined;
   const y = d.slice(0, 4);
   return /^\d{4}$/.test(y) ? y : undefined;
 }
+
 function qualityScore(voteAvg?: number, voteCount?: number): number {
   if (!voteAvg || !voteCount) return 0;
   const s = Math.log10(voteCount + 1);
   return voteAvg * s;
 }
+
 function recencyBonus(year?: string): number {
   if (!year) return 0;
   const y = Number(year);
@@ -135,8 +141,10 @@ function recencyBonus(year?: string): number {
   if (diff <= 5) return 0.4;
   return 0.1;
 }
-function dedupe(items: { id: number; tmdbType: MediaType }[]) {
-  const seen = new Set<string>(), out: { id: number; tmdbType: MediaType }[] = [];
+
+function dedupe(items: { id: number; tmdbType: MediaType; item: TMDBListItem }[]) {
+  const seen = new Set<string>();
+  const out: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
   for (const it of items) {
     const k = `${it.tmdbType}_${it.id}`;
     if (seen.has(k)) continue;
@@ -149,9 +157,11 @@ function dedupe(items: { id: number; tmdbType: MediaType }[]) {
 /* ---------------- V2 taste model ---------------- */
 
 type Taste = { keywordW: Map<number, number>; peopleW: Map<number, number> };
+
 function increment(map: Map<number, number>, key: number, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
+
 function normalizeTopK(map: Map<number, number>, k: number) {
   const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, k);
   const max = entries[0]?.[1] ?? 1;
@@ -159,6 +169,7 @@ function normalizeTopK(map: Map<number, number>, k: number) {
   for (const [id, w] of entries) out.set(id, w / max);
   return out;
 }
+
 function extractKeywordIds(d: TMDBDetailsWithAppends): number[] {
   const kw = d.keywords;
   if (!kw) return [];
@@ -170,6 +181,7 @@ function extractKeywordIds(d: TMDBDetailsWithAppends): number[] {
       : [];
   return arr.map((x) => x.id).filter((id) => Number.isFinite(id));
 }
+
 function extractPeopleIds(d: TMDBDetailsWithAppends, type: MediaType): number[] {
   const c = d.credits;
   if (!c) return [];
@@ -177,10 +189,14 @@ function extractPeopleIds(d: TMDBDetailsWithAppends, type: MediaType): number[] 
   const cast = (c.cast ?? []).sort((a, b) => (a.order ?? 99) - (b.order ?? 99)).slice(0, 5);
   for (const m of cast) if (typeof m.id === "number") ids.push(m.id);
   const crew = c.crew ?? [];
-  if (type === "movie") for (const m of crew) if (m.job === "Director" && typeof m.id === "number") ids.push(m.id);
-  else for (const m of crew) if ((m.job === "Creator" || m.department === "Writing") && typeof m.id === "number") ids.push(m.id);
+  if (type === "movie") {
+    for (const m of crew) if (m.job === "Director" && typeof m.id === "number") ids.push(m.id);
+  } else {
+    for (const m of crew) if ((m.job === "Creator" || m.department === "Writing") && typeof m.id === "number") ids.push(m.id);
+  }
   return ids;
 }
+
 async function fetchFeatures(type: MediaType, id: number, locale: string) {
   const path = type === "movie" ? `/movie/${id}` : `/tv/${id}`;
   const primary = await tmdbGet<TMDBDetailsWithAppends>(path, { language: locale, append_to_response: "keywords,credits" }, "force-cache").catch(() => null);
@@ -191,6 +207,7 @@ async function fetchFeatures(type: MediaType, id: number, locale: string) {
   const fallback = await tmdbGet<TMDBDetailsWithAppends>(path, { language: "en-US", append_to_response: "keywords,credits" }, "force-cache");
   return { keywords: extractKeywordIds(fallback), people: extractPeopleIds(fallback, type) };
 }
+
 async function buildTaste(seeds: { id: number; type: MediaType }[], locale: string): Promise<Taste> {
   const keywordW = new Map<number, number>(), peopleW = new Map<number, number>();
   const feats = await Promise.all(seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({ keywords: [], people: [] }))));
@@ -222,48 +239,6 @@ function genreScore(
   return score;
 }
 
-/* ---------------- Providers (direkt TMDB) ---------------- */
-
-type Providers = {
-  link?: string;
-  flatrate?: { provider_name: string; logo_path: string | null }[];
-  rent?: { provider_name: string; logo_path: string | null }[];
-  buy?: { provider_name: string; logo_path: string | null }[];
-};
-
-async function fetchProvidersDirect(id: number, type: MediaType, region: string): Promise<Providers | null> {
-  const path = type === "movie" ? `/movie/${id}/watch/providers` : `/tv/${id}/watch/providers`;
-  const data = await tmdbGet<TMDBWatchProviders>(path, {}, "force-cache").catch(() => null);
-  if (!data) return null;
-  const regionData = data.results?.[region];
-  if (regionData) return regionData;
-  return data.results["US"] ?? null;
-}
-function providerNames(p: Providers | null): string[] {
-  const names = new Set<string>();
-  if (!p) return [];
-  for (const group of ["flatrate", "rent", "buy"] as const) {
-    for (const it of p[group] ?? []) if (it.provider_name) names.add(it.provider_name);
-  }
-  return Array.from(names);
-}
-
-/* ---------------- mapLimit (concurrency) ---------------- */
-
-async function mapLimit<T, U>(arr: T[], limit: number, fn: (t: T) => Promise<U>): Promise<U[]> {
-  const out = new Array<U>(arr.length);
-  let i = 0;
-  const runners = new Array(Math.min(limit, arr.length)).fill(0).map(async () => {
-    for (;;) {
-      const idx = i++;
-      if (idx >= arr.length) break;
-      out[idx] = await fn(arr[idx]);
-    }
-  });
-  await Promise.all(runners);
-  return out;
-}
-
 /* ---------------- Similarity (MMR) ---------------- */
 
 function jaccard(a: Set<number>, b: Set<number>): number {
@@ -279,24 +254,45 @@ function jaccard(a: Set<number>, b: Set<number>): number {
 export async function GET(req: Request) {
   try {
     const c = await cookies();
-    const cookieMap = new Map<string, string>();
-    for (const { name, value } of c.getAll()) cookieMap.set(name, value);
+    const uid = c.get("nw_uid")?.value;
+    const region = c.get("nw_region")?.value || "SE";
+    const locale = c.get("nw_locale")?.value || "sv-SE";
+    const groupCode = c.get("nw_group")?.value || null;
 
-    const region = cookieMap.get("nw_region") || "SE";
-    const locale = cookieMap.get("nw_locale") || "sv-SE";
-    const groupCode = cookieMap.get("nw_group") || null;
+    if (!uid) return fail("Ingen användare inloggad.", 401);
 
-    const cookieHeader = getCookieString(cookieMap);
+    // 1. Hämta data från databasen direkt via Prisma
+    const [profile, ratings, watchlist, groupMembers] = await Promise.all([
+      prisma.profile.findUnique({ where: { userId: uid } }),
+      prisma.rating.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
+      prisma.watchlist.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
+      groupCode 
+        ? prisma.groupMember.findMany({ where: { groupCode }, include: { user: { include: { profile: true } } } })
+        : Promise.resolve([])
+    ]);
 
-    // Profil
-    const profRes = await fetch(`${new URL(req.url).origin}/api/profile`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store",
-    });
-    if (!profRes.ok) return fail("Kunde inte läsa profil.");
-    const profJson = (await profRes.json()) as { ok: boolean; profile?: ProfileDTO };
-    if (!profJson.ok || !profJson.profile) return fail("Ingen profil.");
-    const profile = profJson.profile;
+    if (!profile) return fail("Ingen profil hittades.");
+
+    // 2. Extrahera och slå ihop providers (för solo eller grupp)
+    const providerStrings = new Set<string>();
+    if (groupCode && groupMembers.length > 0) {
+      // Om grupp: Samla ALLA tjänster som någon i gruppen har (OR-logik via TMDB)
+      for (const member of groupMembers) {
+        const pProviders = member.user.profile?.providers as string[] | undefined;
+        if (Array.isArray(pProviders)) pProviders.forEach(p => providerStrings.add(p));
+      }
+    } else {
+      const pProviders = profile.providers as string[] | undefined;
+      if (Array.isArray(pProviders)) pProviders.forEach(p => providerStrings.add(p));
+    }
+    
+    const usedProviderIds = getProviderIds(Array.from(providerStrings));
+    const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join('|') : undefined;
+
+    // Bygg WatchKeys (för att filtrera bort sedda)
+    const watchKeys = new Set<string>();
+    for (const r of ratings) watchKeys.add(`${r.mediaType}_${r.tmdbId}`);
+    for (const w of watchlist) watchKeys.add(`${w.mediaType}_${w.tmdbId}`);
 
     // Genres
     const [movieGenres, tvGenres] = await Promise.all([
@@ -308,64 +304,46 @@ export async function GET(req: Request) {
     const likedGenres = new Set(profile.favoriteGenres ?? []);
     const dislikedGenres = new Set(profile.dislikedGenres ?? []);
 
-    // Kandidater bas
     const page = new URL(req.url).searchParams.get("page");
     const pageNum = Math.max(1, Number(page || "1"));
-    const [trMovie, trTv, popMovie, popTv] = await Promise.all([
-      tmdbGet<TMDBPaged<TMDBListItem>>("/trending/movie/day", { language: locale, region }, "force-cache"),
-      tmdbGet<TMDBPaged<TMDBListItem>>("/trending/tv/day", { language: locale, region }, "force-cache"),
-      tmdbGet<TMDBPaged<TMDBListItem>>("/movie/popular", { language: locale, region, page: pageNum }, "force-cache"),
-      tmdbGet<TMDBPaged<TMDBListItem>>("/tv/popular", { language: locale, region, page: pageNum }, "force-cache"),
+
+    // 3. TMDB Discover med inbyggd provider-filtrering! (Detta löser N+1)
+    const [popMovie, popTv] = await Promise.all([
+      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", { 
+        language: locale, 
+        region, 
+        watch_region: region,
+        with_watch_providers: tmdbProviderString,
+        sort_by: "popularity.desc",
+        page: pageNum
+      }, "force-cache"),
+      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", { 
+        language: locale, 
+        region, 
+        watch_region: region,
+        with_watch_providers: tmdbProviderString,
+        sort_by: "popularity.desc",
+        page: pageNum 
+      }, "force-cache"),
     ]);
 
-
-    
-
-    // Läs watchlist för att filtrera bort dubbletter i swipen
-    const watchKeys = new Set<string>();
-    const wlRes = await fetch(`${new URL(req.url).origin}/api/watchlist/list`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store",
-    }).catch(() => null);
-    if (wlRes?.ok) {
-      const wlJson = (await wlRes.json().catch(() => null)) as { ok?: boolean; items?: unknown[] } | null;
-      const items = (wlJson?.items ?? []) as unknown[];
-      for (const it of items) {
-        const o = it as Record<string, unknown>;
-        const id = Number((o["tmdbId"] as number | undefined) ?? (o["tmdb_id"] as number | undefined) ?? (o["id"] as number | undefined));
-        const mt = (o["mediaType"] as string | undefined) ?? (o["media_type"] as string | undefined);
-        if (Number.isFinite(id) && (mt === "movie" || mt === "tv")) watchKeys.add(`${mt}_${id}`);
-      }
-    }
-
     const baseRaw: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
-    for (const r of trMovie.results) {
-      const k = `movie_${r.id}`;
-      if (!watchKeys.has(k)) baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
-    }
-    for (const r of trTv.results) {
-      const k = `tv_${r.id}`;
-      if (!watchKeys.has(k)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
-    }
     for (const r of popMovie.results) {
-      const k = `movie_${r.id}`;
-      if (!watchKeys.has(k)) baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
+      if (!watchKeys.has(`movie_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
     }
     for (const r of popTv.results) {
-      const k = `tv_${r.id}`;
-      if (!watchKeys.has(k)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+      if (!watchKeys.has(`tv_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
     }
 
     // Seeds (favoriter + watchlist – för taste)
+    const favMovie = profile.favoriteMovie as FavoriteItem | null;
+    const favShow = profile.favoriteShow as FavoriteItem | null;
     const seedsSet: { id: number; type: MediaType }[] = [];
-    if (profile.favoriteMovie?.id) seedsSet.push({ id: profile.favoriteMovie.id, type: "movie" });
-    if (profile.favoriteShow?.id) seedsSet.push({ id: profile.favoriteShow.id, type: "tv" });
-    if (wlRes?.ok) {
-      for (const k of watchKeys) {
-        const [type, idStr] = k.split("_");
-        const id = Number(idStr);
-        if (type === "movie" || type === "tv") seedsSet.push({ id, type });
-      }
+    
+    if (favMovie?.id) seedsSet.push({ id: favMovie.id, type: "movie" });
+    if (favShow?.id) seedsSet.push({ id: favShow.id, type: "tv" });
+    for (const w of watchlist) {
+      seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
     }
 
     const seenSeed = new Set<string>();
@@ -378,57 +356,34 @@ export async function GET(req: Request) {
       if (seeds.length >= 25) break;
     }
 
-    // TMDB recommendations (filtrera bort watchlist)
-    const recCalls = await Promise.all(
-      seeds.slice(0, 6).map((s) =>
-        tmdbGet<TMDBPaged<TMDBListItem>>(
-          s.type === "movie" ? `/movie/${s.id}/recommendations` : `/tv/${s.id}/recommendations`,
-          { language: locale, region },
-          "force-cache",
-        ).catch(() => ({ page: 1, results: [] as TMDBListItem[] })),
-      ),
-    );
-    for (const rc of recCalls) {
-      for (const r of rc.results) {
-        const tmdbType: MediaType = r.title ? "movie" : "tv";
-        const k = `${tmdbType}_${r.id}`;
-        if (!watchKeys.has(k)) baseRaw.push({ id: r.id, tmdbType, item: r });
-      }
-    }
-
     // Dedupe + index
-    const uniq = dedupe(baseRaw.map((r) => ({ id: r.id, tmdbType: r.tmdbType })));
-    const keyToItem = new Map<string, TMDBListItem>();
-    const keyToType = new Map<string, MediaType>();
-    for (const r of baseRaw) {
-      const k = `${r.tmdbType}_${r.id}`;
-      if (!keyToItem.has(k)) {
-        keyToItem.set(k, r.item);
-        keyToType.set(k, r.tmdbType);
-      }
-    }
-
+    const uniq = dedupe(baseRaw);
+    
     // V1-score
     type Scored = { key: string; id: number; type: MediaType; scoreV1: number; base: TMDBListItem };
     const scoredV1: Scored[] = [];
-    for (const k of uniq.map((u) => `${u.tmdbType}_${u.id}`)) {
-      const it = keyToItem.get(k), type = keyToType.get(k);
-      if (!it || !type) continue;
-      const gScore = genreScore(it.genre_ids, movieIdToName, tvIdToName, type, likedGenres, dislikedGenres);
-      const qScore = qualityScore(it.vote_average, it.vote_count);
-      const rBonus = recencyBonus(yearFrom(it));
-      scoredV1.push({ key: k, id: it.id, type, scoreV1: 1.6 * gScore + 0.6 * qScore + 0.2 * rBonus, base: it });
+    for (const u of uniq) {
+      const gScore = genreScore(u.item.genre_ids, movieIdToName, tvIdToName, u.tmdbType, likedGenres, dislikedGenres);
+      const qScore = qualityScore(u.item.vote_average, u.item.vote_count);
+      const rBonus = recencyBonus(yearFrom(u.item));
+      scoredV1.push({ 
+        key: `${u.tmdbType}_${u.id}`, 
+        id: u.id, 
+        type: u.tmdbType, 
+        scoreV1: 1.6 * gScore + 0.6 * qScore + 0.2 * rBonus, 
+        base: u.item 
+      });
     }
     scoredV1.sort((a, b) => b.scoreV1 - a.scoreV1);
 
     // V2 taste
     const taste = await buildTaste(seeds, locale);
     const N = Math.min(60, scoredV1.length);
-    const topKeys = scoredV1.slice(0, N).map((s) => ({ id: s.id, type: s.type }));
+    const topItems = scoredV1.slice(0, N);
 
     const featureCache = new Map<string, { keywords: number[]; people: number[] }>();
     await Promise.all(
-      topKeys.map(async (t) => {
+      topItems.map(async (t) => {
         const k = `${t.type}:${t.id}:${locale}`;
         if (!featureCache.has(k)) {
           const f = await fetchFeatures(t.type, t.id, locale).catch(() => ({ keywords: [], people: [] }));
@@ -436,6 +391,7 @@ export async function GET(req: Request) {
         }
       })
     );
+    
     function scoreTaste(f: { keywords: number[]; people: number[] }): number {
       let s = 0;
       for (const kw of f.keywords) {
@@ -449,75 +405,36 @@ export async function GET(req: Request) {
       return s;
     }
 
-    // Providers (direkt TMDB) — begränsa samtidighet
-    const providersCache = new Map<string, string[]>();
-    await mapLimit(topKeys, 8, async (t) => {
-      const prov = await fetchProvidersDirect(t.id, t.type, region).catch(() => null);
-      providersCache.set(`${t.type}:${t.id}`, providerNames(prov));
-    });
-
-    // Gruppmedlemmar providers
-    let groupProviders: string[][] = [];
-    if (groupCode) {
-      const gm = await fetch(`${new URL(req.url).origin}/api/group/members`, {
-        headers: { cookie: cookieHeader },
-        cache: "no-store",
-      }).catch(() => null);
-      if (gm?.ok) {
-        const data = (await gm.json().catch(() => null)) as { ok?: boolean; members?: Array<{ providers?: string[] }> } | null;
-        const arr = (data?.members ?? []).map((m) => (Array.isArray(m.providers) ? m.providers : []));
-        if (arr.length > 0) groupProviders = arr;
-      }
-    }
-
-    const myProviders = new Set(profile.providers ?? []);
-
-    // Slutscore V3
-    type ScoredV3 = {
+    // Slutscore V3 (Förenklad! Providers är redan garanterade via TMDB)
+    type ScoredFinal = {
       id: number;
       type: MediaType;
       base: TMDBListItem;
-      scoreV3: number;
+      scoreFinal: number;
       kwSet: Set<number>;
       genSet: Set<number>;
-      providers: string[];
     };
-    const scoredV3: ScoredV3[] = [];
-    for (const s of scoredV1.slice(0, N)) {
+    
+    const scoredFinal: ScoredFinal[] = [];
+    for (const s of topItems) {
       const f = featureCache.get(`${s.type}:${s.id}:${locale}`) ?? { keywords: [], people: [] };
-      const prov = providersCache.get(`${s.type}:${s.id}`) ?? [];
-      let v = s.scoreV1 + scoreTaste(f);
+      const v = s.scoreV1 + scoreTaste(f); // Ingen provider-penalitet behövs
 
-      if (groupCode && groupProviders.length > 0) {
-        let covered = 0;
-        for (const gp of groupProviders) {
-          const gpSet = new Set(gp);
-          if (prov.some((p) => gpSet.has(p))) covered++;
-        }
-        const coverage = covered / groupProviders.length;
-        if (coverage === 0) v -= 1.2;
-        else v += 1.5 * coverage;
-      } else {
-        const overlap = prov.some((p) => myProviders.has(p));
-        v += overlap ? 0.9 : -0.9;
-      }
-
-      scoredV3.push({
+      scoredFinal.push({
         id: s.id,
         type: s.type,
         base: s.base,
-        scoreV3: v,
+        scoreFinal: v,
         kwSet: new Set((f.keywords ?? []) as number[]),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),
-        providers: prov,
       });
     }
 
     // Diversifiering (MMR)
     const lambda = 0.3;
-    const K = Math.min(100, scoredV3.length);
-    const selected: ScoredV3[] = [];
-    const pool = [...scoredV3].sort((a, b) => b.scoreV3 - a.scoreV3);
+    const K = Math.min(100, scoredFinal.length);
+    const selected: ScoredFinal[] = [];
+    const pool = [...scoredFinal].sort((a, b) => b.scoreFinal - a.scoreFinal);
 
     while (selected.length < K && pool.length > 0) {
       let bestIdx = 0;
@@ -530,7 +447,7 @@ export async function GET(req: Request) {
           const b = s.kwSet.size ? s.kwSet : s.genSet;
           sim = Math.max(sim, jaccard(a, b));
         }
-        const mmr = cand.scoreV3 - lambda * sim;
+        const mmr = cand.scoreFinal - lambda * sim;
         if (mmr > bestScore) {
           bestScore = mmr;
           bestIdx = i;
@@ -555,12 +472,13 @@ export async function GET(req: Request) {
       group: groupCode ? { code: groupCode, strictProviders: false } : null,
       language: locale,
       region,
-      usedProviderIds: [],
+      usedProviderIds,
       items,
     };
+    
     return NextResponse.json(payload);
   } catch (err) {
-    console.error("unified recs V3 error:", err);
-    return fail("Internt fel vid rekommendation.");
+    console.error("unified recs error:", err);
+    return fail("Internt fel vid rekommendation.", 500);
   }
 }

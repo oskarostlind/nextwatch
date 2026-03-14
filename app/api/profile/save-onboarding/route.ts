@@ -1,7 +1,6 @@
-// app/api/profile/save-onboarding/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
-import prisma from "../../../../lib/prisma";
+import { prisma } from "../../../../lib/prisma"; // Uppdaterad till named import
 import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -11,31 +10,38 @@ export const dynamic = "force-dynamic";
 function newId(): string {
   return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
+
 function toNumber(n: unknown): number | null {
   if (typeof n === "number" && Number.isFinite(n)) return n;
   if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) return Number(n);
   return null;
 }
+
 function firstAcceptLanguage(h: string | null): string | null {
   if (!h) return null;
   const first = h.split(",")[0]?.trim();
   return first || null;
 }
+
 async function inferRegionAndLocale(): Promise<{ region: string; locale: string }> {
   const jar = await cookies();
   const hdr = await headers();
   const ipCountry = hdr.get("x-vercel-ip-country");
   const acceptLang = firstAcceptLanguage(hdr.get("accept-language"));
+  
   const region =
     jar.get("nw_region")?.value ||
     (ipCountry && /^[A-Z]{2}$/.test(ipCountry) ? ipCountry : null) ||
     "SE";
+    
   const locale =
     jar.get("nw_locale")?.value ||
     (acceptLang && /^[a-z]{2}(-[A-Z]{2})?$/.test(acceptLang) ? acceptLang : null) ||
     "sv-SE";
+    
   return { region, locale };
 }
+
 function normalizeFavorite(x: unknown): Prisma.InputJsonValue | null {
   if (!x || typeof x !== "object") return null;
   const obj = x as Record<string, unknown>;
@@ -43,12 +49,16 @@ function normalizeFavorite(x: unknown): Prisma.InputJsonValue | null {
   const title = typeof obj.title === "string" ? obj.title : null;
   const year = typeof obj.year === "string" ? obj.year : obj.year === null ? null : undefined;
   const poster = typeof obj.poster === "string" ? obj.poster : obj.poster === null ? null : undefined;
+  
   if (!id || !title) return null;
+  
   const payload: Record<string, unknown> = { id, title };
   if (typeof year !== "undefined") payload.year = year;
   if (typeof poster !== "undefined") payload.poster = poster;
+  
   return payload as unknown as Prisma.InputJsonValue;
 }
+
 function toProvidersJson(p: unknown): Prisma.InputJsonValue {
   if (Array.isArray(p)) {
     const norm = p
@@ -69,24 +79,31 @@ function toProvidersJson(p: unknown): Prisma.InputJsonValue {
   }
   return ([] as string[]) as unknown as Prisma.InputJsonValue;
 }
+
 function asStringArray(x: unknown): string[] {
   if (Array.isArray(x)) return x.filter((v): v is string => typeof v === "string");
   return [];
 }
+
 function requireString(body: Record<string, unknown>, key: string): string | null {
   const v = body[key];
   if (typeof v === "string" && v.trim() !== "") return v.trim();
   return null;
 }
+
 function extractDob(body: Record<string, unknown>): string | null {
   const candidates: unknown[] = [body.dob, body.dateOfBirth, body.birthdate, body.birthDate];
-  for (const c of candidates) if (typeof c === "string" && c.trim() !== "") return c;
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim() !== "") return c;
+  }
   return null;
 }
+
 function ok(status: number, message: string, extra?: Record<string, unknown>) {
   const body: Record<string, unknown> = { ok: true, message, ...(extra || {}) };
   return NextResponse.json(body, { status });
 }
+
 function fail(status: number, message: string, debug?: boolean, extra?: Record<string, unknown>) {
   const body: Record<string, unknown> = { ok: false, message };
   if (debug && extra) body.debug = extra;
@@ -100,6 +117,7 @@ export async function POST(req: NextRequest) {
     const jar = await cookies();
     let uid = jar.get("nw_uid")?.value ?? null;
 
+    // Se till att användaren existerar i databasen
     if (!uid) {
       uid = newId();
       await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
@@ -129,7 +147,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const dobDate = new Date(dobStr!); // ✅ vi har validerat att den finns
+    const dobDate = new Date(dobStr!);
 
     const dataCommon = {
       displayName,

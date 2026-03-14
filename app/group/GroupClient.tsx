@@ -32,6 +32,26 @@ type FriendsListResp = {
   pendingOut: { requestId: string; to: FriendsListUser }[];
 };
 
+type RawMember = {
+  userId?: string | number;
+  user_id?: string | number;
+  id?: string | number;
+  username?: string | null;
+  displayName?: string | null;
+  providers?: unknown;
+};
+
+type GroupMembersResponse = {
+  code?: string;
+  region?: string;
+  members?: RawMember[];
+};
+
+type GroupResponse = {
+  code?: string;
+  group?: { code: string };
+};
+
 /** ---------- API Helpers ---------- */
 async function fetchFriends(): Promise<FriendsListResp | null> {
   try {
@@ -86,7 +106,6 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const [members, setMembers] = useState<PublicMember[]>(initial.members || []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
-  const [meUserId] = useState<string | null>(initial.meUserId || null);
 
   // Vänner & Invites
   const [friends, setFriends] = useState<FriendsListUser[]>([]);
@@ -100,8 +119,16 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const [pendingOut, setPendingOut] = useState<{ requestId: string; to: FriendsListUser }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [meUserId, setMeUserId] = useState<string | null>(initial.meUserId || null);
+
   useEffect(() => {
     loadFriends();
+    // Skottsäker fallback: Hämta ditt ID direkt från servern om cachen strular
+    apiCall<{ profile?: { userId: string } }>("/api/profile").then((res) => {
+      if (res && !("error" in res) && res.profile?.userId) {
+        setMeUserId(res.profile.userId);
+      }
+    });
   }, []);
 
   const loadFriends = async () => {
@@ -117,12 +144,23 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const refreshMembers = useCallback(async (overrideCode?: string) => {
     const targetCode = overrideCode || code;
     if (!targetCode) return;
-    const res = await apiCall<{ code: string; region?: string; members: PublicMember[] }>(
+    
+    const res = await apiCall<GroupMembersResponse>(
       `/api/group/members?code=${encodeURIComponent(targetCode)}`
     );
-    if ("members" in res) {
-      setMembers(res.members);
-      setRegion(res.region);
+    
+    if (res && !("error" in res) && Array.isArray(res.members)) {
+      const safeMembers: PublicMember[] = res.members.map((m) => ({
+        userId: String(m.userId ?? m.user_id ?? m.id ?? ""),
+        username: typeof m.username === "string" ? m.username : null,
+        displayName: typeof m.displayName === "string" ? m.displayName : null,
+        providers: Array.isArray(m.providers) 
+          ? m.providers.filter((p): p is string => typeof p === "string") 
+          : [],
+      }));
+      
+      setMembers(safeMembers);
+      if (res.region) setRegion(res.region);
     }
   }, [code]);
 
@@ -148,14 +186,26 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
   const handleCreate = (name?: string) => 
     handleAction(
-      () => apiCall<{ code: string }>("/api/group/create", name ? { name } : {}),
-      (data) => { setCode(data.code); refreshMembers(data.code); }
+      () => apiCall<GroupResponse>("/api/group/create", name ? { name } : {}),
+      (data) => { 
+        const newCode = data.code || data.group?.code;
+        if (newCode) {
+          setCode(newCode); 
+          refreshMembers(newCode); 
+        }
+      }
     );
 
   const handleJoin = (groupCode: string) => 
     handleAction(
-      () => apiCall<{ code: string }>("/api/group/join", { code: groupCode }),
-      (data) => { setCode(data.code); refreshMembers(data.code); }
+      () => apiCall<GroupResponse>("/api/group/join", { code: groupCode }),
+      (data) => { 
+        const newCode = data.code || data.group?.code;
+        if (newCode) {
+          setCode(newCode); 
+          refreshMembers(newCode); 
+        }
+      }
     );
 
   const handleLeave = () => 

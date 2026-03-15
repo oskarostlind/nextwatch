@@ -2,8 +2,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-const PROTECTED = [/^\/swipe($|\/)/, /^\/group\/swipe($|\/)/];
-
 function makeUid(): string {
   const c = crypto as Crypto & { randomUUID?: () => string };
   return typeof c.randomUUID === "function"
@@ -15,12 +13,9 @@ function pickLocale(acceptLang: string | null, region: string): string {
   if (/^[a-z]{2}(-[A-Z]{2})?$/.test(first)) return first.includes("-") ? first : `${first}-${region}`;
   return "sv-SE";
 }
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED.some((re) => re.test(pathname));
-}
 
 export async function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+  const { pathname } = req.nextUrl;
 
   // 0) Backcompat: rewrite /api/profile/get -> /api/profile
   if (pathname === "/api/profile/get") {
@@ -60,10 +55,8 @@ export async function middleware(req: NextRequest) {
   const mustSetRegion = !req.cookies.get("nw_region");
   const mustSetLocale = !req.cookies.get("nw_locale");
 
-  let res: NextResponse;
-
   // 2) Skyddad route: profil-koll sker i layout/page (server component med Prisma), inte här
-  res = NextResponse.next();
+  const res = NextResponse.next();
 
   if (mustSetUid) {
     res.cookies.set("nw_uid", uid, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });

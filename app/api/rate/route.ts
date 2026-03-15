@@ -20,15 +20,12 @@ export async function POST(req: Request) {
     const { tmdbId, mediaType, decision } = body as { tmdbId:number; mediaType:"movie"|"tv"; decision:Decision };
     if (!tmdbId || (mediaType!=="movie" && mediaType!=="tv")) throw new Error("bad input");
 
-    const existing = await prisma.rating.findFirst({ where:{ userId: uid, tmdbId, mediaType } });
-    if (existing) {
-      await prisma.rating.update({ where:{ id: existing.id }, data:{ decision, decidedAt: new Date() } });
-    } else {
-      await prisma.rating.create({
-        data: { id: newId(), userId: uid, tmdbId, mediaType, decision }
-      });
-    }
-    return NextResponse.json({ ok:true });
+    await prisma.rating.upsert({
+      where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
+      update: { decision, decidedAt: new Date() },
+      create: { id: newId(), userId: uid, tmdbId, mediaType, decision },
+    });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ ok:false, error: msg }, { status:400 });

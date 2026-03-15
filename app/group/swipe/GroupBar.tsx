@@ -19,7 +19,7 @@ export default function GroupBar({ code }: { code: string }) {
       if (data?.ok && Array.isArray(data.members)) setMembers(data.members);
     };
     load();
-    t = setInterval(load, 10_000);
+    t = setInterval(load, 15_000);
     return () => { if (t) clearInterval(t); };
   }, [code]);
 

@@ -4,22 +4,22 @@
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import GroupBar from "./GroupBar";
-//import MatchOverlay from "../../components/ui/MatchOverlay";
 import OverlayMount from "../../components/client/OverlayMount";
 
-
-// Din befintliga swipelogik flyttad till _legacy (eller redan där)
 const LegacyGroupSwipe = dynamic(() => import("./_legacy"), { ssr: false });
 
-export default function Client() {
+type Props = { initialCode?: string | null };
+
+export default function Client({ initialCode = null }: Props) {
   const sp = useSearchParams();
-  const code = (sp.get("code") || "").toUpperCase();
+  const codeFromUrl = (sp.get("code") || "").toUpperCase();
+  const fromInitial = initialCode?.trim()?.toUpperCase() ?? "";
+  const code = fromInitial || codeFromUrl;
 
   return (
     <>
       <GroupBar code={code} />
-      <LegacyGroupSwipe />
-      
+      <LegacyGroupSwipe code={code} />
       <OverlayMount />
     </>
   );

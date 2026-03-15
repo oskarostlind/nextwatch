@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { prisma } from "../../../../lib/prisma"; // OBS: rätt sökväg
+import { prisma } from "../../../../lib/prisma";
+import { rateLimitAllow, getRateLimitKey, TMDB_DETAILS_LIMIT } from "../../../../lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,9 +73,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "missing or invalid type/id" }, { status: 400 });
     }
 
-    // språk/region från profil om finns
     const c = await cookies();
     const uid = c.get("nw_uid")?.value || null;
+    const key = getRateLimitKey(req, uid);
+    if (!rateLimitAllow(key, "tmdb-details", { limit: TMDB_DETAILS_LIMIT })) {
+      return NextResponse.json({ ok: false, error: "För många förfrågningar." }, { status: 429 });
+    }
+
     let language = "sv-SE";
     let region = "SE";
     if (uid) {

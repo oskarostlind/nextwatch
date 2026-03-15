@@ -5,7 +5,7 @@ import MatchOverlay from "@/app/components/ui/MatchOverlay";
 import { useGroupMatchPolling } from "@/lib/useGroupMatch";
 
 export default function MatchOverlayMount() {
-  const { open, item, dismiss, notifyVoted } = useGroupMatchPolling();
+  const { open, item, dismiss, notifyVoted, groupCode } = useGroupMatchPolling();
 
   // Intercepta fetch → när /api/group/vote (POST) lyckas, trigga extra poll
   useEffect(() => {
@@ -44,5 +44,5 @@ export default function MatchOverlayMount() {
     };
   }, [notifyVoted]);
 
-  return <MatchOverlay open={open} item={item} onClose={dismiss} />;
+  return <MatchOverlay open={open} item={item} onClose={dismiss} code={groupCode} />;
 }

@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useGroupInvites } from '@/lib/useGroupInvites';
 
 export default function IncomingInvites() {
+  const router = useRouter();
   const { data } = useGroupInvites(5000);
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!data || !data.incoming?.length) return null;
 
   return (
-    <div className="mt-4 space-y-2">
-      <h3 className="text-sm text-zinc-400">Incoming</h3>
+    <div className="mb-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <h3 className="text-sm font-medium text-white/70">Inkommande gruppinbjudan</h3>
 
       {data.incoming.map((inv) => (
         <div
@@ -33,12 +35,13 @@ export default function IncomingInvites() {
               disabled={busy === inv.id}
               onClick={async () => {
                 setBusy(inv.id);
-                await fetch('/api/group/invite/respond', {
+                const res = await fetch('/api/group/invite/respond', {
                   method: 'POST',
                   headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ inviteId: inv.id, action: 'accept' }),
+                  body: JSON.stringify({ id: inv.id, action: 'accept' }),
                 });
                 setBusy(null);
+                if (res.ok) router.refresh();
               }}
             >
               Accept
@@ -52,7 +55,7 @@ export default function IncomingInvites() {
                 await fetch('/api/group/invite/respond', {
                   method: 'POST',
                   headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ inviteId: inv.id, action: 'decline' }),
+                  body: JSON.stringify({ id: inv.id, action: 'decline' }),
                 });
                 setBusy(null);
               }}

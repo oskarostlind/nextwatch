@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
+import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -62,6 +63,12 @@ export async function POST(req: NextRequest) {
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) return jsonRes(401, "Ingen session. Logga in igen.");
 
+    const key = getRateLimitKey(req, uid);
+    const rateOk = rateLimitAllow(key, "auth-register", { limit: AUTH_LIMIT });
+    if (!rateOk) {
+      return jsonRes(429, "För många förfrågningar. Försök igen senare.");
+    }
+
     const body = (await req.json()) as { email?: string; password?: string };
     const email = (body.email ?? "").trim().toLowerCase();
     const password = (body.password ?? "").trim();
@@ -87,8 +94,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: uid }, select: { id: true } });
-    if (!user) return jsonRes(401, "Ogiltig session. Användare saknas.", { uid });
+    // Säkerställ att användarrad finns (middleware sätter bara cookie; session/init kanske inte körts)
+    await prisma.user.upsert({
+      where: { id: uid },
+      update: {},
+      create: { id: uid },
+      select: { id: true },
+    });
 
     const taken = await prisma.user.findFirst({ where: { email, NOT: { id: uid } }, select: { id: true } });
     if (taken) return jsonRes(409, "E-postadressen används redan.");

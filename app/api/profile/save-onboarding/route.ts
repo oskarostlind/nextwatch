@@ -189,7 +189,17 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      return fail(500, "Prisma-fel.", true, { code: err.code, meta: err.meta });
+      const code = err.code;
+      const hint =
+        code === "P2021"
+          ? "Databastabeller saknas. Kör: npx prisma db push (eller npx prisma migrate deploy)."
+          : undefined;
+      return fail(
+        500,
+        code === "P2021" ? "Databastabeller saknas. Kör migreringar eller db push." : "Prisma-fel.",
+        true,
+        { code: err.code, meta: err.meta, ...(hint ? { hint } : {}) }
+      );
     }
     console.error("[save-onboarding] error:", err);
     const message = err instanceof Error ? err.message : "Ett fel uppstod.";

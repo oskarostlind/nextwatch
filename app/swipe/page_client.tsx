@@ -247,55 +247,38 @@ export default function SwipePageClient() {
     }
   }, [cards.length, hasMore, page, loadPage]);
 
-  // lazy hydrering av details på topp- och nästa-kortet
+  // lazy hydrering av details på topp- och nästa-kortet (parallellt)
   const fetched = useRef<Set<string>>(new Set());
   useEffect(() => {
     const cur = cards[0];
     const nxt = cards[1];
-    (async () => {
-      if (cur && !fetched.current.has(cur.id)) {
-        fetched.current.add(cur.id);
-        const det = await fetchDetailsWithFallback(cur.mediaType, cur.tmdbId);
-        if (det) {
-          setCards((prev) =>
-            prev.map((c) =>
-              c.id === cur.id
-                ? {
-                    ...c,
-                    overview: c.overview ?? det.overview,
-                    rating:
-                      typeof c.rating === "number" ? c.rating : det.rating ?? null,
-                    poster: c.poster ?? det.poster,
-                    title: c.title || det.title,
-                    year: c.year ?? det.year,
-                  }
-                : c
-            )
-          );
-        }
-      }
-      if (nxt && !fetched.current.has(nxt.id)) {
-        fetched.current.add(nxt.id);
-        void fetchDetailsWithFallback(nxt.mediaType, nxt.tmdbId).then((det) => {
-          if (!det) return;
-          setCards((prev) =>
-            prev.map((c) =>
-              c.id === nxt.id
-                ? {
-                    ...c,
-                    overview: c.overview ?? det.overview,
-                    rating:
-                      typeof c.rating === "number" ? c.rating : det.rating ?? null,
-                    poster: c.poster ?? det.poster,
-                    title: c.title || det.title,
-                    year: c.year ?? det.year,
-                  }
-                : c
-            )
-          );
-        });
-      }
-    })();
+    const toFetch: { id: string; mediaType: MediaType; tmdbId: number }[] = [];
+    if (cur && !fetched.current.has(cur.id)) toFetch.push({ id: cur.id, mediaType: cur.mediaType, tmdbId: cur.tmdbId });
+    if (nxt && !fetched.current.has(nxt.id)) toFetch.push({ id: nxt.id, mediaType: nxt.mediaType, tmdbId: nxt.tmdbId });
+    if (toFetch.length === 0) return;
+
+    toFetch.forEach((t) => fetched.current.add(t.id));
+    Promise.all(
+      toFetch.map((t) => fetchDetailsWithFallback(t.mediaType, t.tmdbId).then((det) => ({ id: t.id, det })))
+    ).then((results) => {
+      results.forEach(({ id, det }) => {
+        if (!det) return;
+        setCards((prev) =>
+          prev.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  overview: c.overview ?? det.overview,
+                  rating: typeof c.rating === "number" ? c.rating : det.rating ?? null,
+                  poster: c.poster ?? det.poster,
+                  title: c.title || det.title,
+                  year: c.year ?? det.year,
+                }
+              : c
+          )
+        );
+      });
+    });
   }, [cards]);
 
   function popTop() {

@@ -29,37 +29,38 @@ type FriendRequestRow = {
 type IdRow = { id: string };
 
 export async function POST(req: NextRequest) {
-  const jar = await cookies();
-  const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return json(401, { ok: false, message: "Ingen session." });
-
-  let body: Body;
   try {
-    body = (await req.json()) as Body;
-  } catch {
-    return json(400, { ok: false, message: "Ogiltig JSON." });
-  }
+    const jar = await cookies();
+    const uid = jar.get("nw_uid")?.value ?? null;
+    if (!uid) return json(401, { ok: false, message: "Ingen session." });
 
-  const { requestId, fromUserId, fromUsername } = body;
-  if (!requestId && !fromUserId && !fromUsername) {
-    return json(400, {
-      ok: false,
-      message: "Ange 'requestId' eller 'fromUserId' eller 'fromUsername'.",
-    });
-  }
+    let body: Body;
+    try {
+      body = (await req.json()) as Body;
+    } catch {
+      return json(400, { ok: false, message: "Ogiltig JSON." });
+    }
 
-  // 1) Hitta pending friend request riktad till uid
-  let pending: FriendRequestRow | null = null;
+    const { requestId, fromUserId, fromUsername } = body;
+    if (!requestId && !fromUserId && !fromUsername) {
+      return json(400, {
+        ok: false,
+        message: "Ange 'requestId' eller 'fromUserId' eller 'fromUsername'.",
+      });
+    }
 
-  if (requestId) {
-    const rows = await prisma.$queryRaw<FriendRequestRow[]>`
+    // 1) Hitta pending friend request riktad till uid
+    let pending: FriendRequestRow | null = null;
+
+    if (requestId) {
+      const rows = await prisma.$queryRaw<FriendRequestRow[]>`
       SELECT id, from_user_id, to_user_id, status
       FROM friend_requests
-      WHERE id = ${requestId} AND to_user_id = ${uid} AND status = 'pending'
+      WHERE id = (${requestId})::uuid AND to_user_id = ${uid} AND status = 'pending'
       LIMIT 1
     `;
-    pending = rows[0] ?? null;
-  } else if (fromUserId) {
+      pending = rows[0] ?? null;
+    } else if (fromUserId) {
     const rows = await prisma.$queryRaw<FriendRequestRow[]>`
       SELECT id, from_user_id, to_user_id, status
       FROM friend_requests
@@ -85,14 +86,38 @@ export async function POST(req: NextRequest) {
   }
 
   if (!pending) {
+    // Idempotens: om förfrågan redan accepterats (t.ex. race med request auto-accept), kolla om vänskap finns
+    let otherUserId: string | null = null;
+    if (requestId) {
+      const existingReq = await prisma.$queryRaw<{ from_user_id: string }[]>`
+        SELECT from_user_id FROM friend_requests WHERE id = (${requestId})::uuid AND to_user_id = ${uid} LIMIT 1
+      `;
+      otherUserId = existingReq[0]?.from_user_id ?? null;
+    } else if (fromUserId) {
+      otherUserId = fromUserId;
+    } else if (fromUsername != null && fromUsername !== "") {
+      const users = await prisma.$queryRaw<IdRow[]>`
+        SELECT id FROM users WHERE LOWER(username) = LOWER(${fromUsername}) LIMIT 1
+      `;
+      otherUserId = users[0]?.id ?? null;
+    }
+    if (otherUserId) {
+      const a = uid < otherUserId ? uid : otherUserId;
+      const b = uid < otherUserId ? otherUserId : uid;
+      const existing = await prisma.friendship.findUnique({
+        where: { userId_friendId: { userId: a, friendId: b } },
+        select: { userId: true },
+      });
+      if (existing) return json(200, { ok: true, friendship: { userId: a, friendId: b } });
+    }
     return json(404, { ok: false, message: "Ingen väntande förfrågan hittades." });
   }
 
-  // 2) Markera som accepterad
+  // 2) Markera som accepterad (id är UUID i DB)
   await prisma.$executeRaw`
     UPDATE friend_requests
     SET status = 'accepted', decided_at = NOW()
-    WHERE id = ${pending.id}
+    WHERE id = (${pending.id})::uuid
   `;
 
   // 3) Skapa vänskap kanoniskt (a=min, b=max)
@@ -106,4 +131,7 @@ export async function POST(req: NextRequest) {
   `;
 
   return json(200, { ok: true, friendship: { userId: a, friendId: b } });
+  } catch {
+    return NextResponse.json({ ok: false, message: "Ett fel uppstod." }, { status: 500 });
+  }
 }

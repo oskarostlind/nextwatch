@@ -93,7 +93,7 @@ export function useGroupMatchPolling() {
     if (timerRef.current !== null) return;
     // gör en första koll direkt
     void fetchOnce();
-    timerRef.current = window.setInterval(fetchOnce, 2_000);
+    timerRef.current = window.setInterval(fetchOnce, 8_000);
   }, [fetchOnce]);
 
   // Starta/stoppa polling beroende på om vi har gruppkod
@@ -135,6 +135,7 @@ export function useGroupMatchPolling() {
       dismiss,
       notifyVoted,
       hasGroup: Boolean(groupCode),
+      groupCode: groupCode ?? undefined,
     }),
     [dismiss, item, notifyVoted, open, groupCode]
   );

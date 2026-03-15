@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 // OBS: vi använder RELATIVA imports för att undvika alias-strul
 import Sidebar from '../navigation/Sidebar';
 import BottomTabs from '../navigation/BottomTabs';
+import InviteToasts from '../InviteToasts';
 
 // Rutter där vi INTE vill visa AppShell-krom (sidebar/bottom tabs)
 const PUBLIC_ROUTES = [
@@ -43,6 +44,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <BottomTabs />
             <div className="h-3" /> {/* liten spacer över iPhone home-indicator */}
           </div>
+
+          {/* Pop-up för vän- och gruppinbjudan (~5 s) när användaren är inne i appen */}
+          <InviteToasts />
         </div>
       )}
     </div>

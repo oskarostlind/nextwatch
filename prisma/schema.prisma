@@ -168,6 +168,7 @@ model GroupVote {
   user  User  @relation("UserGroupVotes", fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([groupCode, userId, tmdbId, tmdbType])
+  @@index([groupCode, vote], map: "idx_group_votes_group_vote")
   @@map("group_votes")
 }
 
@@ -182,6 +183,7 @@ model FriendRequest {
   fromUser User @relation("FriendRequestsSent", fields: [fromUserId], references: [id], onDelete: Cascade)
   toUser   User @relation("FriendRequestsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
 
+  @@unique([fromUserId, toUserId], map: "uq_friend_requests_pair")
   @@map("friend_requests")
 }
 

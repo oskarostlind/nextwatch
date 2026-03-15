@@ -168,7 +168,12 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   };
 
   const inviteUser = async (userId: string) => {
-    await apiCall("/api/group/invite", { toUserId: userId });
+    setError(null);
+    const result = await apiCall<{ ok?: boolean }>("/api/group/invite", { toUserId: userId });
+    if (result && "error" in result) {
+      setError(result.error);
+      return;
+    }
     setInvitedIds((prev) => new Set(prev).add(userId));
   };
 

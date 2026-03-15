@@ -62,35 +62,8 @@ export async function middleware(req: NextRequest) {
 
   let res: NextResponse;
 
-  // 2) din skyddade-redirect
-  if (isProtectedPath(pathname)) {
-    const existsUrl = new URL("/api/profile/exists", req.nextUrl.origin);
-    const existingCookie = req.headers.get("cookie") ?? "";
-    const extra: string[] = [];
-    if (mustSetUid) extra.push(`nw_uid=${uid}`);
-    if (mustSetRegion) extra.push(`nw_region=${region}`);
-    if (mustSetLocale) extra.push(`nw_locale=${locale}`);
-    const cookieHeader = [existingCookie, ...extra].filter(Boolean).join("; ");
-
-    const existsRes = await fetch(existsUrl, { headers: { cookie: cookieHeader } }).catch(() => null);
-    let hasProfile = false;
-    if (existsRes?.ok) {
-      try {
-        const j = (await existsRes.json()) as { ok?: boolean; hasProfile?: boolean };
-        hasProfile = !!j?.ok && !!j?.hasProfile;
-      } catch {}
-    }
-
-    if (!hasProfile) {
-      const redirectUrl = new URL("/onboarding", req.nextUrl.origin);
-      redirectUrl.searchParams.set("next", pathname + search);
-      res = NextResponse.redirect(redirectUrl);
-    } else {
-      res = NextResponse.next();
-    }
-  } else {
-    res = NextResponse.next();
-  }
+  // 2) Skyddad route: profil-koll sker i layout/page (server component med Prisma), inte här
+  res = NextResponse.next();
 
   if (mustSetUid) {
     res.cookies.set("nw_uid", uid, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });

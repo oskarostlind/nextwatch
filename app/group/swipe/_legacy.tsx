@@ -1,7 +1,6 @@
 "use client";
 
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 export const dynamic = "force-dynamic";
@@ -35,16 +34,14 @@ type ApiDetailsErr = { ok: false; error: string };
 function isRec(x: FeedItem): x is RecItem { return x.type === "rec"; }
 function fmtRating(v: number | null): string { return v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1); }
 
-function GroupSwipeInner() {
-  const sp = useSearchParams();
-  const code = (sp.get("code") || "").toUpperCase();
+type GroupSwipeInnerProps = { code: string };
+
+function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
 
   const [loading, setLoading] = useState(true);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [idx, setIdx] = useState(0);
   const [flip, setFlip] = useState(false);
-  const [matchFound, setMatchFound] = useState<string | null>(null);
-
   const [detailsMap, setDetailsMap] = useState<Record<string, Details>>({});
   const feedRef = useRef<FeedItem[]>([]);
   const indexRef = useRef(0);
@@ -105,26 +102,37 @@ function GroupSwipeInner() {
     resetCard();
     const item = feedRef.current[indexRef.current];
     if (!item || !isRec(item)) {
-      setIdx(v => v + 1);
+      setIdx((v) => v + 1);
       setFlip(false);
       return;
     }
     try {
+      const vote = decision === "like" ? "LIKE" : "DISLIKE";
+      if (code) {
+        await fetch("/api/group/vote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            tmdbId: item.tmdbId,
+            tmdbType: item.mediaType,
+            vote,
+            groupCode: code,
+          }),
+        });
+      }
       await fetch("/api/rate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType, decision, groupCode: code }),
+        body: JSON.stringify({
+          tmdbId: item.tmdbId,
+          mediaType: item.mediaType,
+          decision,
+        }),
       });
-      if (decision === "like") {
-        const m = await fetch(`/api/group/match?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-        const j = await m.json();
-        if (j?.ok && Array.isArray(j.matches) && j.matches.length > 0) {
-          setMatchFound(`Match! ${j.matches.length} träff(ar) för grupp ${code}`);
-        }
-      }
-    } catch { /* ignore */ }
-    finally {
-      setIdx(v => v + 1);
+    } catch {
+      /* ignore */
+    } finally {
+      setIdx((v) => v + 1);
       setFlip(false);
     }
   }, [code, resetCard]);
@@ -184,31 +192,30 @@ function GroupSwipeInner() {
 
   if (!code) {
     return (
-      <main className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Grupp-swipe</h1>
-        <p className="opacity-80">Saknar <code>?code=XXXXXX</code> i URL:en.</p>
+      <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 max-w-xl mx-auto w-full justify-center">
+        <h1 className="text-xl sm:text-2xl font-semibold mb-2">Grupp-swipe</h1>
+        <p className="text-sm opacity-80">Saknar <code>?code=XXXXXX</code> i URL:en.</p>
       </main>
     );
   }
 
   return (
-    <main className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-1">Grupp-swipe</h1>
-      <p className="opacity-80 mb-4">Kod: <span className="font-mono">{code}</span></p>
+    <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 max-w-xl mx-auto w-full">
+      <header className="shrink-0 mb-2">
+        <h1 className="text-xl sm:text-2xl font-semibold">Grupp-swipe</h1>
+        <p className="text-sm opacity-80">Kod: <span className="font-mono">{code}</span></p>
+      </header>
 
-      {matchFound && (
-        <div className="mb-4 rounded-lg border border-green-600 p-3">
-          <strong>{matchFound}</strong>
-          <div className="text-sm opacity-80">Öppna matchlistan: <code>/group/match?code={code}</code></div>
+      {loading && (
+        <div className="flex flex-1 items-center justify-center py-8">
+          <p className="text-neutral-400">Laddar förslag…</p>
         </div>
       )}
 
-      {loading && <p>Laddar förslag…</p>}
-
       {!loading && current && (
-        <>
+        <div className="flex flex-1 flex-col min-h-0">
           <div
-            className="[perspective:1000px] select-none cursor-grab active:cursor-grabbing"
+            className="flex-1 flex flex-col min-h-0 [perspective:1000px] select-none cursor-grab active:cursor-grabbing"
             style={{ touchAction: "pan-y" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -217,7 +224,7 @@ function GroupSwipeInner() {
           >
             <div
               ref={cardRef}
-              className="relative w-full overflow-hidden rounded-xl border shadow"
+              className="relative w-full max-w-sm mx-auto overflow-hidden rounded-xl border shadow flex-shrink-0"
               style={{ aspectRatio: "2 / 3" }}
             >
               <div className={`absolute inset-0 transition-transform duration-300 [transform-style:preserve-3d] ${flip ? "[transform:rotateY(180deg)]" : ""}`}>
@@ -277,20 +284,30 @@ function GroupSwipeInner() {
             </div>
           </div>
 
-          {/* Knappar */}
-          <div className="mt-3 flex gap-2 justify-center">
-            <button className="px-4 py-2 rounded-xl border" onClick={() => decide("dislike")}>Nej (←)</button>
-            <button className="px-4 py-2 rounded-xl border" onClick={() => setFlip(f => !f)}>Info</button>
-            <button className="px-4 py-2 rounded-xl border" onClick={() => decide("like")}>Ja (→)</button>
-            <button className="px-4 py-2 rounded-xl border" onClick={toggleWatch}>watchlist (↑)</button>
+          {/* Knappar – touch-vänliga, flex för RN-port */}
+          <div className="shrink-0 mt-4 flex flex-wrap gap-2 justify-center">
+            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={() => decide("dislike")}>
+              Nej (←)
+            </button>
+            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={() => setFlip((f) => !f)}>
+              Info
+            </button>
+            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-emerald-600 bg-emerald-800/80 text-white active:bg-emerald-700" onClick={() => decide("like")}>
+              Ja (→)
+            </button>
+            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={toggleWatch}>
+              Watchlist (↑)
+            </button>
           </div>
-        </>
+        </div>
       )}
 
       {!loading && !current && (
-        <div className="rounded-lg border p-4">
-          <p className="mb-2">Slut på förslag nu.</p>
-          <a className="underline" href={`/group/match?code=${encodeURIComponent(code)}`}>Visa matchlista</a>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900/50 p-6 text-center">
+          <p className="mb-3 text-neutral-300">Slut på förslag nu.</p>
+          <a className="text-emerald-400 underline underline-offset-2" href={`/group/match?code=${encodeURIComponent(code)}`}>
+            Visa matchlista
+          </a>
         </div>
       )}
 
@@ -299,10 +316,12 @@ function GroupSwipeInner() {
   );
 }
 
-export default function GroupSwipePage() {
+type GroupSwipePageProps = { code: string };
+
+export default function GroupSwipePage({ code }: GroupSwipePageProps) {
   return (
     <Suspense fallback={<main className="p-6 max-w-xl mx-auto">Laddar…</main>}>
-      <GroupSwipeInner />
+      <GroupSwipeInner code={code} />
     </Suspense>
   );
 }

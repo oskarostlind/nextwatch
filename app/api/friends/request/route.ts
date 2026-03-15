@@ -97,10 +97,19 @@ export async function POST(req: NextRequest) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("duplicate key") || msg.includes("23505")) {
         const fr = await prisma.friendRequest.findFirst({
-          where: { fromUserId: me, toUserId, status: "pending" },
-          select: { id: true },
+          where: { fromUserId: me, toUserId },
+          select: { id: true, status: true },
         });
-        return json({ ok: true, requestId: fr?.id ?? "pending" });
+        if (fr) {
+          if (fr.status !== "pending") {
+            await prisma.friendRequest.update({
+              where: { id: fr.id },
+              data: { status: "pending", decidedAt: null },
+            });
+          }
+          return json({ ok: true, requestId: fr.id });
+        }
+        return json({ ok: true, requestId: "pending" });
       }
       return json({ ok: false, message: "Internal error." }, { status: 500 });
     }

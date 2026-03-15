@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
 
 type TmdbType = "movie" | "tv";
 
@@ -105,24 +106,41 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = jar.get("nw_uid")?.value ?? undefined;
+    const key = getRateLimitKey(req, userId ?? null);
+    if (!rateLimitAllow(key, "group-match", { limit: MATCH_LIMIT })) {
+      return NextResponse.json(
+        { ok: false, message: "För många förfrågningar.", size: 0, need: 0, count: 0, match: null, matches: [] },
+        { status: 429 }
+      );
+    }
     const locale = jar.get("nw_locale")?.value ?? "sv-SE";
 
     const size = await prisma.groupMember.count({ where: { groupCode: code } });
     const need = Math.max(2, Math.ceil(size * 0.6));
 
     // Ranka kandidater på antal LIKE
-    const top = await prisma.groupVote.groupBy({
-      by: ["tmdbId", "tmdbType"],
-      where: { groupCode: code, vote: "LIKE" },
-      _count: { _all: true },
-      // sortera på count (använder tmdbId-nyckel för att undvika typbråk i Prisma)
-      orderBy: { _count: { tmdbId: "desc" } },
-      take: 20,
-    });
+    const [top, seenRows] = await Promise.all([
+      prisma.groupVote.groupBy({
+        by: ["tmdbId", "tmdbType"],
+        where: { groupCode: code, vote: "LIKE" },
+        _count: { _all: true },
+        orderBy: { _count: { tmdbId: "desc" } },
+        take: 20,
+      }),
+      userId
+        ? prisma.groupMatchSeen.findMany({
+            where: { groupCode: code, userId },
+            select: { tmdbId: true, tmdbType: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const seenKeys = new Set(
+      seenRows.map((s) => `${s.tmdbId}_${s.tmdbType}`)
+    );
 
     // Kandidaten vi vill visa för denna användare (ej kvitterad)
     let chosen: { tmdbId: number; tmdbType: TmdbType; count: number } | null = null;
-    // Första kandidat som passerar tröskeln men redan är kvitterad av användaren
     let firstSeenAboveThreshold: { tmdbId: number; tmdbType: TmdbType; count: number } | null =
       null;
 
@@ -130,28 +148,16 @@ export async function GET(req: NextRequest) {
       const likeCount = row._count?._all ?? 0;
       if (likeCount < need) continue;
 
-      if (userId) {
-        const already = await prisma.groupMatchSeen.findUnique({
-          where: {
-            groupCode_userId_tmdbId_tmdbType: {
-              groupCode: code,
-              userId,
-              tmdbId: row.tmdbId,
-              tmdbType: row.tmdbType as TmdbType,
-            },
-          },
-          select: { tmdbId: true },
-        });
-        if (already) {
-          if (!firstSeenAboveThreshold) {
-            firstSeenAboveThreshold = {
-              tmdbId: row.tmdbId,
-              tmdbType: row.tmdbType as TmdbType,
-              count: likeCount,
-            };
-          }
-          continue;
+      const key = `${row.tmdbId}_${row.tmdbType}`;
+      if (userId && seenKeys.has(key)) {
+        if (!firstSeenAboveThreshold) {
+          firstSeenAboveThreshold = {
+            tmdbId: row.tmdbId,
+            tmdbType: row.tmdbType as TmdbType,
+            count: likeCount,
+          };
         }
+        continue;
       }
 
       chosen = {

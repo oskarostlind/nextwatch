@@ -1,0 +1,11 @@
+{"sessionId":"397de7","location":"register/route.ts:entry","message":"Register POST entry","data":{"hasUid":true,"uidLength":36},"hypothesisId":"H5","timestamp":1773610577420}
+{"sessionId":"397de7","location":"register/route.ts:rateLimit","message":"Rate limit check","data":{"allowed":true,"key":"ac1a6cf0"},"hypothesisId":"H2","timestamp":1773610577436}
+{"sessionId":"397de7","location":"register/route.ts:preflight","message":"Preflight schema check","data":{"preflightOk":true,"missingUsers":[],"missingVer":[]},"hypothesisId":"H3","timestamp":1773610577596}
+{"sessionId":"397de7","location":"register/route.ts:userLookup","message":"User ensured via upsert","data":{"uidLength":36},"hypothesisId":"H1","timestamp":1773610577911}
+{"sessionId":"397de7","location":"register/route.ts:beforeTx","message":"Before transaction","data":{"uidLength":36},"hypothesisId":"H4","timestamp":1773610578368}
+{"sessionId":"397de7","location":"register/route.ts:entry","message":"Register POST entry","data":{"hasUid":true,"uidLength":36},"hypothesisId":"H5","timestamp":1773610682543}
+{"sessionId":"397de7","location":"register/route.ts:rateLimit","message":"Rate limit check","data":{"allowed":true,"key":"877c058a"},"hypothesisId":"H2","timestamp":1773610682557}
+{"sessionId":"397de7","location":"register/route.ts:preflight","message":"Preflight schema check","data":{"preflightOk":true,"missingUsers":[],"missingVer":[]},"hypothesisId":"H3","timestamp":1773610682696}
+{"sessionId":"397de7","location":"register/route.ts:userLookup","message":"User ensured via upsert","data":{"uidLength":36},"hypothesisId":"H1","timestamp":1773610683011}
+{"sessionId":"397de7","location":"register/route.ts:beforeTx","message":"Before transaction","data":{"uidLength":36},"hypothesisId":"H4","timestamp":1773610683483}
+{"sessionId":"397de7","location":"friends/accept/route.ts:afterRequestIdQuery","message":"Raw query by requestId","data":{"requestId":"c6114ab7","found":true,"rowKeys":["id","from_user_id","to_user_id","status"]},"hypothesisId":"H1","timestamp":1773610955081}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
+import { rateLimitAllow, getRateLimitKey, RECS_LIMIT } from "../../../../lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -261,6 +262,11 @@ export async function GET(req: Request) {
 
     if (!uid) return fail("Ingen användare inloggad.", 401);
 
+    const key = getRateLimitKey(req, uid);
+    if (!rateLimitAllow(key, "recs", { limit: RECS_LIMIT })) {
+      return fail("För många förfrågningar. Försök igen senare.", 429);
+    }
+
     // 1. Hämta data från databasen direkt via Prisma
     const [profile, ratings, watchlist, groupMembers] = await Promise.all([
       prisma.profile.findUnique({ where: { userId: uid } }),
@@ -353,7 +359,7 @@ export async function GET(req: Request) {
       if (seenSeed.has(k)) continue;
       seenSeed.add(k);
       seeds.push(s);
-      if (seeds.length >= 25) break;
+      if (seeds.length >= 6) break;
     }
 
     // Dedupe + index
@@ -378,7 +384,7 @@ export async function GET(req: Request) {
 
     // V2 taste
     const taste = await buildTaste(seeds, locale);
-    const N = Math.min(60, scoredV1.length);
+    const N = Math.min(30, scoredV1.length);
     const topItems = scoredV1.slice(0, N);
 
     const featureCache = new Map<string, { keywords: number[]; people: number[] }>();

@@ -1,7 +1,7 @@
 // app/auth/register/page_client.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function RegisterClient() {
@@ -10,6 +10,11 @@ export default function RegisterClient() {
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const router = useRouter();
+
+  // Säkerställ att användarrad finns i DB innan registrering (middleware sätter bara cookie)
+  useEffect(() => {
+    fetch("/api/session/init", { cache: "no-store" }).catch(() => {});
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

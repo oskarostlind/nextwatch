@@ -78,14 +78,19 @@ export async function POST() {
 
     if (rows.length === 0) return NextResponse.json({ ok: true, items: [] });
 
-    // Hämta titeldata parallellt
-    const items = await Promise.all(
-      rows.map(async (r) => {
-        const path = r.mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
-        const t = await tmdbGet<TmdbTitle>(path);
-        return normalize(t, r.mediaType as "movie" | "tv");
-      })
-    );
+    const BATCH_SIZE = 10;
+    const items: Card[] = [];
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (r) => {
+          const path = r.mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
+          const t = await tmdbGet<TmdbTitle>(path);
+          return normalize(t, r.mediaType as "movie" | "tv");
+        })
+      );
+      items.push(...batchResults);
+    }
 
     return NextResponse.json({ ok: true, items });
   } catch {

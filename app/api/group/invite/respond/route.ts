@@ -84,16 +84,16 @@ export async function POST(req: NextRequest) {
       data: { status: "accepted", respondedAt: new Date() },
     });
 
-    // 3) Sätt aktiv grupp-cookie så klienten börjar polla direkt
-    jar.set("nw_group", group.code, {
+    // 3) Sätt aktiv grupp-cookie på svaret så mottagaren ser gruppen i /group
+    const res = NextResponse.json({ ok: true, joined: group.code } as OkJoined, { status: 200 });
+    res.cookies.set("nw_group", group.code, {
       path: "/",
       maxAge: 60 * 60 * 24 * 14, // 14 dagar
       sameSite: "lax",
-      secure: true,
-      httpOnly: false, // ska kunna läsas av klient-hooken (useGroupMatchPolling)
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: false,
     });
-
-    return NextResponse.json({ ok: true, joined: group.code } as OkJoined, { status: 200 });
+    return res;
   } catch (e: unknown) {
     console.error("invite/respond POST error:", e);
     return bad("Internal error.");

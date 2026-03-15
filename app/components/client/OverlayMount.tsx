@@ -5,7 +5,7 @@ import MatchOverlay, { type GroupMatchItem } from "../ui/MatchOverlay";
 import { useGroupMatchPolling } from "../../../lib/useGroupMatch";
 
 export default function OverlayMount() {
-  const { open, item, dismiss, notifyVoted } = useGroupMatchPolling();
+  const { open, item, dismiss, notifyVoted, groupCode } = useGroupMatchPolling();
 
   // Sticky-minne: om vi får ett item när overlayn inte hunnit mounta,
   // behåll det så att vi kan visa direkt när allt är redo.
@@ -51,5 +51,5 @@ export default function OverlayMount() {
     };
   }, [notifyVoted]);
 
-  return <MatchOverlay open={open} item={shownItem} onClose={dismiss} />;
+  return <MatchOverlay open={open} item={shownItem} onClose={dismiss} code={groupCode} />;
 }

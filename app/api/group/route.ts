@@ -23,16 +23,9 @@ export async function GET(req: Request) {
 export async function POST() {
   const cookieStore = await cookies();
   let uid = cookieStore.get("nw_uid")?.value;
+  const mustSetCookie = !uid;
   if (!uid) {
     uid = crypto.randomUUID();
-    cookieStore.set({
-      name: "nw_uid",
-      value: uid,
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-    });
   }
 
   // se till att User finns (User.id saknar default)
@@ -64,5 +57,15 @@ export async function POST() {
     create: { groupCode: group.code, userId: user.id },
   });
 
-  return NextResponse.json({ ok: true, group }, { status: 201 });
+  const res = NextResponse.json({ ok: true, group }, { status: 201 });
+  if (mustSetCookie && uid) {
+    res.cookies.set("nw_uid", uid, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+  return res;
 }

@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Undvik vit flash bakom Dynamic Island / safe areas (webb + PWA). */
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -12,16 +13,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  min-height: 100dvh;
+  background-color: #0a0a0a;
 }
 
 body {
   min-height: 100dvh;
-  background: var(--background);
+  background-color: #0a0a0a;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }

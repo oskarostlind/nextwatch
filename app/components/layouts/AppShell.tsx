@@ -12,8 +12,12 @@ const PUBLIC_ROUTES = [
   /^\/auth(?:\/.*)?$/,
 ];
 
-/** Utrymme ovanför fast BottomTabs (höjd + säker marginal). Matchar ungefär pb-24 på main. */
-const MAIN_BOTTOM_PADDING = "pb-24";
+/**
+ * Utrymme så scrollande innehåll inte hamnar under den fasta BottomTabs-raden.
+ * Höjden ska matcha tab-raden (py-2 + h-12 + pb med safe-area i BottomTabs), inte dubbleras med swipe-knapparnas egna padding.
+ */
+const MAIN_BOTTOM_PADDING =
+  "pb-[calc(env(safe-area-inset-bottom)+4.25rem)]";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
@@ -21,15 +25,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (hideChrome) {
     return (
-      <div className="min-h-dvh bg-neutral-950 text-neutral-100">
-        <main className="min-h-dvh pt-[env(safe-area-inset-top)]">{children}</main>
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
+        <main className="min-h-[100dvh] pt-[env(safe-area-inset-top)]">{children}</main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-neutral-900 via-neutral-900 to-black text-neutral-100">
-      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
+    <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
         <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
           {children}
         </main>

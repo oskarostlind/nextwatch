@@ -386,16 +386,13 @@ export default function SwipePageClient() {
         </div>
       )}
 
-      {/* Kort-stack: flex-1 fyller utrymmet mellan safe top och knapprad; ingen sidoscroll */}
+      {/* Kort-stack: flex-1 + min-h-0 låter höjden komma från föräldern — inga fasta px-höjder */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pt-2">
       {cards[0] ? (
-        <div
-          className="relative mx-auto flex min-h-0 w-full max-w-[360px] flex-1 items-center justify-center overflow-hidden"
-          style={{
-            height: "min(620px, calc(100dvh - 14rem))",
-            maxHeight: "100%",
-          }}
-        >
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden">
+          <div
+            className="relative isolate mx-auto aspect-[9/13] h-full max-h-full w-full min-h-0 max-w-[360px] shrink overflow-hidden"
+          >
           {stackIndices.map((idx) => {
             const card = cards[idx];
             if (!card) return null;
@@ -404,7 +401,7 @@ export default function SwipePageClient() {
               return (
                 <motion.div
                   key={card.id}
-                  className="absolute inset-x-0 top-0 z-10 flex items-center justify-center"
+                  className="absolute inset-0 z-10 flex items-center justify-center p-0.5"
                   animate={controls}
                   drag="x"
                   dragConstraints={{ left: 0, right: 0 }}
@@ -457,7 +454,7 @@ export default function SwipePageClient() {
             return (
               <div
                 key={card.id}
-                className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center opacity-[0.92]"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92]"
                 style={{
                   zIndex: z,
                   transform: `translateY(${translateY}px) scale(${scale})`,
@@ -468,6 +465,7 @@ export default function SwipePageClient() {
               </div>
             );
           })}
+          </div>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center opacity-70">
@@ -476,8 +474,8 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      {/* Action buttons – ovanför BottomTabs + home indicator */}
-      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-[calc(env(safe-area-inset-bottom)+6rem)] pt-3">
+      {/* Action buttons: endast luft mot kort — bottenutfyllnad sköts av AppShell main (tabs + safe area) */}
+      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-2 pt-2">
         <button
           aria-label="Nej"
           onClick={() =>
@@ -561,11 +559,11 @@ function StaticCard({
 }) {
   return (
     <div
-      className={`relative h-[520px] w-[360px] [perspective:1000px] ${interactive ? "cursor-pointer" : "cursor-default"}`}
+      className={`relative h-full max-h-full w-full min-h-0 [perspective:1000px] ${interactive ? "cursor-pointer" : "cursor-default"}`}
       onClick={interactive ? onFlip : undefined}
     >
       <div
-        className="relative h-full w-full rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
+        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
@@ -581,15 +579,15 @@ function StaticCard({
 
 function Front({ card }: { card: Card }) {
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl">
+    <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
       {card.poster ? (
-        <div className="relative h-full w-full">
+        <div className="relative h-full w-full min-h-0">
           <Image
             src={card.poster}
             alt={card.title}
             fill
             sizes="(max-width: 768px) 100vw, 600px"
-            className="object-cover"
+            className="object-contain object-center"
             priority={false}
           />
         </div>

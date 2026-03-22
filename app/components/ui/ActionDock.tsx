@@ -56,8 +56,8 @@ function RoundBtn({
   );
 }
 
-/** Ovanför BottomTabs (fast botten); samma max-bredd som AppShell. */
-const DOCK_BOTTOM = "bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]";
+/** Ovanför BottomTabs — samma vertikala mått som AppShell MAIN_BOTTOM_PADDING (tab-rad + safe area). */
+const DOCK_BOTTOM = "bottom-[calc(env(safe-area-inset-bottom)+4.25rem)]";
 
 export default function ActionDock({
   onNope,

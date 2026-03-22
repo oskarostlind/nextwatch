@@ -53,6 +53,9 @@ type MatchResp =
 const HIDE_KEY = "nw_disliked_until";
 const SEEN_KEY = "nw_seen_ids";
 
+/** Hämta nästa unified-sida när kön har färre kort än detta (aggressiv prefetch). */
+const PREFETCH_MIN_CARDS = 10;
+
 function readHideMap(): Record<string, number> {
   try {
     const raw = localStorage.getItem(HIDE_KEY);
@@ -240,21 +243,24 @@ export default function SwipePageClient() {
   }, [loadPage]);
 
   useEffect(() => {
-    if (!loadingRef.current && cards.length < 3 && hasMore) {
+    if (!loadingRef.current && cards.length < PREFETCH_MIN_CARDS && hasMore) {
       const next = page + 1;
       setPage(next);
       void loadPage(next, false);
     }
   }, [cards.length, hasMore, page, loadPage]);
 
-  // lazy hydrering av details på topp- och nästa-kortet (parallellt)
+  // lazy hydrering av details på topp- och nästa korten i stacken (parallellt)
   const fetched = useRef<Set<string>>(new Set());
   useEffect(() => {
     const cur = cards[0];
     const nxt = cards[1];
+    const third = cards[2];
     const toFetch: { id: string; mediaType: MediaType; tmdbId: number }[] = [];
     if (cur && !fetched.current.has(cur.id)) toFetch.push({ id: cur.id, mediaType: cur.mediaType, tmdbId: cur.tmdbId });
     if (nxt && !fetched.current.has(nxt.id)) toFetch.push({ id: nxt.id, mediaType: nxt.mediaType, tmdbId: nxt.tmdbId });
+    if (third && !fetched.current.has(third.id))
+      toFetch.push({ id: third.id, mediaType: third.mediaType, tmdbId: third.tmdbId });
     if (toFetch.length === 0) return;
 
     toFetch.forEach((t) => fetched.current.add(t.id));
@@ -286,79 +292,76 @@ export default function SwipePageClient() {
     setCards((prev) => prev.slice(1));
   }
 
-  /* ---------- group helpers ---------- */
+  /* ---------- group helpers (fire-and-forget; blockerar inte UI) ---------- */
 
-  async function sendGroupVote(c: Card, vote: "LIKE" | "DISLIKE") {
+  function sendGroupVoteBackground(c: Card, vote: "LIKE" | "DISLIKE") {
     if (mode !== "group" || !group?.code) return;
-    try {
-      await fetch("/api/group/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          groupCode: group.code,
-          tmdbId: c.tmdbId,
-          tmdbType: c.mediaType,
-          vote,
-        }),
-      });
-      // efter röst: poll match-endpoint och emit event om match finns
-      const m = await fetch(`/api/group/match?code=${group.code}`, {
-        cache: "no-store",
+    const code = group.code;
+    void fetch("/api/group/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        groupCode: code,
+        tmdbId: c.tmdbId,
+        tmdbType: c.mediaType,
+        vote,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) return null;
+        return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, { cache: "no-store" });
       })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
-      const parsed = m as MatchResp | null;
-      if (parsed && "ok" in parsed && parsed.ok && parsed.match) {
-        // låt din befintliga overlay lyssna på detta
-        window.dispatchEvent(
-          new CustomEvent("nw:group-match", {
-            detail: {
-              code: group.code,
-              tmdbId: parsed.match.tmdbId,
-              tmdbType: parsed.match.tmdbType,
-            },
-          })
-        );
-      }
-    } catch {
-      // swallow – gruppröst är best-effort; UI lämnas oförändrat
-    }
+      .then((matchRes) => {
+        if (!matchRes || !matchRes.ok) return null;
+        return matchRes.json() as Promise<unknown>;
+      })
+      .then((m: unknown) => {
+        const parsed = m as MatchResp | null;
+        if (parsed && "ok" in parsed && parsed.ok && parsed.match) {
+          window.dispatchEvent(
+            new CustomEvent("nw:group-match", {
+              detail: {
+                code,
+                tmdbId: parsed.match.tmdbId,
+                tmdbType: parsed.match.tmdbType,
+              },
+            })
+          );
+        }
+      })
+      .catch(() => {
+        /* best-effort */
+      });
   }
 
-  /* ---------- actions ---------- */
+  /* ---------- actions (optimistic: popTop direkt; API i bakgrunden) ---------- */
 
-  async function handleDislike(c: Card) {
+  function handleDislike(c: Card): void {
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
-    await sendGroupVote(c, "DISLIKE");
     popTop();
+    sendGroupVoteBackground(c, "DISLIKE");
   }
 
-  async function handleLike(c: Card) {
+  function handleLike(c: Card): void {
     markSeen(c.id);
-    try {
-      // enskild watchlist (bevarar existerande beteende)
-      const res = await fetch("/api/watchlist/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          tmdbId: c.tmdbId,
-          mediaType: c.mediaType,
-          title: c.title,
-          year: c.year,
-          poster: c.poster,
-        }),
-      });
-      // oavsett om watchlist lyckas ska grupp-rösten skickas om läge=group
-      await sendGroupVote(c, "LIKE");
-      if (!res.ok) {
-        // fortsätt ändå – vi har redan markerat kortet som sett
-      }
-    } finally {
-      popTop();
-    }
+    popTop();
+    void fetch("/api/watchlist/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: c.tmdbId,
+        mediaType: c.mediaType,
+        title: c.title,
+        year: c.year,
+        poster: c.poster,
+      }),
+    }).catch(() => {
+      /* best-effort */
+    });
+    sendGroupVoteBackground(c, "LIKE");
   }
 
   function onInfo(c: Card) {
@@ -370,67 +373,111 @@ export default function SwipePageClient() {
   const DIST_THRESHOLD = 110;
   const VELOCITY_THRESHOLD = 700;
 
+  const stackIndices: number[] = [];
+  if (cards.length > 0) {
+    for (let i = Math.min(2, cards.length - 1); i >= 0; i--) stackIndices.push(i);
+  }
+
   return (
-    <div className="relative mx-auto w-full max-w-md" style={{ minHeight: 620 }}>
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {mode === "group" && group?.code && (
-        <div className="pointer-events-none absolute top-2 left-1/2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
+        <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
           Swiping as: <span className="font-mono tracking-wider">{group.code}</span>
         </div>
       )}
 
-      {/* Top card */}
+      {/* Kort-stack: flex-1 fyller utrymmet mellan safe top och knapprad; ingen sidoscroll */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pt-2">
       {cards[0] ? (
-        <motion.div
-          key={cards[0].id}
-          className="absolute inset-x-0 top-0 z-10 flex items-center justify-center"
-          animate={controls}
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.18}
-          onDragEnd={(_, info) => {
-            const { x } = info.offset;
-            const v = info.velocity.x;
-            if (x > DIST_THRESHOLD || v > VELOCITY_THRESHOLD) {
-              const c = cards[0];
-              void controls
-                .start({ x: 520, rotate: 18, opacity: 0, transition: { duration: 0.22 } })
-                .then(async () => {
-                  await handleLike(c);
-                  await controls.start({ x: 0, rotate: 0, opacity: 1 });
-                });
-              return;
-            }
-            if (x < -DIST_THRESHOLD || v < -VELOCITY_THRESHOLD) {
-              const c = cards[0];
-              void controls
-                .start({ x: -520, rotate: -18, opacity: 0, transition: { duration: 0.22 } })
-                .then(async () => {
-                  await handleDislike(c);
-                  await controls.start({ x: 0, rotate: 0, opacity: 1 });
-                });
-              return;
-            }
-            void controls.start({
-              x: 0,
-              rotate: 0,
-              transition: { type: "spring", stiffness: 320, damping: 28 },
-            });
+        <div
+          className="relative mx-auto flex min-h-0 w-full max-w-[360px] flex-1 items-center justify-center overflow-hidden"
+          style={{
+            height: "min(620px, calc(100dvh - 14rem))",
+            maxHeight: "100%",
           }}
         >
-          <StaticCard
-            card={cards[0]}
-            flipped={flippedId === cards[0].id}
-            onFlip={() => setFlippedId((p) => (p === cards[0].id ? null : cards[0].id))}
-          />
-        </motion.div>
+          {stackIndices.map((idx) => {
+            const card = cards[idx];
+            if (!card) return null;
+            const isTop = idx === 0;
+            if (isTop) {
+              return (
+                <motion.div
+                  key={card.id}
+                  className="absolute inset-x-0 top-0 z-10 flex items-center justify-center"
+                  animate={controls}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.18}
+                  onDragEnd={(_, info) => {
+                    const { x } = info.offset;
+                    const v = info.velocity.x;
+                    if (x > DIST_THRESHOLD || v > VELOCITY_THRESHOLD) {
+                      const c = cards[0];
+                      if (!c) return;
+                      void controls
+                        .start({ x: 520, rotate: 18, opacity: 0, transition: { duration: 0.22 } })
+                        .then(() => {
+                          handleLike(c);
+                          void controls.start({ x: 0, rotate: 0, opacity: 1 });
+                        });
+                      return;
+                    }
+                    if (x < -DIST_THRESHOLD || v < -VELOCITY_THRESHOLD) {
+                      const c = cards[0];
+                      if (!c) return;
+                      void controls
+                        .start({ x: -520, rotate: -18, opacity: 0, transition: { duration: 0.22 } })
+                        .then(() => {
+                          handleDislike(c);
+                          void controls.start({ x: 0, rotate: 0, opacity: 1 });
+                        });
+                      return;
+                    }
+                    void controls.start({
+                      x: 0,
+                      rotate: 0,
+                      transition: { type: "spring", stiffness: 320, damping: 28 },
+                    });
+                  }}
+                >
+                  <StaticCard
+                    card={card}
+                    flipped={flippedId === card.id}
+                    interactive
+                    onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                  />
+                </motion.div>
+              );
+            }
+            const depth = idx;
+            const scale = depth === 1 ? 0.95 : 0.9;
+            const translateY = depth === 1 ? 10 : 20;
+            const z = depth === 1 ? 9 : 8;
+            return (
+              <div
+                key={card.id}
+                className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center opacity-[0.92]"
+                style={{
+                  zIndex: z,
+                  transform: `translateY(${translateY}px) scale(${scale})`,
+                  filter: "brightness(0.88)",
+                }}
+              >
+                <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center opacity-70">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center opacity-70">
           Slut på förslag nu.
         </div>
       )}
+      </div>
 
-      {/* Action buttons – bevarad placering & storlek */}
-      <div className="pointer-events-auto absolute inset-x-0 bottom-6 z-20 flex items-center justify-center gap-7">
+      {/* Action buttons – ovanför BottomTabs + home indicator */}
+      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-[calc(env(safe-area-inset-bottom)+6rem)] pt-3">
         <button
           aria-label="Nej"
           onClick={() =>
@@ -438,7 +485,7 @@ export default function SwipePageClient() {
             (async () => {
               const c = cards[0];
               await controls.start({ x: -520, rotate: -18, opacity: 0, transition: { duration: 0.22 } });
-              await handleDislike(c);
+              handleDislike(c);
               await controls.start({ x: 0, rotate: 0, opacity: 1 });
             })()
           }
@@ -464,7 +511,7 @@ export default function SwipePageClient() {
             (async () => {
               const c = cards[0];
               await controls.start({ x: 520, rotate: 18, opacity: 0, transition: { duration: 0.22 } });
-              await handleLike(c);
+              handleLike(c);
               await controls.start({ x: 0, rotate: 0, opacity: 1 });
             })()
           }
@@ -484,8 +531,8 @@ export default function SwipePageClient() {
               await controls.start({ x: 520, rotate: 0, opacity: 0, transition: { duration: 0.18 } });
               markSeen(c.id);
               hideFor7Days(c.tmdbId);
-              await sendGroupVote(c, "DISLIKE"); // räknas som ej intresserad i gruppen
               popTop();
+              sendGroupVoteBackground(c, "DISLIKE");
               await controls.start({ x: 0, rotate: 0, opacity: 1 });
             })()
           }
@@ -505,13 +552,18 @@ function StaticCard({
   card,
   flipped,
   onFlip,
+  interactive = true,
 }: {
   card: Card;
   flipped: boolean;
+  interactive?: boolean;
   onFlip: () => void;
 }) {
   return (
-    <div className="relative h-[520px] w-[360px] cursor-pointer [perspective:1000px]" onClick={onFlip}>
+    <div
+      className={`relative h-[520px] w-[360px] [perspective:1000px] ${interactive ? "cursor-pointer" : "cursor-default"}`}
+      onClick={interactive ? onFlip : undefined}
+    >
       <div
         className="relative h-full w-full rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}

@@ -49,12 +49,15 @@ function RoundBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-14 w-14 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition disabled:opacity-60 md:h-12 md:w-12 ${cls}`}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition disabled:opacity-60 ${cls}`}
     >
       {children}
     </button>
   );
 }
+
+/** Ovanför BottomTabs (fast botten); samma max-bredd som AppShell. */
+const DOCK_BOTTOM = "bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]";
 
 export default function ActionDock({
   onNope,
@@ -64,7 +67,9 @@ export default function ActionDock({
   disabled,
 }: Props) {
   return (
-    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+68px)] z-30 mx-auto mt-4 flex w-full max-w-[520px] items-center justify-center gap-5 px-4 md:static md:bottom-0 md:mt-6">
+    <div
+      className={`fixed left-1/2 z-40 mx-auto flex w-full max-w-md -translate-x-1/2 items-center justify-center gap-5 px-4 ${DOCK_BOTTOM}`}
+    >
       <RoundBtn
         title="Nope"
         intent="danger"

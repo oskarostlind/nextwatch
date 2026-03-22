@@ -1,14 +1,19 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import React from "react";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import { cookies } from "next/headers";
-import { SpeedInsights } from "@vercel/speed-insights/next"
 
 export const metadata: Metadata = {
   title: "NextWatch",
   description: "Swipe your next watch",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({
@@ -21,7 +26,7 @@ export default async function RootLayout({
 
   return (
     <html lang="sv">
-      <body>
+      <body className="min-h-dvh bg-neutral-900 text-neutral-100 antialiased">
         <AppShell>{children}</AppShell>
 
         {/* Global overlay – körs endast på klienten via OverlayMount */}

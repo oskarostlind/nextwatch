@@ -52,16 +52,18 @@ export async function GET() {
       favoriteMovie: true,
       favoriteShow: true,
       updatedAt: true,
+      user: { select: { username: true } },
     },
   });
 
   if (!prof) return NextResponse.json({ ok: true, profile: null });
 
   const dob = prof.dob ? new Date(prof.dob).toISOString() : null;
+  const { user, ...rest } = prof;
 
   return NextResponse.json({
     ok: true,
-    profile: { ...prof, dob },
+    profile: { ...rest, dob, username: user?.username ?? null },
   });
 }
 

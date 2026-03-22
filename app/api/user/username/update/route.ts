@@ -12,7 +12,7 @@ type Err = { ok: false; message: string };
 type Body = { username: string | null };
 
 function valid(u: string): boolean {
-  return /^[a-z0-9_]{3,20}$/i.test(u);
+  return /^[a-z0-9_.]{3,20}$/.test(u);
 }
 
 type ExistsRow = { exists: boolean };
@@ -29,17 +29,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: "Ogiltig JSON." } as Err, { status: 400 });
   }
 
-  const desired = body.username; // kan vara null för att rensa
-  if (desired !== null && !valid(desired.trim())) {
+  const desiredRaw = body.username;
+  const desired =
+    desiredRaw === null || typeof desiredRaw === "undefined"
+      ? null
+      : typeof desiredRaw === "string"
+        ? desiredRaw.trim().toLowerCase()
+        : null;
+
+  if (desired !== null && desired !== "" && !valid(desired)) {
     return NextResponse.json({ ok: false, message: "Ogiltigt användarnamn." } as Err, { status: 400 });
   }
 
-  if (desired !== null) {
+  const toStore = desired === "" ? null : desired;
+
+  if (toStore !== null) {
     const taken = await prisma.$queryRaw<ExistsRow[]>`
       SELECT EXISTS(
         SELECT 1 FROM users
         WHERE username IS NOT NULL
-          AND LOWER(username) = LOWER(${desired})
+          AND LOWER(username) = LOWER(${toStore})
           AND id <> ${uid}
       ) AS exists
     `;
@@ -48,12 +57,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Uppdatera
   await prisma.$executeRaw`
     UPDATE users
-    SET username = ${desired}
+    SET username = ${toStore}
     WHERE id = ${uid}
   `;
 
-  return NextResponse.json({ ok: true, username: desired } as Ok);
+  return NextResponse.json({ ok: true, username: toStore } as Ok);
 }

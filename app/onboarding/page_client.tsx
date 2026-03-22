@@ -1,7 +1,8 @@
 // app/onboarding/page_client.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -245,6 +246,8 @@ export default function Client() {
 
   // state
   const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState("");
   const [language, setLanguage] = useState<(typeof LANGS)[number]>("sv");
   const [providers, setProviders] = useState<string[]>([]);
@@ -273,6 +276,14 @@ export default function Client() {
     );
     setDislikeGenres((prev) => prev.filter((x) => x !== g));
   }
+  function onUsernameChange(e: ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const lower = raw.toLowerCase();
+    const next = sanitizeUsernameInput(raw);
+    setUsername(next);
+    setUsernameBlockedChars(lower.length > 0 && lower !== next);
+  }
+
   function toggleDislike(g: string) {
     setDislikeGenres((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
@@ -283,6 +294,10 @@ export default function Client() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+    if (!usernameValidOrEmpty(username)) {
+      setErr("Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .).");
+      return;
+    }
     setLoading(true);
 
     // Region/Locale skickas inte – servern härleder från cookies/IP.
@@ -355,6 +370,24 @@ export default function Client() {
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm text-white/70">Användarnamn (valfritt)</label>
+            <input
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-white/30 focus:bg-white/10"
+              placeholder="t.ex. film_ninja.42"
+              value={username}
+              onChange={onUsernameChange}
+              autoComplete="username"
+              spellCheck={false}
+            />
+            <p className="mt-1 text-xs text-white/50">
+              Tomt eller 3–20 tecken: a–z, 0–9, _ och . Används när vänner söker dig.
+            </p>
+            {usernameBlockedChars ? (
+              <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort automatiskt.</p>
+            ) : null}
           </div>
 
           {/* Rad 2 – ENDAST Språk kvar */}

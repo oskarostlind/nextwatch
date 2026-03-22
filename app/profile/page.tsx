@@ -15,6 +15,8 @@ export type FavoriteItem = {
 
 export type ProfileDTO = {
   displayName: string | null;
+  /** User.username — gemensamt med vän-sök m.m. */
+  username?: string | null;
   dob: string | null; // ISO yyyy-mm-dd eller null
   region: string | null;
   locale: string | null;
@@ -73,6 +75,7 @@ export default async function Page() {
         providers: true,
         favoriteMovie: true,
         favoriteShow: true,
+        user: { select: { username: true } },
       },
     });
 
@@ -95,6 +98,7 @@ export default async function Page() {
 
       initial = {
         displayName: prof.displayName ?? null,
+        username: prof.user?.username ?? null,
         dob: prof.dob ? toDateInput(prof.dob) : null,
         region: prof.region ?? null,
         locale: prof.locale ?? null,

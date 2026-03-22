@@ -10,8 +10,7 @@ type Ok = { ok: true; available: boolean };
 type Err = { ok: false; message: string };
 
 function valid(u: string): boolean {
-  // 3–20 tecken, a–z0–9_, skiftlägesokänsligt
-  return /^[a-z0-9_]{3,20}$/i.test(u);
+  return /^[a-z0-9_.]{3,20}$/.test(u);
 }
 
 type ExistsRow = { exists: boolean };
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (!uid) return NextResponse.json({ ok: false, message: "Ingen session." } as Err, { status: 401 });
 
   const u = new URL(req.url);
-  const username = (u.searchParams.get("u") ?? u.searchParams.get("username") ?? "").trim();
+  const username = (u.searchParams.get("u") ?? u.searchParams.get("username") ?? "").trim().toLowerCase();
   if (!username) {
     return NextResponse.json({ ok: false, message: "Saknar 'username'." } as Err, { status: 400 });
   }

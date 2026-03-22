@@ -28,10 +28,19 @@ export async function GET() {
         favoriteGenres: true,
         dislikedGenres: true,
         dob: true,
+        user: { select: { username: true } },
       },
     });
 
-    return NextResponse.json({ ok: true, profile });
+    if (!profile) {
+      return NextResponse.json({ ok: true, profile: null });
+    }
+
+    const { user, ...rest } = profile;
+    return NextResponse.json({
+      ok: true,
+      profile: { ...rest, username: user?.username ?? null },
+    });
   } catch (err) {
     console.error("[profile/me] error:", err);
     return NextResponse.json({ ok: false, message: "Kunde inte läsa profil." }, { status: 500 });

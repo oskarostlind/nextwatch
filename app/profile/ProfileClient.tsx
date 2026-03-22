@@ -1,9 +1,10 @@
 // app/profile/ProfileClient.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import LogoutButton from "@/app/components/auth/LogoutButton";
+import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 
 export type FavoriteItem = {
   id: number;
@@ -15,6 +16,8 @@ export type FavoriteItem = {
 // DTO exakt som servern skickar från app/profile/page.tsx
 export type ProfileDTO = {
   displayName: string | null;
+  /** User.username */
+  username?: string | null;
   dob: string | null;
   region: string | null;
   locale: string | null;
@@ -25,6 +28,11 @@ export type ProfileDTO = {
   favoriteMovie?: FavoriteItem | null;
   favoriteShow?: FavoriteItem | null;
 };
+
+const FIELD_CLASS =
+  "w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-white/30 focus:bg-white/10";
+
+const DATE_INPUT_CLASS = `${FIELD_CLASS} [color-scheme:dark]`;
 
 type Props = { initial: ProfileDTO | null };
 type Fav = FavoriteItem | null;
@@ -115,7 +123,8 @@ function cx(...xs: Array<string | null | false | undefined>) {
 
 // ——— Liten inline SearchBox (film/serie) ———
 type SearchItem = { id: number; title: string; year?: string | null; poster?: string | null };
-type SearchRes = { ok: boolean; items: SearchItem[] };
+/** Matchar app/api/tmdb/search — returnerar `results`, inte `items`. */
+type SearchRes = { ok?: boolean; results?: SearchItem[] };
 
 function SearchBox({
   label,
@@ -135,28 +144,60 @@ function SearchBox({
   const [q, setQ] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
-    if (!q || value) {
+    const query = q.trim();
+    if (value) {
       setItems([]);
+      setLoading(false);
+      setSearched(false);
       return;
     }
+    if (query.length < 2) {
+      setItems([]);
+      setLoading(false);
+      setSearched(false);
+      setOpen(false);
+      return;
+    }
+    setLoading(true);
+    setSearched(false);
     const t = setTimeout(async () => {
       try {
-        const u = `/api/tmdb/search?q=${encodeURIComponent(q)}&type=${type}&locale=${encodeURIComponent(locale)}`;
+        const u = `/api/tmdb/search?q=${encodeURIComponent(query)}&type=${type}&locale=${encodeURIComponent(locale)}`;
         const res = await fetch(u, { cache: "no-store" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (active) {
+            setItems([]);
+            setLoading(false);
+            setSearched(true);
+            setOpen(true);
+          }
+          return;
+        }
         const data = (await res.json()) as SearchRes;
         if (!active) return;
-        setItems(Array.isArray(data.items) ? data.items : []);
+        const list = Array.isArray(data.results) ? data.results : [];
+        setItems(list);
+        setLoading(false);
+        setSearched(true);
         setOpen(true);
       } catch {
-        /* ignore */
+        if (active) {
+          setItems([]);
+          setLoading(false);
+          setSearched(true);
+        }
       }
     }, 200);
-    return () => { active = false; clearTimeout(t); };
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
   }, [q, type, locale, value]);
 
   useEffect(() => {
@@ -173,16 +214,28 @@ function SearchBox({
       <label className="mb-1 block text-sm text-white/70">{label}</label>
       <div className="flex gap-2">
         <input
-          className="mt-0 w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
+          className={FIELD_CLASS}
           placeholder={placeholder}
           value={value ? value.title : q}
-          onChange={(e) => { onSelect(null); setQ(e.target.value); }}
+          onChange={(e) => {
+            onSelect(null);
+            setQ(e.target.value);
+          }}
+          onFocus={() => {
+            if (items.length > 0 || loading || searched) setOpen(true);
+          }}
+          autoComplete="off"
         />
         {value && (
           <button
             type="button"
             className="rounded-xl border border-white/10 bg-black/30 px-3 text-sm hover:bg-white/5"
-            onClick={() => onSelect(null)}
+            onClick={() => {
+              onSelect(null);
+              setQ("");
+              setItems([]);
+              setOpen(false);
+            }}
             aria-label="Rensa"
             title="Rensa"
           >
@@ -191,46 +244,52 @@ function SearchBox({
         )}
       </div>
 
-      {open && items.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-black/80 backdrop-blur">
-          <ul className="max-h-64 overflow-auto">
-            {items.map((it) => (
-              <li key={`${type}-${it.id}`}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 p-2 text-left hover:bg-white/5"
-                  onClick={() => {
-                    onSelect({
-                      id: it.id,
-                      title: it.title,
-                      year: it.year ?? null,
-                      poster: it.poster ?? null,
-                    });
-                    setQ("");
-                    setOpen(false);
-                  }}
-                >
-                  <div className="h-12 w-8 overflow-hidden rounded bg-white/10">
-                    {it.poster ? (
-                      <Image
-                        src={it.poster}
-                        alt=""
-                        width={80}
-                        height={120}
-                        className="h-12 w-8 object-cover"
-                      />
-                    ) : (
-                      <div className="h-12 w-8" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm">{it.title}</div>
-                    {it.year && <div className="text-xs text-white/60">{it.year}</div>}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+      {open && (loading || searched || items.length > 0) && (
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 shadow-lg backdrop-blur">
+          {loading ? (
+            <div className="px-4 py-3 text-sm text-white/60">Söker…</div>
+          ) : items.length > 0 ? (
+            <ul className="max-h-64 overflow-auto">
+              {items.map((it) => (
+                <li key={`${type}-${it.id}`}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 p-2 text-left hover:bg-white/10"
+                    onClick={() => {
+                      onSelect({
+                        id: it.id,
+                        title: it.title,
+                        year: it.year ?? null,
+                        poster: it.poster ?? null,
+                      });
+                      setQ("");
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/10">
+                      {it.poster ? (
+                        <Image
+                          src={it.poster}
+                          alt=""
+                          width={80}
+                          height={120}
+                          className="h-12 w-8 object-cover"
+                        />
+                      ) : (
+                        <div className="h-12 w-8" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm">{it.title}</div>
+                      {it.year ? <div className="text-xs text-white/60">{it.year}</div> : null}
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-4 py-3 text-sm text-white/60">Inga träffar — prova en annan sökning.</div>
+          )}
         </div>
       )}
     </div>
@@ -240,6 +299,8 @@ function SearchBox({
 // —————————————————————— Huvudkomponent ——————————————————————
 export default function ProfileClient({ initial }: Props) {
   const [displayName, setDisplayName] = useState<string>(initial?.displayName ?? "");
+  const [username, setUsername] = useState<string>(initial?.username ?? "");
+  const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState<string>(toInputDate(initial?.dob ?? null));
   const [uiLanguage, setUiLanguage] = useState<string>(initial?.uiLanguage ?? "sv");
 
@@ -273,6 +334,8 @@ export default function ProfileClient({ initial }: Props) {
         if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
         if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
         if (typeof p.displayName === "string") setDisplayName(p.displayName);
+        if (typeof p.username === "string") setUsername(p.username);
+        else if (p.username === null) setUsername("");
         if (typeof p.dob === "string") setDob(toInputDate(p.dob));
         if (p.favoriteMovie && typeof p.favoriteMovie === "object") {
           const o = p.favoriteMovie as Record<string, unknown>;
@@ -299,11 +362,26 @@ export default function ProfileClient({ initial }: Props) {
     return () => { ignore = true; };
   }, []);
 
-  const canSubmit = useMemo(() => !!displayName && !!dob, [displayName, dob]);
+  const canSubmit = useMemo(
+    () => !!displayName && !!dob && usernameValidOrEmpty(username),
+    [displayName, dob, username]
+  );
+
+  function onUsernameChange(e: ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const lower = raw.toLowerCase();
+    const next = sanitizeUsernameInput(raw);
+    setUsername(next);
+    setUsernameBlockedChars(lower.length > 0 && lower !== next);
+  }
 
   const submit = async () => {
-    if (!canSubmit) { setMsg("Fyll i namn och födelsedatum."); return; }
-    setBusy(true); setMsg(null);
+    if (!canSubmit) {
+      setMsg("Fyll i namn och födelsedatum. Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .).");
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
     try {
       const res = await fetch("/api/profile/save-onboarding", {
         method: "POST",
@@ -320,11 +398,26 @@ export default function ProfileClient({ initial }: Props) {
           favoriteShow,
         }),
       });
-      let message = "Sparat.";
-      try {
-        const d = (await res.json()) as { message?: string };
-        if (d?.message) message = d.message;
-      } catch {}
+      const payload = (await res.json()) as { ok?: boolean; message?: string };
+      if (!res.ok || payload.ok === false) {
+        setMsg(payload.message ?? "Kunde inte spara profil.");
+        return;
+      }
+      const message = payload.message ?? "Sparat.";
+
+      const unamePayload = username.trim() === "" ? null : username.trim();
+      const ures = await fetch("/api/user/username/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ username: unamePayload } satisfies { username: string | null }),
+      });
+      const udata = (await ures.json()) as { ok?: boolean; message?: string };
+      if (!ures.ok || udata.ok === false) {
+        setMsg(`${message} ${udata.message ?? "Kunde inte spara användarnamn."}`.trim());
+        return;
+      }
+
       setMsg(message);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Ett fel uppstod.");
@@ -359,21 +452,45 @@ export default function ProfileClient({ initial }: Props) {
           <div>
             <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
             <input
-              className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
+              className={FIELD_CLASS}
               placeholder="Ditt namn"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="name"
             />
           </div>
           <div>
             <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
             <input
               type="date"
-              className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
+              className={DATE_INPUT_CLASS}
+              style={{ colorScheme: "dark" }}
               value={dob}
               onChange={(e) => setDob(e.target.value)}
             />
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm text-white/70">Användarnamn</label>
+          <input
+            className={FIELD_CLASS}
+            placeholder="t.ex. film_ninja.42"
+            value={username}
+            onChange={onUsernameChange}
+            autoComplete="username"
+            inputMode="text"
+            spellCheck={false}
+          />
+          <p className="mt-1 text-xs text-white/50">
+            Tomt eller 3–20 tecken: små bokstäver, siffror, punkt och understreck. Visas för vänner.
+          </p>
+          {usernameBlockedChars ? (
+            <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort (endast a–z, 0–9, _ och .).</p>
+          ) : null}
+          {!usernameValidOrEmpty(username) ? (
+            <p className="mt-1 text-xs text-rose-400">Ange minst 3 tecken eller lämna tomt.</p>
+          ) : null}
         </div>
 
         {/* Favoriter – inline-sök */}

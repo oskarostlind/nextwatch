@@ -5,11 +5,25 @@ import Stripe from "stripe";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type CheckoutBody = {
+  priceId?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+};
+
+/** Bästa gissning på publik origin (proxy-säker), med env som sista fallback. */
+function resolveOrigin(req: NextRequest): string {
+  const fromHeader = req.headers.get("origin");
+  if (fromHeader) return fromHeader.replace(/\/$/, "");
+  const envBase = process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  if (envBase) return envBase.replace(/\/$/, "");
+  return new URL(req.url).origin;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) {
-      // Ingen Stripe i denna miljö – faila snällt vid RUNTIME (inte vid build)
       return NextResponse.json(
         { ok: false, message: "Stripe is not configured in this environment." },
         { status: 503 }
@@ -18,16 +32,32 @@ export async function POST(req: NextRequest) {
 
     const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
 
-    const body = (await req.json()) as { priceId: string; successUrl: string; cancelUrl: string };
-    if (!body?.priceId || !body?.successUrl || !body?.cancelUrl) {
-      return NextResponse.json({ ok: false, message: "Invalid payload" }, { status: 400 });
+    // Body är valfri – allt kan härledas på servern.
+    const body = (await req.json().catch(() => ({}))) as CheckoutBody;
+
+    const priceId = body.priceId ?? process.env.STRIPE_PRICE_LIFETIME;
+    if (!priceId) {
+      return NextResponse.json(
+        { ok: false, message: "Missing price (set STRIPE_PRICE_LIFETIME)." },
+        { status: 400 }
+      );
     }
 
+    const origin = resolveOrigin(req);
+    const successUrl = body.successUrl ?? `${origin}/premium/success`;
+    const cancelUrl = body.cancelUrl ?? `${origin}/premium`;
+
+    // Koppla köpet till nuvarande session-användare så webhooken kan sätta premium.
+    const uid = req.cookies.get("nw_uid")?.value ?? undefined;
+
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [{ price: body.priceId, quantity: 1 }],
-      success_url: body.successUrl,
-      cancel_url: body.cancelUrl,
+      // Lifetime = engångsköp → "payment" (inte "subscription").
+      mode: "payment",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      client_reference_id: uid,
+      metadata: uid ? { uid, product: "lifetime" } : { product: "lifetime" },
     });
 
     return NextResponse.json({ ok: true, url: session.url }, { status: 200 });

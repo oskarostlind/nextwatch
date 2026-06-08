@@ -27,6 +27,7 @@ type TmdbTitle = {
 };
 
 const V4_TOKEN =
+  process.env.TMDB_V4_TOKEN ??
   process.env.TMDB_v4_TOKEN ??
   process.env.TMDB_READ_TOKEN ??
   process.env.TMDB_TOKEN ??

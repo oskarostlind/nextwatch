@@ -11,11 +11,12 @@ export default function PremiumPage() {
     setLoading(true);
     try {
       const r = await fetch("/api/stripe/checkout", { method: "POST" });
-      const js: { ok: boolean; url?: string; error?: string } = await r.json();
+      const js: { ok: boolean; url?: string; error?: string; message?: string } =
+        await r.json();
       if (js.ok && js.url) {
         window.location.href = js.url;
       } else {
-        setErr(js.error ?? "Kunde inte starta betalning");
+        setErr(js.error ?? js.message ?? "Kunde inte starta betalning");
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

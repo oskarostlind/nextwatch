@@ -99,7 +99,7 @@ async function tmdbGet<T>(
   params: Record<string, string | number | undefined>,
   cacheMode: RequestCache = "no-store",
 ): Promise<T> {
-  const v4 = process.env.TMDB_v4_TOKEN;
+  const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN;
   const v3 = process.env.TMDB_API_KEY;
 
   const usp = new URLSearchParams();

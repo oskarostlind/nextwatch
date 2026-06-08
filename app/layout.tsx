@@ -25,8 +25,8 @@ export default async function RootLayout({
   await cookies();
 
   return (
-    <html lang="sv" className="min-h-[100dvh] bg-neutral-950">
-      <body className="min-h-[100dvh] bg-neutral-950 text-neutral-100 antialiased">
+    <html lang="sv" className="min-h-[100dvh] overscroll-none bg-neutral-950">
+      <body className="min-h-[100dvh] overscroll-none bg-neutral-950 text-neutral-100 antialiased">
         <AppShell>{children}</AppShell>
 
         {/* Global overlay – körs endast på klienten via OverlayMount */}

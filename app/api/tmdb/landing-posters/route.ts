@@ -42,7 +42,7 @@ async function resolveRegionLocale(): Promise<{ region: string; locale: string }
 
 async function tmdbFetch(path: string, params: Record<string, string | number>): Promise<TmdbResponse> {
   const apiKey = process.env.TMDB_API_KEY;
-  const v4 = process.env.TMDB_v4_TOKEN;
+  const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN;
 
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) usp.set(k, String(v));

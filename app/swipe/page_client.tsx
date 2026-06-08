@@ -386,12 +386,11 @@ export default function SwipePageClient() {
         </div>
       )}
 
-      {/* Kort-stack: flex-1 + min-h-0 låter höjden komma från föräldern — inga fasta px-höjder */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pt-2">
+      {/* Kort-yta: flex-1 + min-h-0 + overflow-hidden => flexbox styr höjden och kortet kan aldrig växa förbi ytan och klippas bakom ikon-raden. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pt-2">
       {cards[0] ? (
-        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden">
           <div
-            className="relative isolate mx-auto aspect-[9/13] h-full max-h-full w-full min-h-0 max-w-[360px] shrink overflow-hidden"
+            className="relative isolate mx-auto h-full max-h-full w-full min-h-0 max-w-[360px] overflow-hidden"
           >
           {stackIndices.map((idx) => {
             const card = cards[idx];
@@ -466,7 +465,6 @@ export default function SwipePageClient() {
             );
           })}
           </div>
-        </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center opacity-70">
           Slut på förslag nu.
@@ -474,8 +472,8 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      {/* Action buttons: endast luft mot kort — bottenutfyllnad sköts av AppShell main (tabs + safe area) */}
-      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-2 pt-2">
+      {/* Action buttons: endast luft mot kort — bottenutfyllnad sköts av AppShell main (tabs + safe area). pb-0 så ikonerna ligger tajt ovanför BottomTabs. */}
+      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-0 pt-2">
         <button
           aria-label="Nej"
           onClick={() =>

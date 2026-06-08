@@ -59,7 +59,7 @@ function regionFromLocale(l: string): string {
 }
 
 async function tmdbGet<T>(path: string, query: string): Promise<T> {
-  const v4 = process.env.TMDB_v4_TOKEN;
+  const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN;
   const v3 = process.env.TMDB_API_KEY;
   const qs = query ? (path.includes("?") ? `&${query}` : `?${query}`) : "";
   const url = `${TMDB_BASE}${path}${qs}`;

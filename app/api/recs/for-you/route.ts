@@ -46,6 +46,7 @@ const SWEDISH_TO_TMDB: Record<string, number> = {
 
 // Env stöd: TMDB_v4_TOKEN | TMDB_READ_TOKEN | TMDB_TOKEN (v4) eller TMDB_API_KEY (v3)
 const V4_TOKEN =
+  process.env.TMDB_V4_TOKEN ??
   process.env.TMDB_v4_TOKEN ??
   process.env.TMDB_READ_TOKEN ??
   process.env.TMDB_TOKEN ??

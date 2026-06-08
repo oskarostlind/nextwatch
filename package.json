@@ -10,6 +10,8 @@
     "postinstall": "prisma generate --schema=./prisma/schema.prisma"
   },
   "dependencies": {
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "@prisma/client": "^6.16.2",
     "@vercel/speed-insights": "^1.2.0",
     "bcryptjs": "^3.0.2",
@@ -25,6 +27,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.0",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

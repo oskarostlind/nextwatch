@@ -17,7 +17,7 @@ const PUBLIC_ROUTES = [
  * Höjden ska matcha tab-raden (py-2 + h-12 + pb med safe-area i BottomTabs), inte dubbleras med swipe-knapparnas egna padding.
  */
 const MAIN_BOTTOM_PADDING =
-  "pb-[calc(env(safe-area-inset-bottom)+4.25rem)]";
+  "pb-[calc(env(safe-area-inset-bottom)+4rem)]";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";

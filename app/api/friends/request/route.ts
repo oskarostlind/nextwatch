@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 type ApiOk = { ok: true; requestId: string };
 type ApiErr = { ok: false; message: string };
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     // Båda användarna måste finnas
     const [fromUser, toUser] = await Promise.all([
-      prisma.user.findUnique({ where: { id: me }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: me }, select: { id: true, username: true } }),
       prisma.user.findUnique({ where: { id: toUserId }, select: { id: true } }),
     ]);
     if (!fromUser || !toUser) return json({ ok: false, message: "User not found." }, { status: 404 });
@@ -91,6 +92,11 @@ export async function POST(req: NextRequest) {
       const fr = await prisma.friendRequest.create({
         data: { fromUserId: me, toUserId, status: "pending" },
         select: { id: true },
+      });
+      void sendPushToUser(toUserId, {
+        title: "Ny vänförfrågan",
+        body: `${fromUser.username ?? "Någon"} vill bli vän med dig`,
+        data: { type: "friend_request", fromUserId: me },
       });
       return json({ ok: true, requestId: fr.id });
     } catch (e) {

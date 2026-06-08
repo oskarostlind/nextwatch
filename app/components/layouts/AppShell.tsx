@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import BottomTabs from "../navigation/BottomTabs";
 import InviteToasts from "../InviteToasts";
+import PushRegistration from "../client/PushRegistration";
 
 const PUBLIC_ROUTES = [
   /^\/$/,
@@ -26,6 +27,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (hideChrome) {
     return (
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
+        <PushRegistration />
         <main className="min-h-[100dvh] pt-[env(safe-area-inset-top)]">{children}</main>
       </div>
     );
@@ -33,6 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
+      <PushRegistration />
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
         <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
           {children}

@@ -43,8 +43,23 @@ model User {
   groupMatchesSeen     GroupMatchSeen[]
 
   verifications Verification[]
+  pushTokens    PushToken[]
 
   @@map("users")
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  platform  String   @default("ios")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_push_tokens_user")
+  @@map("push_tokens")
 }
 
 model Profile {

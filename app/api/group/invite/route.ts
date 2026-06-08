@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,6 +113,20 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       );
     }
 
+    // Inbjudarens namn för notistexten (best-effort).
+    const inviter = await prisma.user.findUnique({
+      where: { id: fromUserId },
+      select: { username: true },
+    });
+    const fromName = inviter?.username ?? "Någon";
+    const notify = () => {
+      void sendPushToUser(toUserId, {
+        title: "Gruppinbjudan",
+        body: `${fromName} bjöd in dig till en grupp`,
+        data: { type: "group_invite", groupCode, fromUserId },
+      });
+    };
+
     // Upsert: om pending mellan samma par finns, uppdatera den; annars skapa
     const existingPending = await prisma.groupInvite.findFirst({
       where: {
@@ -130,6 +145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
           createdAt: new Date(), // bump sort
         },
       });
+      notify();
       return NextResponse.json({ ok: true });
     }
 
@@ -143,6 +159,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       },
     });
 
+    notify();
     return NextResponse.json({ ok: true });
   } catch (e) {
     // fånga Prisma P2002 → returnera 409 (aldrig 500)

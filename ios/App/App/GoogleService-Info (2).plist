@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>se.nextwatch.app</string>
+	<string>com.nextwatch.app</string>
 	<key>PROJECT_ID</key>
 	<string>nextwatch-20fb2</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,11 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:244074717455:ios:425fc38f26051d263d1e7a</string>
-
-	<key>UIBackgroundModes</key>
-<array>
-  <string>remote-notification</string>
-</array>
+	<string>1:244074717455:ios:b402dc2b49a6a37a3d1e7a</string>
 </dict>
 </plist>

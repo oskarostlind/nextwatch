@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'se.nextwatch.app',
+  appId: 'com.nextwatch.app',
   appName: 'Nextwatch',
   // NextWatch är en server-driven Next.js-app (API-routes, middleware, cookies()).
   // Den kan INTE statiskt exporteras, så native-skalet laddar den hostade appen

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import LogoutButton from "@/app/components/auth/LogoutButton";
+import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 
 export type FavoriteItem = {
@@ -593,17 +594,12 @@ export default function ProfileClient({ initial }: Props) {
             <p className="mb-3 text-sm text-white/50">Välj de streamingtjänster du har.</p>
             <div className="flex flex-wrap gap-2">
               {PROVIDERS.map((p) => (
-                <button
-                  type="button"
+                <ProviderChip
                   key={p.id}
+                  label={p.label}
+                  selected={providers.includes(p.id)}
                   onClick={() => toggle("providers", p.id)}
-                  className={cx(
-                    "rounded-xl border px-3 py-2 text-sm",
-                    providers.includes(p.id) ? "border-sky-500 bg-sky-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                  )}
-                >
-                  {p.label}
-                </button>
+                />
               ))}
             </div>
           </div>

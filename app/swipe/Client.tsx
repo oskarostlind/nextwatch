@@ -15,10 +15,8 @@ export default function Client() {
       await fetch("/api/session/init", { cache: "no-store" }).catch(() => {});
       const s = await fetch("/api/profile/status", { cache: "no-store" }).then((x) => x.json());
       if (!alive) return;
-      if (!s?.ok) { setReady(true); return; }
-      if (!s.hasSession) { setReady(true); return; }
-      if (!s.emailVerified) { r.replace("/auth/signup"); return; }
-      if (!s.hasProfile) { r.replace("/onboarding"); return; }
+      if (!s?.hasSession) { setReady(true); return; }
+      if (!s?.hasProfile) { r.replace("/onboarding"); return; }
       setReady(true);
     })();
     return () => { alive = false; };

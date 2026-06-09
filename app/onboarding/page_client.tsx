@@ -338,7 +338,7 @@ export default function Client() {
       }
       const data = (await res.json()) as { ok?: boolean; message?: string; next?: string };
       if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
-      router.replace(data.next ?? "/auth/register");
+      router.replace(data.next ?? "/swipe");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
     } finally {

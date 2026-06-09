@@ -220,14 +220,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const authUser = await prisma.user.findUnique({
-      where: { id: uid },
-      select: { appleSub: true, passwordHash: true },
-    });
-    const needsRegister = !authUser?.passwordHash && !authUser?.appleSub;
-    const next = needsRegister ? "/auth/register" : "/swipe";
-
-    const res = ok(200, "Profilen sparades.", { profile, next });
+    const res = ok(200, "Profilen sparades.", { profile, next: "/swipe" });
     const oneYear = 60 * 60 * 24 * 365;
     res.cookies.set("nw_uid", uid, sessionCookieOpts(oneYear, true));
     res.cookies.set("nw_region", finalRegion, sessionCookieOpts(oneYear, false));

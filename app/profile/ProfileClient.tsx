@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 
@@ -318,6 +319,13 @@ export default function ProfileClient({ initial }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [tab, setTab] = useState<"bas" | "smak" | "tjanster">("bas");
+
+  const TABS = [
+    { id: "bas" as const, label: "Profil" },
+    { id: "smak" as const, label: "Smak" },
+    { id: "tjanster" as const, label: "Tjänster" },
+  ];
 
   // Bakåtkompatibel hydrering om initial saknar fält
   useEffect(() => {
@@ -440,159 +448,177 @@ export default function ProfileClient({ initial }: Props) {
   };
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Din profil</h1>
+    <main className="mx-auto max-w-2xl px-4 py-6">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Profil</h1>
         <LogoutButton />
       </div>
 
-      <div className="grid gap-5">
-        {/* Namn & DOB */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
-            <input
-              className={FIELD_CLASS}
-              placeholder="Ditt namn"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              autoComplete="name"
-            />
+      <div className="mb-6 flex w-full items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className="relative flex-1 px-3 py-2 text-sm font-medium transition-colors"
+          >
+            {tab === t.id && (
+              <motion.div
+                layoutId="profile-tabs"
+                className="absolute inset-0 rounded-full bg-white"
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              />
+            )}
+            <span className={`relative z-10 ${tab === t.id ? "text-black" : "text-white/60 hover:text-white"}`}>
+              {t.label}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-neutral-900/50 p-5">
+        {tab === "bas" && (
+          <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
+                <input
+                  className={FIELD_CLASS}
+                  placeholder="Ditt namn"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  autoComplete="name"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
+                <input
+                  type="date"
+                  className={DATE_INPUT_CLASS}
+                  style={{ colorScheme: "dark" }}
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-white/70">Användarnamn</label>
+              <input
+                className={FIELD_CLASS}
+                placeholder="t.ex. film_ninja.42"
+                value={username}
+                onChange={onUsernameChange}
+                autoComplete="username"
+                inputMode="text"
+                spellCheck={false}
+              />
+              <p className="mt-1 text-xs text-white/50">
+                3–20 tecken (a–z, 0–9, _, .) — visas för vänner.
+              </p>
+              {usernameBlockedChars ? (
+                <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort.</p>
+              ) : null}
+              {!usernameValidOrEmpty(username) ? (
+                <p className="mt-1 text-xs text-rose-400">Ange minst 3 tecken eller lämna tomt.</p>
+              ) : null}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm text-white/70">Språk</label>
+              <div className="flex gap-2">
+                {["sv", "en"].map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => setUiLanguage(code)}
+                    className={cx(
+                      "rounded-xl border px-4 py-2 text-sm",
+                      uiLanguage === code ? "border-violet-500 bg-violet-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
+                    )}
+                  >
+                    {code === "sv" ? "Svenska" : "English"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
-            <input
-              type="date"
-              className={DATE_INPUT_CLASS}
-              style={{ colorScheme: "dark" }}
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-            />
+        )}
+
+        {tab === "smak" && (
+          <div className="grid gap-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
+              <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm text-white/70">Gillar</label>
+              <div className="flex flex-wrap gap-2">
+                {ALL_GENRES_SV.map((g) => (
+                  <button
+                    type="button"
+                    key={`like-${g}`}
+                    onClick={() => toggle("favoriteGenres", g)}
+                    className={cx(
+                      "rounded-full border px-3 py-1.5 text-sm",
+                      favoriteGenres.includes(g) ? "border-emerald-500 bg-emerald-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm text-white/70">Undvik</label>
+              <div className="flex flex-wrap gap-2">
+                {ALL_GENRES_SV.map((g) => (
+                  <button
+                    type="button"
+                    key={`dislike-${g}`}
+                    onClick={() => toggle("dislikedGenres", g)}
+                    className={cx(
+                      "rounded-full border px-3 py-1.5 text-sm",
+                      dislikedGenres.includes(g) ? "border-rose-500 bg-rose-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
+                    )}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div>
-          <label className="mb-1 block text-sm text-white/70">Användarnamn</label>
-          <input
-            className={FIELD_CLASS}
-            placeholder="t.ex. film_ninja.42"
-            value={username}
-            onChange={onUsernameChange}
-            autoComplete="username"
-            inputMode="text"
-            spellCheck={false}
-          />
-          <p className="mt-1 text-xs text-white/50">
-            Tomt eller 3–20 tecken: små bokstäver, siffror, punkt och understreck. Visas för vänner.
-          </p>
-          {usernameBlockedChars ? (
-            <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort (endast a–z, 0–9, _ och .).</p>
-          ) : null}
-          {!usernameValidOrEmpty(username) ? (
-            <p className="mt-1 text-xs text-rose-400">Ange minst 3 tecken eller lämna tomt.</p>
-          ) : null}
-        </div>
-
-        {/* Favoriter – inline-sök */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
-          <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
-        </div>
-
-        {/* UI-språk */}
-        <div className="grid grid-cols-1 md:grid-cols-2">
+        {tab === "tjanster" && (
           <div>
-            <label className="mb-1 block text-sm text-white/70">UI-språk</label>
+            <p className="mb-3 text-sm text-white/50">Välj de streamingtjänster du har.</p>
             <div className="flex flex-wrap gap-2">
-              {["sv", "en"].map((code) => (
+              {PROVIDERS.map((p) => (
                 <button
-                  key={code}
                   type="button"
-                  onClick={() => setUiLanguage(code)}
+                  key={p.id}
+                  onClick={() => toggle("providers", p.id)}
                   className={cx(
                     "rounded-xl border px-3 py-2 text-sm",
-                    uiLanguage === code ? "border-violet-500 bg-violet-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
+                    providers.includes(p.id) ? "border-sky-500 bg-sky-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
                   )}
                 >
-                  {code === "sv" ? "Svenska" : "English"}
+                  {p.label}
                 </button>
               ))}
             </div>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Genrer */}
-        <div>
-          <label className="mb-2 block text-sm text-white/70">Gillar genrer</label>
-          <div className="flex flex-wrap gap-2">
-            {ALL_GENRES_SV.map((g) => (
-              <button
-                type="button"
-                key={`like-${g}`}
-                onClick={() => toggle("favoriteGenres", g)}
-                className={cx(
-                  "rounded-xl border px-3 py-2 text-sm",
-                  favoriteGenres.includes(g) ? "border-emerald-500 bg-emerald-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                )}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm text-white/70">Undvik genrer</label>
-          <div className="flex flex-wrap gap-2">
-            {ALL_GENRES_SV.map((g) => (
-              <button
-                type="button"
-                key={`dislike-${g}`}
-                onClick={() => toggle("dislikedGenres", g)}
-                className={cx(
-                  "rounded-xl border px-3 py-2 text-sm",
-                  dislikedGenres.includes(g) ? "border-rose-500 bg-rose-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                )}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Providers */}
-        <div>
-          <label className="mb-2 block text-sm text-white/70">Tjänster du har</label>
-          <div className="flex flex-wrap gap-2">
-            {PROVIDERS.map((p) => (
-              <button
-                type="button"
-                key={p.id}
-                onClick={() => toggle("providers", p.id)}
-                className={cx(
-                  "rounded-xl border px-3 py-2 text-sm",
-                  providers.includes(p.id) ? "border-sky-500 bg-sky-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                )}
-                title={p.label}
-                aria-label={p.label}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Spara */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={submit}
-            disabled={busy || !canSubmit}
-            className="rounded-xl bg-violet-600 px-4 py-2 text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy ? "Sparar…" : "Spara ändringar"}
-          </button>
-          {msg && <p className="text-sm text-neutral-300">{msg}</p>}
-        </div>
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onClick={submit}
+          disabled={busy || !canSubmit}
+          className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? "Sparar…" : "Spara"}
+        </button>
+        {msg && <p className="text-sm text-neutral-300">{msg}</p>}
       </div>
     </main>
   );

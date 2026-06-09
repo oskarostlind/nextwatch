@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useGroupInvites } from '@/lib/useGroupInvites';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useGroupInvites } from "@/lib/useGroupInvites";
 
 export default function IncomingInvites() {
   const router = useRouter();
@@ -12,55 +12,56 @@ export default function IncomingInvites() {
   if (!data || !data.incoming?.length) return null;
 
   return (
-    <div className="mb-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
-      <h3 className="text-sm font-medium text-white/70">Inkommande gruppinbjudan</h3>
+    <div className="mb-5 space-y-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+      <h3 className="text-sm font-medium text-cyan-300">Gruppinbjudningar</h3>
 
       {data.incoming.map((inv) => (
         <div
           key={inv.id}
-          className="flex items-center justify-between rounded-xl bg-zinc-800 px-3 py-2"
+          className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5"
         >
-          <div>
-            <div className="text-zinc-100">
-              {inv.from.displayName ?? inv.from.username ?? inv.from.id}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-white">
+              {inv.from.displayName ?? inv.from.username ?? "Någon"}
             </div>
-            <div className="text-xs text-zinc-400">
-              invited you to <span className="font-mono">{inv.groupCode}</span>
+            <div className="text-xs text-white/50">
+              Bjuder in till <span className="font-mono text-white/70">{inv.groupCode}</span>
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <button
-              className="rounded-full bg-emerald-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+              type="button"
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               disabled={busy === inv.id}
               onClick={async () => {
                 setBusy(inv.id);
-                const res = await fetch('/api/group/invite/respond', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ id: inv.id, action: 'accept' }),
+                const res = await fetch("/api/group/invite/respond", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ id: inv.id, action: "accept" }),
                 });
                 setBusy(null);
                 if (res.ok) router.refresh();
               }}
             >
-              Accept
+              Acceptera
             </button>
-
             <button
-              className="rounded-full bg-red-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+              type="button"
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 disabled:opacity-50"
               disabled={busy === inv.id}
               onClick={async () => {
                 setBusy(inv.id);
-                await fetch('/api/group/invite/respond', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ id: inv.id, action: 'decline' }),
+                await fetch("/api/group/invite/respond", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ id: inv.id, action: "decline" }),
                 });
                 setBusy(null);
               }}
             >
-              Decline
+              Avvisa
             </button>
           </div>
         </div>

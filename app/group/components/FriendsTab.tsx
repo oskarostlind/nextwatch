@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Users, UserPlus, Send, Check, X } from "lucide-react";
+import { Search, Plus, Users, UserPlus, Check } from "lucide-react";
 
 type FriendsListUser = {
   id: string;
@@ -136,9 +136,10 @@ export default function FriendsTab() {
     }
   };
 
+  const hasPending = pendingIn.length > 0 || pendingOut.length > 0;
+
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2">
-      {/* Sök – enhetlig med GroupTab */}
+    <div className="flex flex-col gap-4">
       <div className={cardClass}>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
@@ -225,72 +226,49 @@ export default function FriendsTab() {
         )}
       </div>
 
-      {/* Inkommande */}
-      <div className={cardClass}>
-        <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
-          <UserPlus className="h-4 w-4 text-white/50" />
-          Inkommande ({pendingIn.length})
-        </h3>
-        {pendingIn.length === 0 ? (
-          <p className="rounded-xl bg-white/[0.02] py-4 text-center text-sm text-white/50">
-            Inga nya förfrågningar
-          </p>
-        ) : (
+      {hasPending && (
+        <div className={cardClass}>
+          <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
+            <UserPlus className="h-4 w-4 text-white/50" />
+            Förfrågningar
+          </h3>
           <ul className="flex flex-col gap-2">
             {pendingIn.map((r) => (
               <li
                 key={r.requestId}
-                className="flex flex-row flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-3"
               >
-                <span className="font-medium text-white/90">{displayName(r.from)}</span>
-                <div className="flex flex-row gap-2">
+                <span className="text-sm font-medium text-white/90">{displayName(r.from)}</span>
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => void declineRequest(r.requestId)}
-                    className="inline-flex items-center gap-1 rounded-full border border-white/20 px-3 py-2 text-xs font-medium text-white/70 transition active:scale-[0.98] hover:bg-white/10"
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5"
                   >
-                    <X className="h-3.5 w-3.5" /> Avvisa
+                    Avvisa
                   </button>
                   <button
                     type="button"
                     onClick={() => void acceptRequest(r.requestId)}
-                    className="inline-flex items-center gap-1 rounded-full bg-emerald-500/25 px-3 py-2 text-xs font-bold text-emerald-400 transition active:scale-[0.98] hover:bg-emerald-500/35"
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
                   >
-                    <Check className="h-3.5 w-3.5" /> Acceptera
+                    Acceptera
                   </button>
                 </div>
               </li>
             ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Utgående */}
-      <div className={cardClass}>
-        <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
-          <Send className="h-4 w-4 text-white/50" />
-          Utgående ({pendingOut.length})
-        </h3>
-        {pendingOut.length === 0 ? (
-          <p className="rounded-xl bg-white/[0.02] py-4 text-center text-sm text-white/50">
-            Inga utgående förfrågningar
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
             {pendingOut.map((r) => (
               <li
                 key={r.requestId}
-                className="flex flex-row items-center justify-between rounded-xl bg-white/5 px-4 py-3"
+                className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
               >
-                <span className="font-medium text-white/90">{displayName(r.to)}</span>
-                <span className="rounded-full border border-white/15 px-3 py-1 text-xs font-medium text-white/50">
-                  Skickad
-                </span>
+                <span className="text-sm font-medium text-white/90">{displayName(r.to)}</span>
+                <span className="text-xs text-white/40">Väntar…</span>
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

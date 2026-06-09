@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { motion, useAnimation } from "framer-motion";
+import { motion, useAnimation, useMotionValue, useTransform } from "framer-motion";
 
 /* ---------- types ---------- */
 
@@ -186,6 +186,14 @@ export default function SwipePageClient() {
   const controls = useAnimation();
   const loadingRef = useRef(false);
 
+  // Tinder-stil: kortet följer fingret, overlays togglas av drag-riktningen.
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotate = useTransform(x, [-260, 260], [-16, 16]);
+  const likeOpacity = useTransform(x, [48, 150], [0, 1]);
+  const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
+  const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
+
   const loadPage = useCallback(
     async (targetPage: number, replace: boolean) => {
       if (loadingRef.current) return;
@@ -364,14 +372,36 @@ export default function SwipePageClient() {
     sendGroupVoteBackground(c, "LIKE");
   }
 
-  function onInfo(c: Card) {
-    setFlippedId((prev) => (prev === c.id ? null : c.id));
+  function handleSeen(c: Card): void {
+    markSeen(c.id);
+    hideFor7Days(c.tmdbId);
+    popTop();
+    sendGroupVoteBackground(c, "DISLIKE");
   }
 
   /* ---------- render ---------- */
 
   const DIST_THRESHOLD = 110;
   const VELOCITY_THRESHOLD = 700;
+
+  async function swipeOut(dir: "left" | "right" | "up") {
+    const c = cards[0];
+    if (!c) return;
+    const target =
+      dir === "right"
+        ? { x: 560, opacity: 0 }
+        : dir === "left"
+        ? { x: -560, opacity: 0 }
+        : { y: -760, opacity: 0 };
+    await controls.start({ ...target, transition: { duration: 0.22 } });
+    if (dir === "right") handleLike(c);
+    else if (dir === "left") handleDislike(c);
+    else handleSeen(c);
+    // Återställ direkt (utan animation) så nästa kort inte glider in från sidan.
+    x.set(0);
+    y.set(0);
+    controls.set({ x: 0, y: 0, opacity: 1 });
+  }
 
   const stackIndices: number[] = [];
   if (cards.length > 0) {
@@ -403,38 +433,31 @@ export default function SwipePageClient() {
                 <motion.div
                   key={card.id}
                   className="absolute inset-0 z-10 flex items-center justify-center p-0.5"
+                  style={{ x, y, rotate }}
                   animate={controls}
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  dragElastic={0.18}
+                  drag
+                  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                  dragElastic={0.8}
                   onDragEnd={(_, info) => {
-                    const { x } = info.offset;
-                    const v = info.velocity.x;
-                    if (x > DIST_THRESHOLD || v > VELOCITY_THRESHOLD) {
-                      const c = cards[0];
-                      if (!c) return;
-                      void controls
-                        .start({ x: 520, rotate: 18, opacity: 0, transition: { duration: 0.22 } })
-                        .then(() => {
-                          handleLike(c);
-                          void controls.start({ x: 0, rotate: 0, opacity: 1 });
-                        });
+                    const { offset, velocity } = info;
+                    const up =
+                      (offset.y < -DIST_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD) &&
+                      Math.abs(offset.y) > Math.abs(offset.x);
+                    if (up) {
+                      void swipeOut("up");
                       return;
                     }
-                    if (x < -DIST_THRESHOLD || v < -VELOCITY_THRESHOLD) {
-                      const c = cards[0];
-                      if (!c) return;
-                      void controls
-                        .start({ x: -520, rotate: -18, opacity: 0, transition: { duration: 0.22 } })
-                        .then(() => {
-                          handleDislike(c);
-                          void controls.start({ x: 0, rotate: 0, opacity: 1 });
-                        });
+                    if (offset.x > DIST_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
+                      void swipeOut("right");
+                      return;
+                    }
+                    if (offset.x < -DIST_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
+                      void swipeOut("left");
                       return;
                     }
                     void controls.start({
                       x: 0,
-                      rotate: 0,
+                      y: 0,
                       transition: { type: "spring", stiffness: 320, damping: 28 },
                     });
                   }}
@@ -445,6 +468,32 @@ export default function SwipePageClient() {
                     interactive
                     onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
                   />
+
+                  {/* Swipe-feedback (Tinder-stil): visas gradvis medan man drar */}
+                  <motion.div
+                    style={{ opacity: likeOpacity }}
+                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                  >
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/25 text-5xl text-emerald-300 ring-4 ring-emerald-400 backdrop-blur-sm">
+                      ❤
+                    </div>
+                  </motion.div>
+                  <motion.div
+                    style={{ opacity: nopeOpacity }}
+                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                  >
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-500/25 text-5xl text-rose-300 ring-4 ring-rose-400 backdrop-blur-sm">
+                      ✖
+                    </div>
+                  </motion.div>
+                  <motion.div
+                    style={{ opacity: seenOpacity }}
+                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                  >
+                    <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-sky-500/25 text-4xl text-sky-300 ring-4 ring-sky-400 backdrop-blur-sm">
+                      ✓
+                    </div>
+                  </motion.div>
                 </motion.div>
               );
             }
@@ -474,71 +523,11 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      {/* Action buttons: endast luft mot kort — bottenutfyllnad sköts av AppShell main (tabs + safe area). pb-0 så ikonerna ligger tajt ovanför BottomTabs. */}
-      <div className="pointer-events-auto relative z-20 flex shrink-0 items-center justify-center gap-7 px-2 pb-0 pt-2">
-        <button
-          aria-label="Nej"
-          onClick={() =>
-            cards[0] &&
-            (async () => {
-              const c = cards[0];
-              await controls.start({ x: -520, rotate: -18, opacity: 0, transition: { duration: 0.22 } });
-              handleDislike(c);
-              await controls.start({ x: 0, rotate: 0, opacity: 1 });
-            })()
-          }
-          className="h-16 w-16 rounded-full bg-rose-500/15 text-rose-300 ring-2 ring-rose-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(244,63,94,0.25)] transition hover:bg-rose-500/25"
-          title="Nej"
-        >
-          <span className="text-2xl">✖</span>
-        </button>
-
-        <button
-          aria-label="Info"
-          onClick={() => cards[0] && onInfo(cards[0])}
-          className="h-14 w-14 rounded-full bg-white/10 text-white ring-1 ring-white/30 backdrop-blur-md shadow-[0_10px_30px_rgba(255,255,255,0.15)] transition hover:bg-white/20"
-          title="Info"
-        >
-          <span className="text-xl">i</span>
-        </button>
-
-        <button
-          aria-label="Gilla"
-          onClick={() =>
-            cards[0] &&
-            (async () => {
-              const c = cards[0];
-              await controls.start({ x: 520, rotate: 18, opacity: 0, transition: { duration: 0.22 } });
-              handleLike(c);
-              await controls.start({ x: 0, rotate: 0, opacity: 1 });
-            })()
-          }
-          className="h-16 w-16 rounded-full bg-emerald-500/15 text-emerald-300 ring-2 ring-emerald-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(16,185,129,0.25)] transition hover:bg-emerald-500/25"
-          title="Gilla"
-        >
-          <span className="text-2xl">❤</span>
-        </button>
-
-        {/* ✓-knappen behåller vi – markerar kortet som sett och döljer likt dislike */}
-        <button
-          aria-label="Sett redan"
-          onClick={() =>
-            cards[0] &&
-            (async () => {
-              const c = cards[0];
-              await controls.start({ x: 520, rotate: 0, opacity: 0, transition: { duration: 0.18 } });
-              markSeen(c.id);
-              hideFor7Days(c.tmdbId);
-              popTop();
-              sendGroupVoteBackground(c, "DISLIKE");
-              await controls.start({ x: 0, rotate: 0, opacity: 1 });
-            })()
-          }
-          className="h-14 w-14 rounded-full bg-sky-500/15 text-sky-200 ring-2 ring-sky-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(14,165,233,0.25)] transition hover:bg-sky-500/25"
-          title="Sett redan"
-        >
-          <span className="text-xl">✓</span>
-        </button>
+      {/* Diskret hint istället för knapprad: swipe vänster = nej, höger = gilla, upp = redan sett. Tryck = info. */}
+      <div className="pointer-events-none flex shrink-0 items-center justify-center gap-4 px-2 pb-1 pt-1.5 text-[11px] text-neutral-500">
+        <span className="text-rose-400/80">← Nej</span>
+        <span className="text-sky-400/80">↑ Sett</span>
+        <span className="text-emerald-400/80">Gilla →</span>
       </div>
     </div>
   );
@@ -589,6 +578,7 @@ function Front({ card }: { card: Card }) {
             sizes="(max-width: 768px) 100vw, 600px"
             className="object-contain object-center"
             priority={false}
+            draggable={false}
           />
         </div>
       ) : (

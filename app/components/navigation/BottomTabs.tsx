@@ -29,10 +29,9 @@ export default function BottomTabs() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              // Ändrat från flex-col till flex-row för att rymma pill-designen
-              className="relative flex h-12 flex-row items-center justify-center text-[13px] font-medium"
+              className="relative flex h-12 w-12 items-center justify-center"
             >
-              {/* Animering för den aktiva bakgrunden ("pillen") */}
+              {/* Animering för den aktiva bakgrunden ("pillen") – ikon-only, ingen text */}
               {active && (
                 <motion.div
                   layoutId="activeTabPill"
@@ -41,25 +40,12 @@ export default function BottomTabs() {
                 />
               )}
 
-              <div
+              <Icon
                 className={[
-                  "relative z-10 flex items-center gap-1.5 px-4 transition-colors",
+                  "relative z-10 h-6 w-6 transition-colors",
                   active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-300",
                 ].join(" ")}
-              >
-                <Icon className={active ? "h-5 w-5" : "h-6 w-6"} />
-                {/* Visa bara texten om fliken är aktiv */}
-                {active && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="overflow-hidden whitespace-nowrap"
-                  >
-                    {item.short}
-                  </motion.span>
-                )}
-              </div>
+              />
             </Link>
           );
         })}

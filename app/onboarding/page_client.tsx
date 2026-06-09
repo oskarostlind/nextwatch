@@ -162,6 +162,7 @@ const STEPS = [
   { id: 0, title: "Om dig", subtitle: "Namn, användarnamn och ålder" },
   { id: 1, title: "Tjänster", subtitle: "Språk och streaming" },
   { id: 2, title: "Smak", subtitle: "Favoriter och genrer" },
+  { id: 3, title: "Konto", subtitle: "Gäst eller registrera dig" },
 ] as const;
 
 const GENRES = [
@@ -297,16 +298,8 @@ export default function Client() {
     setLikeGenres((prev) => prev.filter((x) => x !== g));
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveAndContinue(redirect: string) {
     setErr(null);
-
-    // Enter i formuläret får inte spara och hoppa över sista steget (Smak).
-    if (step < STEPS.length - 1) {
-      goNext();
-      return;
-    }
-
     if (!step0Valid()) {
       setErr("Kontrollera namn, användarnamn och ålder.");
       setStep(0);
@@ -336,13 +329,23 @@ export default function Client() {
         const errBody = (await res.json()) as { message?: string };
         throw new Error(errBody.message ?? "Ett fel uppstod.");
       }
-      const data = (await res.json()) as { ok?: boolean; message?: string; next?: string };
+      const data = (await res.json()) as { ok?: boolean; message?: string };
       if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
-      router.replace(data.next ?? "/swipe");
+      router.replace(redirect);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+
+    // Steg 0–2: Enter/Nästa går bara vidare — sparar aldrig profilen här.
+    if (step < STEPS.length - 1) {
+      goNext();
     }
   }
 
@@ -383,7 +386,15 @@ export default function Client() {
           </div>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-5">
+        <form
+          onSubmit={onSubmit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && step >= STEPS.length - 1) {
+              e.preventDefault();
+            }
+          }}
+          className="space-y-5"
+        >
           {/* Steg 1: Om dig */}
           {step === 0 && (
             <div className="space-y-4">
@@ -570,23 +581,54 @@ export default function Client() {
             </div>
           )}
 
-          {/* Navigation */}
-          <div className="flex items-center justify-between pt-2">
-            {step === 0 ? (
-              <Link href="/" className="text-sm text-neutral-400 underline hover:text-neutral-200">
-                Tillbaka
-              </Link>
-            ) : (
+          {/* Steg 4: Välj gäst eller konto */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-400">
+                Profilen är klar! Välj hur du vill fortsätta.
+              </p>
               <button
                 type="button"
-                onClick={goBack}
-                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/swipe")}
+                className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
               >
-                ← Föregående
+                <p className="font-semibold text-cyan-300">Fortsätt som gäst</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Börja swipa direkt. Du kan skapa konto senare under Profil.
+                </p>
               </button>
-            )}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/auth/register")}
+                className="w-full rounded-2xl border border-white/15 bg-white/5 p-5 text-left transition hover:bg-white/10 disabled:opacity-50"
+              >
+                <p className="font-semibold text-white">Skapa konto</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Spara med e-post eller Apple så du kan logga in igen på andra enheter.
+                </p>
+              </button>
+            </div>
+          )}
 
-            {step < STEPS.length - 1 ? (
+          {/* Navigation */}
+          {step < 3 && (
+            <div className="flex items-center justify-between pt-2">
+              {step === 0 ? (
+                <Link href="/" className="text-sm text-neutral-400 underline hover:text-neutral-200">
+                  Tillbaka
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10"
+                >
+                  ← Föregående
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={goNext}
@@ -594,16 +636,24 @@ export default function Client() {
               >
                 Nästa →
               </button>
-            ) : (
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="flex items-center justify-between pt-2">
               <button
-                type="submit"
+                type="button"
+                onClick={goBack}
                 disabled={loading}
-                className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-5 py-2 text-sm font-medium text-black hover:opacity-90 disabled:opacity-50"
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-50"
               >
-                {loading ? "Sparar…" : "Spara & börja"}
+                ← Föregående
               </button>
-            )}
-          </div>
+              {loading && (
+                <span className="text-sm text-neutral-400">Sparar profil…</span>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </div>

@@ -1,0 +1,9 @@
+# Appflow auto-increment iOS build number via CI_BUILD_NUMBER.
+# Docs: https://ionic.io/docs/appflow/cookbook/auto-incrementing-build-numbers
+vars:
+  CI_BUILD_NUMBER:
+    default: 1
+
+platforms:
+  ios:
+    buildNumber: $CI_BUILD_NUMBER

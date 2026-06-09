@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "appflow:build": "if [ \"$CI_PLATFORM\" != \"web\" ]; then npx trapeze run appflow.yml -y --$CI_PLATFORM; fi && npm run build",
+    "bump:ios": "node scripts/bump-ios-build.mjs",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate --schema=./prisma/schema.prisma && patch-package"
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.0",
+    "@trapezedev/configure": "^7.1.3",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

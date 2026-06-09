@@ -48,7 +48,12 @@ export default function LoginCard() {
           />
         </div>
         <div className="space-y-1">
-          <label className="text-sm text-neutral-300">Lösenord</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-neutral-300">Lösenord</label>
+            <a href="/auth/forgot" className="text-xs text-neutral-400 underline hover:text-neutral-200">
+              Glömt lösenord?
+            </a>
+          </div>
           <input
             type="password"
             className="w-full rounded-lg bg-neutral-800/80 border border-white/10 p-2 outline-none focus:ring-2 focus:ring-cyan-500/50"

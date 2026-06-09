@@ -13,7 +13,7 @@
     "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
-    "@capacitor/push-notifications": "^7.0.6",
+    "@capacitor/push-notifications": "^8.1.1",
     "@prisma/client": "^6.16.2",
     "@vercel/speed-insights": "^1.2.0",
     "bcryptjs": "^3.0.2",

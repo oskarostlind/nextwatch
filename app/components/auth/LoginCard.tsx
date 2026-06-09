@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import AppleSignInButton from './AppleSignInButton';
 
 export default function LoginCard() {
   const [email, setEmail] = React.useState('');
@@ -18,9 +19,9 @@ export default function LoginCard() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string };
+      const data = (await res.json()) as { ok: boolean; message?: string; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error ?? 'Kunde inte logga in');
+        setError(data.message ?? data.error ?? 'Kunde inte logga in');
         return;
       }
       window.location.href = '/swipe';
@@ -74,6 +75,17 @@ export default function LoginCard() {
           {loading ? 'Loggar in…' : 'Logga in'}
         </button>
       </form>
+
+      <div className="relative my-4">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-white/10" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-neutral-900/60 px-2 text-neutral-500">eller</span>
+        </div>
+      </div>
+
+      <AppleSignInButton />
 
       <div className="mt-4 text-sm text-neutral-400">
         Har du inget lösenord? <a className="underline" href="/onboarding">Skapa konto</a>

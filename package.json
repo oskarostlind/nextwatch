@@ -10,6 +10,7 @@
     "postinstall": "prisma generate --schema=./prisma/schema.prisma"
   },
   "dependencies": {
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
     "@capacitor/push-notifications": "^8.1.1",
@@ -19,6 +20,7 @@
     "clsx": "^2.1.1",
     "dynamic": "^4.2.2",
     "framer-motion": "^12.23.12",
+    "jose": "^6.2.3",
     "lucide-react": "^0.453.0",
     "next": "15.5.9",
     "nodemailer": "^7.0.6",

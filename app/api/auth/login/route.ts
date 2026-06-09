@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     const res = NextResponse.json({ ok: true });
-    setAuthCookies(res, user.id);
+    setAuthCookies(res, user.id, { remember: true });
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed';

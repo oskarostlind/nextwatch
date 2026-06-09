@@ -2,79 +2,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
+import { sanitizeUsernameInput, usernameValidRequired } from "@/lib/usernameClient";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-
-// --- Providers: basnamn → vi försöker .svg först, faller tillbaka till .svg.svg ---
-const PROVIDER_BASENAME: Record<string, string> = {
-  netflix: "netflix",
-  "disney+": "disney-plus",
-  disney: "disney-plus",
-  "prime video": "prime-video",
-  prime: "prime-video",
-  max: "max",
-  viaplay: "viaplay",
-  "apple tv+": "apple-tv-plus",
-  appletv: "apple-tv-plus",
-  skyshowtime: "skyshowtime",
-  "svt play": "svt-play",
-  svt: "svt-play",
-  "tv4 play": "tv4-play",
-  tv4: "tv4-play",
-};
-function keyify(label: string) {
-  return label.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function ProviderChip({
-  label,
-  selected,
-  onToggle,
-}: {
-  label: string;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const key = keyify(label);
-  const base = PROVIDER_BASENAME[key];
-  const [src, setSrc] = useState<string | null>(
-    base ? `/providers/${base}.svg` : null
-  );
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={[
-        "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
-        selected
-          ? "border-cyan-400 bg-cyan-400/10"
-          : "border-white/10 bg-white/5 hover:bg-white/10",
-      ].join(" ")}
-    >
-      {src ? (
-        <span className="relative inline-block h-5 w-5">
-          <Image
-            src={src}
-            alt={label}
-            fill
-            sizes="20px"
-            onError={() => {
-              if (base) setSrc(`/providers/${base}.svg.svg`);
-            }}
-          />
-        </span>
-      ) : (
-        <span className="grid h-5 w-5 place-items-center rounded bg-white/20 text-[10px] font-bold">
-          {label.slice(0, 1).toUpperCase()}
-        </span>
-      )}
-      <span>{label}</span>
-    </button>
-  );
-}
+import { ProviderChip } from "@/app/components/ui/ProviderChip";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -226,6 +158,12 @@ const PROVIDERS = [
   "TV4 Play",
 ] as const;
 
+const STEPS = [
+  { id: 0, title: "Om dig", subtitle: "Namn, användarnamn och ålder" },
+  { id: 1, title: "Tjänster", subtitle: "Språk och streaming" },
+  { id: 2, title: "Smak", subtitle: "Favoriter och genrer" },
+] as const;
+
 const GENRES = [
   "Action",
   "Äventyr",
@@ -244,11 +182,20 @@ const GENRES = [
 export default function Client() {
   const router = useRouter();
 
-  // state
+  const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
-  const [dob, setDob] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const [ageInput, setAgeInput] = useState("");
+
+  function parsedAge(): number | null {
+    const n = Number(ageInput.trim());
+    if (!Number.isFinite(n)) return null;
+    const age = Math.floor(n);
+    if (age < 7 || age > 99) return null;
+    return age;
+  }
   const [language, setLanguage] = useState<(typeof LANGS)[number]>("sv");
   const [providers, setProviders] = useState<string[]>([]);
   const [favoriteMovie, setFavoriteMovie] = useState<Fav | null>(null);
@@ -282,6 +229,65 @@ export default function Client() {
     const next = sanitizeUsernameInput(raw);
     setUsername(next);
     setUsernameBlockedChars(lower.length > 0 && lower !== next);
+    setUsernameStatus("idle");
+  }
+
+  // Debounced tillgänglighetskoll för användarnamn
+  useEffect(() => {
+    if (!usernameValidRequired(username)) {
+      setUsernameStatus(username.length > 0 ? "invalid" : "idle");
+      return;
+    }
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/user/username/check?u=${encodeURIComponent(username)}`, {
+          cache: "no-store",
+        });
+        const data = (await res.json()) as { ok?: boolean; available?: boolean };
+        if (!res.ok || !data.ok) {
+          setUsernameStatus("invalid");
+          return;
+        }
+        setUsernameStatus(data.available ? "available" : "taken");
+      } catch {
+        setUsernameStatus("idle");
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [username]);
+
+  function step0Valid() {
+    return (
+      displayName.trim().length > 0 &&
+      parsedAge() !== null &&
+      usernameValidRequired(username) &&
+      usernameStatus === "available"
+    );
+  }
+
+  function goNext() {
+    setErr(null);
+    if (step === 0 && !step0Valid()) {
+      if (!usernameValidRequired(username)) {
+        setErr("Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).");
+      } else if (usernameStatus === "taken") {
+        setErr("Användarnamnet är upptaget. Välj ett annat.");
+      } else if (usernameStatus === "checking") {
+        setErr("Vänta medan vi kollar användarnamnet…");
+      } else if (ageInput.trim() && parsedAge() === null) {
+        setErr("Ange en giltig ålder (7–99 år).");
+      } else {
+        setErr("Fyll i alla obligatoriska fält.");
+      }
+      return;
+    }
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  }
+
+  function goBack() {
+    setErr(null);
+    setStep((s) => Math.max(s - 1, 0));
   }
 
   function toggleDislike(g: string) {
@@ -294,16 +300,24 @@ export default function Client() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (!usernameValidOrEmpty(username)) {
-      setErr("Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .).");
+
+    // Enter i formuläret får inte spara och hoppa över sista steget (Smak).
+    if (step < STEPS.length - 1) {
+      goNext();
+      return;
+    }
+
+    if (!step0Valid()) {
+      setErr("Kontrollera namn, användarnamn och ålder.");
+      setStep(0);
       return;
     }
     setLoading(true);
 
-    // Region/Locale skickas inte – servern härleder från cookies/IP.
     const payload = {
       displayName,
-      dob,
+      username,
+      age: parsedAge(),
       uiLanguage: language,
       providers,
       favoriteMovie,
@@ -322,9 +336,9 @@ export default function Client() {
         const errBody = (await res.json()) as { message?: string };
         throw new Error(errBody.message ?? "Ett fel uppstod.");
       }
-      const data = (await res.json()) as { ok?: boolean; message?: string };
+      const data = (await res.json()) as { ok?: boolean; message?: string; next?: string };
       if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
-      router.replace("/auth/register");
+      router.replace(data.next ?? "/auth/register");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
     } finally {
@@ -332,178 +346,263 @@ export default function Client() {
     }
   }
 
-  return (
-    <div className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-6 text-3xl font-semibold">Onboarding</h1>
+  const progress = ((step + 1) / STEPS.length) * 100;
 
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-xl">
+  return (
+    <div className="mx-auto min-h-[100dvh] max-w-lg px-4 py-8">
+      {/* Header */}
+      <div className="mb-8 text-center">
+        <p className="text-xs font-medium uppercase tracking-widest text-cyan-400/80">
+          Välkommen till NextWatch
+        </p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">{STEPS[step].title}</h1>
+        <p className="mt-1 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
+      </div>
+
+      {/* Progress */}
+      <div className="mb-6">
+        <div className="mb-2 flex justify-between text-xs text-neutral-500">
+          {STEPS.map((s, i) => (
+            <span key={s.id} className={i <= step ? "text-cyan-400" : ""}>
+              {s.title}
+            </span>
+          ))}
+        </div>
+        <div className="h-1 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-neutral-900/60 p-5 shadow-xl backdrop-blur sm:p-6">
         {err && (
-          <div className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {err}
           </div>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-6">
-          {/* Rad 1 */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm text-white/70">
-                Visningsnamn
-              </label>
-              <input
-                className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
-                placeholder="Ditt namn…"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm text-white/70">
-                Födelsedatum
-              </label>
-              <input
-                type="date"
-                className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm text-white/70">Användarnamn (valfritt)</label>
-            <input
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-white/30 focus:bg-white/10"
-              placeholder="t.ex. film_ninja.42"
-              value={username}
-              onChange={onUsernameChange}
-              autoComplete="username"
-              spellCheck={false}
-            />
-            <p className="mt-1 text-xs text-white/50">
-              Tomt eller 3–20 tecken: a–z, 0–9, _ och . Används när vänner söker dig.
-            </p>
-            {usernameBlockedChars ? (
-              <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort automatiskt.</p>
-            ) : null}
-          </div>
-
-          {/* Rad 2 – ENDAST Språk kvar */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-sm text-white/70">Språk</label>
-              <select
-                className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
-                value={language}
-                onChange={(e) =>
-                  setLanguage(e.target.value as (typeof LANGS)[number])
-                }
-              >
-                {LANGS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Rad 3: favoritfilm/serie */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <SearchBox
-              label="Favoritfilm"
-              placeholder="Sök titel…"
-              type="movie"
-              value={favoriteMovie}
-              onSelect={setFavoriteMovie}
-              locale={searchLocale}
-            />
-            <SearchBox
-              label="Favoritserie"
-              placeholder="Sök titel…"
-              type="tv"
-              value={favoriteShow}
-              onSelect={setFavoriteShow}
-              locale={searchLocale}
-            />
-          </div>
-
-          {/* Providers */}
-          <div>
-            <div className="mb-2 text-sm text-white/70">Streaming­tjänster</div>
-            <div className="flex flex-wrap gap-3">
-              {PROVIDERS.map((p) => (
-                <ProviderChip
-                  key={p}
-                  label={p}
-                  selected={providers.includes(p)}
-                  onToggle={() => toggleProvider(p)}
+        <form onSubmit={onSubmit} className="space-y-5">
+          {/* Steg 1: Om dig */}
+          {step === 0 && (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">Visningsnamn</label>
+                <input
+                  className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  placeholder="Ditt namn…"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                  autoFocus
                 />
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Genres */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <div className="mb-2 text-sm text-white/70">Gillar</div>
-              <div className="flex flex-wrap gap-2">
-                {GENRES.map((g) => (
-                  <button
-                    key={`like-${g}`}
-                    type="button"
-                    onClick={() => toggleLike(g)}
-                    className={[
-                      "rounded-full px-3 py-1 text-sm border transition",
-                      likeGenres.includes(g)
-                        ? "border-emerald-400 bg-emerald-400/10"
-                        : "border-white/10 bg-white/5 hover:bg-white/10",
-                    ].join(" ")}
-                  >
-                    {g}
-                  </button>
-                ))}
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  Användarnamn <span className="text-cyan-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+                    @
+                  </span>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-8 pr-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    placeholder="film_ninja.42"
+                    value={username}
+                    onChange={onUsernameChange}
+                    autoComplete="username"
+                    spellCheck={false}
+                    required
+                    minLength={3}
+                    maxLength={20}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-neutral-500">
+                  3–20 tecken: a–z, 0–9, _ och . Vänner söker dig med detta namn.
+                </p>
+                {usernameBlockedChars ? (
+                  <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort automatiskt.</p>
+                ) : null}
+                {usernameStatus === "checking" && (
+                  <p className="mt-1 text-xs text-neutral-400">Kollar tillgänglighet…</p>
+                )}
+                {usernameStatus === "available" && (
+                  <p className="mt-1 text-xs text-emerald-400">✓ Tillgängligt</p>
+                )}
+                {usernameStatus === "taken" && (
+                  <p className="mt-1 text-xs text-rose-400">Upptaget – välj ett annat</p>
+                )}
+                {usernameStatus === "invalid" && username.length > 0 && (
+                  <p className="mt-1 text-xs text-rose-400">Ogiltigt format</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  Hur gammal är du? <span className="text-cyan-400">*</span>
+                </label>
+                <p className="mb-2 text-xs text-neutral-500">
+                  Vi använder åldern för att filtrera innehåll efter åldersgräns.
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={7}
+                    max={99}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-500/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    placeholder="t.ex. 18"
+                    value={ageInput}
+                    onChange={(e) => setAgeInput(e.target.value.replace(/[^\d]/g, ""))}
+                    required
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
+                    år
+                  </span>
+                </div>
               </div>
             </div>
-            <div>
-              <div className="mb-2 text-sm text-white/70">Ogillar</div>
-              <div className="flex flex-wrap gap-2">
-                {GENRES.map((g) => (
-                  <button
-                    key={`dislike-${g}`}
-                    type="button"
-                    onClick={() => toggleDislike(g)}
-                    className={[
-                      "rounded-full px-3 py-1 text-sm border transition",
-                      dislikeGenres.includes(g)
-                        ? "border-rose-400 bg-rose-400/10"
-                        : "border-white/10 bg-white/5 hover:bg-white/10",
-                    ].join(" ")}
-                  >
-                    {g}
-                  </button>
-                ))}
+          )}
+
+          {/* Steg 2: Tjänster */}
+          {step === 1 && (
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">Språk</label>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as (typeof LANGS)[number])}
+                >
+                  {LANGS.map((l) => (
+                    <option key={l} value={l}>
+                      {l === "sv" ? "Svenska" : "English"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-2 text-sm text-neutral-300">Dina streamingtjänster</div>
+                <p className="mb-3 text-xs text-neutral-500">
+                  Välj de tjänster du har – vi visar bara titlar du kan streama.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {PROVIDERS.map((p) => (
+                    <ProviderChip
+                      key={p}
+                      label={p}
+                      selected={providers.includes(p)}
+                      onClick={() => toggleProvider(p)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Knappar */}
-          <div className="flex items-center justify-between">
-            <Link
-              href="/"
-              className="rounded-xl border border-white/10 px-4 py-2 hover:bg-white/10"
-            >
-              Tillbaka
-            </Link>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-xl bg-white/15 px-4 py-2 font-medium hover:bg-white/25 disabled:opacity-50"
-            >
-              {loading ? "Sparar…" : "Spara & börja"}
-            </button>
+          {/* Steg 3: Smak */}
+          {step === 2 && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-4">
+                <SearchBox
+                  label="Favoritfilm (valfritt)"
+                  placeholder="Sök titel…"
+                  type="movie"
+                  value={favoriteMovie}
+                  onSelect={setFavoriteMovie}
+                  locale={searchLocale}
+                />
+                <SearchBox
+                  label="Favoritserie (valfritt)"
+                  placeholder="Sök titel…"
+                  type="tv"
+                  value={favoriteShow}
+                  onSelect={setFavoriteShow}
+                  locale={searchLocale}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-sm text-neutral-300">Gillar</div>
+                  <div className="flex flex-wrap gap-2">
+                    {GENRES.map((g) => (
+                      <button
+                        key={`like-${g}`}
+                        type="button"
+                        onClick={() => toggleLike(g)}
+                        className={[
+                          "rounded-full border px-3 py-1 text-sm transition",
+                          likeGenres.includes(g)
+                            ? "border-emerald-400 bg-emerald-400/10 text-emerald-300"
+                            : "border-white/10 bg-white/5 hover:bg-white/10",
+                        ].join(" ")}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-sm text-neutral-300">Ogillar</div>
+                  <div className="flex flex-wrap gap-2">
+                    {GENRES.map((g) => (
+                      <button
+                        key={`dislike-${g}`}
+                        type="button"
+                        onClick={() => toggleDislike(g)}
+                        className={[
+                          "rounded-full border px-3 py-1 text-sm transition",
+                          dislikeGenres.includes(g)
+                            ? "border-rose-400 bg-rose-400/10 text-rose-300"
+                            : "border-white/10 bg-white/5 hover:bg-white/10",
+                        ].join(" ")}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div className="flex items-center justify-between pt-2">
+            {step === 0 ? (
+              <Link href="/" className="text-sm text-neutral-400 underline hover:text-neutral-200">
+                Tillbaka
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={goBack}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10"
+              >
+                ← Föregående
+              </button>
+            )}
+
+            {step < STEPS.length - 1 ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className="rounded-xl bg-cyan-500 px-5 py-2 text-sm font-medium text-black hover:bg-cyan-400"
+              >
+                Nästa →
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-5 py-2 text-sm font-medium text-black hover:opacity-90 disabled:opacity-50"
+              >
+                {loading ? "Sparar…" : "Spara & börja"}
+              </button>
+            )}
           </div>
         </form>
       </div>

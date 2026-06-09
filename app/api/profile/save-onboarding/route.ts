@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
-import { prisma } from "../../../../lib/prisma"; // Uppdaterad till named import
+import { prisma } from "../../../../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { sessionCookieOpts } from "../../../../lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,12 +92,30 @@ function requireString(body: Record<string, unknown>, key: string): string | nul
   return null;
 }
 
+function validUsername(u: string): boolean {
+  return /^[a-z0-9_.]{3,20}$/.test(u);
+}
+
 function extractDob(body: Record<string, unknown>): string | null {
   const candidates: unknown[] = [body.dob, body.dateOfBirth, body.birthdate, body.birthDate];
   for (const c of candidates) {
     if (typeof c === "string" && c.trim() !== "") return c;
   }
+  const age = extractAge(body);
+  if (age !== null) {
+    const year = new Date().getFullYear() - age;
+    return `${year}-06-15`;
+  }
   return null;
+}
+
+function extractAge(body: Record<string, unknown>): number | null {
+  const raw = body.age;
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const age = Math.floor(n);
+  if (age < 7 || age > 99) return null;
+  return age;
 }
 
 function ok(status: number, message: string, extra?: Record<string, unknown>) {
@@ -127,6 +146,8 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as Record<string, unknown>;
     const displayName = requireString(body, "displayName");
+    const usernameRaw = requireString(body, "username");
+    const username = usernameRaw ? usernameRaw.toLowerCase() : null;
     const dobStr = extractDob(body);
     const favoriteGenres = asStringArray(body.favoriteGenres);
     const dislikedGenres = asStringArray(body.dislikedGenres);
@@ -140,12 +161,29 @@ export async function POST(req: NextRequest) {
 
     const missing: string[] = [];
     if (!displayName) missing.push("displayName");
-    if (!dobStr) missing.push("dob");
+    if (!username) missing.push("username");
+    if (!dobStr) missing.push("age");
     if (missing.length) {
       return fail(400, `Obligatoriska fält saknas: ${missing.join(", ")}`, debug, {
         receivedKeys: Object.keys(body),
       });
     }
+    if (!validUsername(username!)) {
+      return fail(400, "Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).", debug);
+    }
+
+    const taken = await prisma.user.findFirst({
+      where: { username, NOT: { id: uid } },
+      select: { id: true },
+    });
+    if (taken) {
+      return fail(409, "Användarnamnet är upptaget. Välj ett annat.", debug);
+    }
+
+    await prisma.user.update({
+      where: { id: uid },
+      data: { username },
+    });
 
     const dobDate = new Date(dobStr!);
 
@@ -182,10 +220,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const res = ok(200, "Profilen sparades.", { profile });
-    res.cookies.set("nw_uid", uid, { path: "/", httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
-    res.cookies.set("nw_region", finalRegion, { path: "/", httpOnly: false, sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
-    res.cookies.set("nw_locale", finalLocale, { path: "/", httpOnly: false, sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
+    const authUser = await prisma.user.findUnique({
+      where: { id: uid },
+      select: { appleSub: true, passwordHash: true },
+    });
+    const needsRegister = !authUser?.passwordHash && !authUser?.appleSub;
+    const next = needsRegister ? "/auth/register" : "/swipe";
+
+    const res = ok(200, "Profilen sparades.", { profile, next });
+    const oneYear = 60 * 60 * 24 * 365;
+    res.cookies.set("nw_uid", uid, sessionCookieOpts(oneYear, true));
+    res.cookies.set("nw_region", finalRegion, sessionCookieOpts(oneYear, false));
+    res.cookies.set("nw_locale", finalLocale, sessionCookieOpts(oneYear, false));
     return res;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

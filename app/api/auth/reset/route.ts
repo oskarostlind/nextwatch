@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     // Logga in användaren direkt
     const res = NextResponse.json({ ok: true, message: "Lösenordet är uppdaterat." });
-    setAuthCookies(res, ver.userId);
+    setAuthCookies(res, ver.userId, { remember: true });
     return res;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Internt fel.";

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
+import { sessionCookieOpts } from "../../../../lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET() {
       uid = newId();
       await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
       const res = NextResponse.json({ ok: true, userId: uid, hasProfile: false });
-      res.cookies.set("nw_uid", uid, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+      res.cookies.set("nw_uid", uid, sessionCookieOpts(60 * 60 * 24 * 365, true));
       return res;
     }
 

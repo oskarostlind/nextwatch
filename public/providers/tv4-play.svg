@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="TV4 Play">
+  <rect width="48" height="48" rx="10" fill="#00B4AA"/>
+  <text x="24" y="22" fill="#fff" font-family="Arial Black,Arial,sans-serif" font-size="14" font-weight="900" text-anchor="middle">TV4</text>
+  <polygon fill="#fff" points="20,28 28,32 20,36"/>
+</svg>

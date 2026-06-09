@@ -22,6 +22,9 @@ model User {
   // Username för kompis-sök
   username String? @unique
 
+  // Sign in with Apple (unikt Apple-användar-id)
+  appleSub String? @unique @map("apple_sub")
+
   profile   Profile?
   ratings   Rating[]
   watchlist watchlist[]

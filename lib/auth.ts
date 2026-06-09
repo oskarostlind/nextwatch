@@ -1,30 +1,23 @@
 // lib/auth.ts
 import { NextResponse, type NextRequest } from 'next/server';
+import { sessionCookieOpts } from './cookies';
+
+const ONE_YEAR = 60 * 60 * 24 * 365;
+const THIRTY_DAYS = 60 * 60 * 24 * 30;
+
+export { sessionCookieOpts } from './cookies';
 
 export function attachSessionCookies(
   res: NextResponse,
   uid: string,
   opts?: { remember?: boolean }
 ) {
-  const oneYear = 60 * 60 * 24 * 365;
-  const thirtyDays = 60 * 60 * 24 * 30;
+  // remember=true (eller default) → 1 år så samma enhet (t.ex. iOS) slipper logga in om och om igen.
+  const maxAge = opts?.remember === false ? THIRTY_DAYS : ONE_YEAR;
 
-  res.cookies.set('nw_uid', uid, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: opts?.remember ? oneYear : thirtyDays,
-  });
+  res.cookies.set('nw_uid', uid, sessionCookieOpts(maxAge, true));
 
-  // “senast aktiv” (5 min)
-  res.cookies.set('nw_last', String(Date.now()), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 60 * 5,
-  });
+  res.cookies.set('nw_last', String(Date.now()), sessionCookieOpts(60 * 5, true));
 
   return res;
 }
@@ -50,32 +43,13 @@ export function sessionRedirect(
 }
 
 export function touchLastSeen(res: NextResponse) {
-  res.cookies.set('nw_last', String(Date.now()), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 60 * 5,
-  });
+  res.cookies.set('nw_last', String(Date.now()), sessionCookieOpts(60 * 5, true));
   return res;
 }
 
 export function clearAuthCookies(res: NextResponse) {
-  // rensa båda cookies på ett säkert sätt
-  res.cookies.set('nw_uid', '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 0,
-  });
-  res.cookies.set('nw_last', '', {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: true,
-    path: '/',
-    maxAge: 0,
-  });
+  res.cookies.set('nw_uid', '', sessionCookieOpts(0, true));
+  res.cookies.set('nw_last', '', sessionCookieOpts(0, true));
   return res;
 }
 

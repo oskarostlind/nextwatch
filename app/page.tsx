@@ -1,6 +1,7 @@
 // app/page.tsx
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { prisma } from "../lib/prisma";
 import HeroReel from "./components/landing/HeroReel";
 import LoginCard from "./components/auth/LoginCard";
 
@@ -8,15 +9,24 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  // Regler: alltid await cookies()
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  const lastStr = jar.get("nw_last")?.value ?? null;
-  const within5min =
-    lastStr ? Date.now() - Number.parseInt(lastStr, 10) < 5 * 60 * 1000 : false;
 
-  if (uid && within5min) {
-    redirect("/swipe");
+  // Redan inloggad med verifierat konto + profil → hoppa över login (viktigt för iOS/Capacitor).
+  if (uid) {
+    const user = await prisma.user.findUnique({
+      where: { id: uid },
+      select: {
+        emailVerified: true,
+        passwordHash: true,
+        appleSub: true,
+        profile: { select: { userId: true } },
+      },
+    });
+    const hasAuth = Boolean(user?.passwordHash || user?.appleSub);
+    if (user?.emailVerified && hasAuth && user?.profile) {
+      redirect("/swipe");
+    }
   }
 
   return (

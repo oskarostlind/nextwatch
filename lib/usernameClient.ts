@@ -8,3 +8,7 @@ export function usernameValidOrEmpty(u: string): boolean {
   if (u.length === 0) return true;
   return /^[a-z0-9_.]{3,20}$/.test(u);
 }
+
+export function usernameValidRequired(u: string): boolean {
+  return /^[a-z0-9_.]{3,20}$/.test(u);
+}

@@ -386,11 +386,13 @@ export default function SwipePageClient() {
         </div>
       )}
 
-      {/* Kort-yta: flex-1 + min-h-0 + overflow-hidden => flexbox styr höjden och kortet kan aldrig växa förbi ytan och klippas bakom ikon-raden. */}
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 pt-2">
+      {/* Kort-yta: flex-1 + min-h-0 + overflow-hidden => flexbox styr höjden och kortet kan aldrig växa förbi ytan och klippas bakom ikon-raden.
+          OBS: kort-wrappern är absolut positionerad (inte h-full) eftersom procenthöjder
+          kollapsar till 0 när förfäderna bara har min-h + flex-1 (indefinit höjd). */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
       {cards[0] ? (
           <div
-            className="relative isolate mx-auto h-full max-h-full w-full min-h-0 max-w-[360px] overflow-hidden"
+            className="absolute inset-x-2 inset-y-2 isolate mx-auto max-w-[360px] overflow-hidden"
           >
           {stackIndices.map((idx) => {
             const card = cards[idx];
@@ -466,7 +468,7 @@ export default function SwipePageClient() {
           })}
           </div>
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center opacity-70">
+        <div className="absolute inset-0 flex items-center justify-center px-4 text-center opacity-70">
           Slut på förslag nu.
         </div>
       )}

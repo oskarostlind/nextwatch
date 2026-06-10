@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Copy, LogOut, UserPlus, Users, Plus, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Copy, LogOut, UserPlus, Users, Plus, Check, Play } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
 import type { PublicMember } from "../GroupClient";
 
@@ -66,6 +67,7 @@ type Props = {
 };
 
 export default function GroupTab({ initialCode, initialRegion, initialMembers, initialMeUserId }: Props) {
+  const router = useRouter();
   const [code, setCode] = useState<string | null>(initialCode);
   const [region, setRegion] = useState<string | undefined>(initialRegion);
   const [members, setMembers] = useState<PublicMember[]>(initialMembers || []);
@@ -133,7 +135,12 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       () => apiCall<GroupResponse>("/api/group/create", {}),
       (data) => { 
         const newCode = data.code || data.group?.code;
-        if (newCode) { setCode(newCode); void refreshMembers(newCode); }
+        if (newCode) {
+          setCode(newCode);
+          void refreshMembers(newCode);
+          // Bust:a router-cachen så /swipe renderas om med nw_group-cookien.
+          router.refresh();
+        }
       }
     );
 
@@ -142,15 +149,24 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       () => apiCall<GroupResponse>("/api/group/join", { code: groupCode }),
       (data) => { 
         const newCode = data.code || data.group?.code;
-        if (newCode) { setCode(newCode); void refreshMembers(newCode); }
+        if (newCode) {
+          setCode(newCode);
+          void refreshMembers(newCode);
+          router.refresh();
+        }
       }
     );
 
   const handleLeave = () => 
     void handleAction(
       () => apiCall<{ success: boolean }>("/api/group/leave", {}),
-      () => { setCode(null); setMembers([]); }
+      () => { setCode(null); setMembers([]); router.refresh(); }
     );
+
+  const startGroupSwipe = () => {
+    router.refresh();
+    router.push("/swipe");
+  };
 
   const openInviteModal = async () => {
     setInviteOpen(true);
@@ -181,6 +197,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     return (
       <div className="space-y-4">
         {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
+
+        <button
+          type="button"
+          onClick={startGroupSwipe}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
+        >
+          <Play className="h-5 w-5" /> Starta gruppswipe
+        </button>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <p className="text-xs font-medium uppercase tracking-wide text-white/40">Gruppkod</p>

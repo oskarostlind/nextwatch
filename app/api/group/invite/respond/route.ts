@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 type Action = "accept" | "decline";
 type Body = { id: string; action: Action };
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
         id: true,
         groupCode: true,
         status: true,
+        fromUserId: true,
       },
     });
 
@@ -83,6 +85,20 @@ export async function POST(req: NextRequest) {
       where: { id: invite.id },
       data: { status: "accepted", respondedAt: new Date() },
     });
+
+    // Notifiera den som bjöd in så att hen vet att gruppswipen kan börja.
+    if (invite.fromUserId) {
+      const accepter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true, profile: { select: { displayName: true } } },
+      });
+      const name = accepter?.profile?.displayName ?? accepter?.username ?? "Någon";
+      void sendPushToUser(invite.fromUserId, {
+        title: "Inbjudan accepterad",
+        body: `${name} gick med i din grupp ${group.code} – dags att swipa!`,
+        data: { type: "group_invite_accepted", groupCode: group.code },
+      });
+    }
 
     // 3) Sätt aktiv grupp-cookie på svaret så mottagaren ser gruppen i /group
     const res = NextResponse.json({ ok: true, joined: group.code } as OkJoined, { status: 200 });

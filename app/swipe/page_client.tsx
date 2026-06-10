@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { motion, useAnimation, useMotionValue, useTransform } from "framer-motion";
 
 /* ---------- types ---------- */
@@ -174,7 +175,11 @@ async function fetchDetailsWithFallback(type: MediaType, id: number) {
 
 /* ---------- component ---------- */
 
+// Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
+let groupRefreshAttempted = false;
+
 export default function SwipePageClient() {
+  const router = useRouter();
   const [cards, setCards] = useState<Card[]>([]);
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
@@ -211,6 +216,16 @@ export default function SwipePageClient() {
         setMode(data.mode);
         setGroup(data.group);
 
+        // Den här komponenten är solo-vyn. Om API:t säger att en grupp är aktiv
+        // har servern renderat en inaktuell vy (t.ex. via Next.js router-cache
+        // efter att gruppen skapades). Tvinga en server-omrendering så att
+        // gruppswipe-vyn visas i stället.
+        if (data.mode === "group" && !groupRefreshAttempted) {
+          groupRefreshAttempted = true;
+          router.refresh();
+          return;
+        }
+
         const mapped: Card[] = data.items
           .map((it): Card | null => {
             const id = `${it.tmdbType}_${it.id}`;
@@ -243,7 +258,7 @@ export default function SwipePageClient() {
         loadingRef.current = false;
       }
     },
-    []
+    [router]
   );
 
   useEffect(() => {

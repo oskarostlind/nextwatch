@@ -12,6 +12,12 @@ const config: CapacitorConfig = {
     url: 'https://www.nextwatch.se',
     cleartext: false,
   },
+  plugins: {
+    PushNotifications: {
+      // Visa notiser även när appen är i förgrunden.
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
 };
 
 export default config;

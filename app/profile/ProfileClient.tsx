@@ -392,8 +392,8 @@ export default function ProfileClient({ initial }: Props) {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/profile/save-onboarding", {
-        method: "POST",
+      const res = await fetch("/api/profile", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
         body: JSON.stringify({
@@ -402,17 +402,17 @@ export default function ProfileClient({ initial }: Props) {
           uiLanguage,
           favoriteGenres,
           dislikedGenres,
-          providers: providerIdsToLabels(providers), // behåll kompatibilitet
+          providers: providerIdsToLabels(providers),
           favoriteMovie,
           favoriteShow,
         }),
       });
-      const payload = (await res.json()) as { ok?: boolean; message?: string };
+      const payload = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || payload.ok === false) {
-        setMsg(payload.message ?? "Kunde inte spara profil.");
+        setMsg(payload.error ?? "Kunde inte spara profil.");
         return;
       }
-      const message = payload.message ?? "Sparat.";
+      const message = "Sparat.";
 
       const unamePayload = username.trim() === "" ? null : username.trim();
       const ures = await fetch("/api/user/username/update", {

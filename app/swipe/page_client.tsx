@@ -110,10 +110,13 @@ type DetailsDTO = {
   title?: string;
   overview?: string | null;
   poster?: string | null;
+  posterUrl?: string | null;
   poster_path?: string | null;
-  year?: number | null;
+  posterPath?: string | null;
+  year?: number | string | null;
   releaseYear?: number | null;
   vote_average?: number | null;
+  voteAverage?: number | null;
   rating?: number | null;
   name?: string;
 };
@@ -131,12 +134,18 @@ function parseDetails(d: unknown) {
   const rating =
     typeof o.rating === "number"
       ? o.rating
+      : typeof o.voteAverage === "number"
+      ? o.voteAverage
       : typeof o.vote_average === "number"
       ? o.vote_average
       : null;
   const posterPath =
-    typeof o.poster === "string"
+    typeof o.posterUrl === "string"
+      ? o.posterUrl
+      : typeof o.poster === "string"
       ? o.poster
+      : typeof o.posterPath === "string"
+      ? o.posterPath
       : typeof o.poster_path === "string"
       ? o.poster_path
       : null;
@@ -146,7 +155,9 @@ function parseDetails(d: unknown) {
       : `https://image.tmdb.org/t/p/w780${posterPath}`
     : null;
   const y =
-    typeof o.year === "number"
+    typeof o.year === "string"
+      ? o.year
+      : typeof o.year === "number"
       ? String(o.year)
       : typeof o.releaseYear === "number"
       ? String(o.releaseYear)
@@ -163,7 +174,7 @@ async function fetchDetailsWithFallback(type: MediaType, id: number) {
   let parsed = parseDetails(d1);
   if (parsed && parsed.overview) return parsed;
 
-  const p2 = fetch(`/api/tmdb/details?type=${type}&id=${id}&locale=en-US`, {
+  const p2 = fetch(`/api/tmdb/details?type=${type}&id=${id}&language=en-US`, {
     cache: "force-cache",
   })
     .then((r) => (r.ok ? r.json() : null))

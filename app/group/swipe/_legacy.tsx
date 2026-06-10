@@ -140,7 +140,7 @@ function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
   const toggleWatch = useCallback(async () => {
     const item = feedRef.current[indexRef.current];
     if (!item || !isRec(item)) return;
-    await fetch("/api/watchlist/toggle", {
+    await fetch("/api/watchlist/like", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType }),

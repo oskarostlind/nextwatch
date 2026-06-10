@@ -17,7 +17,7 @@ export default function SignupPage() {
     });
     const data = await res.json().catch(() => null);
     if (data?.ok) setSent(true);
-    else setError(data?.error || "Något gick fel.");
+    else setError(data?.message || data?.error || "Något gick fel.");
   };
 
   return (

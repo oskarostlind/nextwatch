@@ -2,7 +2,24 @@
 
 import { useEffect, useState } from "react";
 
-type Member = { userId: string; displayName: string; initials: string; joinedAt: string };
+type Member = { userId: string; displayName: string; initials: string };
+
+type ApiMember = {
+  id: string;
+  displayName: string | null;
+  username: string | null;
+};
+
+function toMember(m: ApiMember): Member {
+  const displayName = m.displayName ?? m.username ?? "Okänd";
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
+  return { userId: m.id, displayName, initials };
+}
 
 type ShareCapableNavigator = Navigator & {
   share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
@@ -16,7 +33,9 @@ export default function GroupBar({ code }: { code: string }) {
     const load = async () => {
       const res = await fetch(`/api/group/members?code=${encodeURIComponent(code)}`, { cache: "no-store" });
       const data = await res.json().catch(() => null);
-      if (data?.ok && Array.isArray(data.members)) setMembers(data.members);
+      if (data?.ok && Array.isArray(data.members)) {
+        setMembers((data.members as ApiMember[]).map(toMember));
+      }
     };
     load();
     t = setInterval(load, 15_000);

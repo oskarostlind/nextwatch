@@ -80,11 +80,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "För många förfrågningar." }, { status: 429 });
     }
 
-    let language = "sv-SE";
+    const langOverride = url.searchParams.get("language") || url.searchParams.get("locale");
+    let language = langOverride || "sv-SE";
     let region = "SE";
     if (uid) {
       const profile = await prisma.profile.findUnique({ where: { userId: uid } });
-      if (profile?.locale) language = profile.locale;
+      if (!langOverride && profile?.locale) language = profile.locale;
       if (profile?.region) region = profile.region;
     }
 

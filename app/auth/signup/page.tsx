@@ -21,7 +21,7 @@ export default function SignupVerifyPage() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Något gick fel.");
+        throw new Error(data?.message || data?.error || "Något gick fel.");
       }
       setSent(true);
     } catch (e) {

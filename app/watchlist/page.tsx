@@ -136,7 +136,7 @@ export default async function Page() {
   const items = await getWatchlistServer();
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
+    <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
       <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du gillat och vill se." />
       <WatchlistClient items={items} />
     </main>

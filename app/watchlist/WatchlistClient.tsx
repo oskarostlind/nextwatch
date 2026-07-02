@@ -43,22 +43,12 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
   const [detail, setDetail] = useState<Detail>({});
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
-  const [cols, setCols] = useState<1 | 2 | 3 | 4>(2);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((it) => it.title.toLowerCase().includes(needle));
   }, [q, items]);
-
-  const gridClass = useMemo(() => {
-    switch (cols) {
-      case 1: return 'grid-cols-1';
-      case 2: return 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
-      case 3: return 'grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5';
-      case 4: return 'grid-cols-4 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8';
-    }
-  }, [cols]);
 
   const open = useCallback(async (item: WatchItem) => {
     setActive(item);
@@ -115,70 +105,51 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Sök titel…"
-          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
         />
-        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
-          {[1, 2, 3, 4].map((n) => (
-            <button
-              key={n}
-              onClick={() => setCols(n as 1 | 2 | 3 | 4)}
-              aria-label={`${n} per rad`}
-              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                cols === n ? 'bg-cyan-500 text-black' : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
       </div>
 
       {filtered.length === 0 ? (
         <p className="text-neutral-400">Inga träffar.</p>
       ) : (
-        <div className={`grid ${gridClass} gap-3`}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {filtered.map((it) => (
             <div
               key={`${it.tmdbType}-${it.id}`}
-              className="group relative overflow-hidden rounded-xl border border-white/10 bg-neutral-900/60 transition hover:ring-2 hover:ring-cyan-500/60"
+              className="group relative overflow-hidden rounded-xl border border-white/10 transition hover:ring-2 hover:ring-cyan-500/60"
             >
               <button
+                type="button"
                 aria-label="Ta bort från watchlist"
                 onClick={() => remove(it)}
                 className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-rose-600 hover:text-white"
               >
-                {/* trash icon */}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 6h18M9 6v-.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V6m-8 0v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   <path d="M10 10v6M14 10v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
               </button>
 
-              <button onClick={() => open(it)} className="block w-full text-left">
-                <div className="relative aspect-[2/3] w-full">
-                  <Image
-                    src={it.posterUrl}
-                    alt={it.title}
-                    fill
-                    sizes="(max-width:768px) 50vw, (max-width:1200px) 25vw, 20vw"
-                    className="object-cover"
-                    priority={false}
-                  />
-                </div>
-                {cols <= 2 && (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2.5 pt-8">
-                    <p className="truncate text-sm font-semibold text-white">{it.title}</p>
-                    <p className="flex items-center justify-between text-xs text-neutral-300">
-                      <span>{it.year ?? '—'}</span>
-                      {typeof it.rating === 'number' && <span>★ {it.rating.toFixed(1)}</span>}
-                    </p>
+              <button type="button" onClick={() => open(it)} className="relative block w-full text-left">
+                <Image
+                  src={it.posterUrl}
+                  alt={it.title}
+                  width={342}
+                  height={513}
+                  className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2 text-[12px]">
+                  <div className="truncate font-medium text-white">{it.title}</div>
+                  <div className="flex items-center justify-between opacity-90">
+                    <span>{it.year ?? '—'}</span>
+                    {typeof it.rating === 'number' && <span>★ {it.rating.toFixed(1)}</span>}
                   </div>
-                )}
+                </div>
               </button>
             </div>
           ))}

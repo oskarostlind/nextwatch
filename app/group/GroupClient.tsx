@@ -5,20 +5,9 @@ import GroupTab from "./components/GroupTab";
 import FriendsTab from "./components/FriendsTab";
 import IncomingInvites from "./components/IncomingInvites";
 import { PageHeader, SegmentedTabs } from "@/app/components/ui/kit";
+import type { GroupInitial } from "./page";
 
-export type PublicMember = {
-  userId: string;
-  username: string | null;
-  displayName: string | null;
-  providers?: string[];
-};
-
-export type GroupInitial = {
-  code: string | null;
-  region?: string;
-  members: PublicMember[];
-  meUserId?: string | null;
-};
+export type { PublicMember, GroupInitial } from "./page";
 
 const TABS = [
   { id: "group" as const, label: "Grupp" },
@@ -29,7 +18,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const [tab, setTab] = useState<"group" | "friends">("group");
 
   return (
-    <div className="mx-auto max-w-lg px-4 pb-8 pt-4">
+    <div className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4">
       <PageHeader title="Tillsammans" subtitle="Swipa i grupp eller lägg till vänner." />
 
       <IncomingInvites />
@@ -46,7 +35,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
           initialMeUserId={initial.meUserId}
         />
       ) : (
-        <FriendsTab />
+        <FriendsTab initial={initial.friends} />
       )}
     </div>
   );

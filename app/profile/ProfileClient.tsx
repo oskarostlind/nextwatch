@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
-import { Button, Card, Chip, PageHeader, SegmentedTabs, fieldClass } from "@/app/components/ui/kit";
+import { Button, Card, Chip, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 
 export type FavoriteItem = {
@@ -32,8 +32,6 @@ export type ProfileDTO = {
 };
 
 const FIELD_CLASS = fieldClass;
-
-const DATE_INPUT_CLASS = `${FIELD_CLASS} [color-scheme:dark]`;
 
 type Props = { initial: ProfileDTO | null };
 type Fav = FavoriteItem | null;
@@ -448,7 +446,7 @@ export default function ProfileClient({ initial }: Props) {
   };
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
+    <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
       <PageHeader eyebrow="Ditt konto" title="Profil" right={<LogoutButton />} />
 
       <div className="mb-6">
@@ -458,8 +456,8 @@ export default function ProfileClient({ initial }: Props) {
       <Card>
         {tab === "bas" && (
           <div className="grid gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
                 <input
                   className={FIELD_CLASS}
@@ -469,18 +467,17 @@ export default function ProfileClient({ initial }: Props) {
                   autoComplete="name"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
                 <input
                   type="date"
-                  className={DATE_INPUT_CLASS}
-                  style={{ colorScheme: "dark" }}
+                  className={dateFieldClass}
                   value={dob}
                   onChange={(e) => setDob(e.target.value)}
                 />
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-sm text-white/70">Användarnamn</label>
               <input
                 className={FIELD_CLASS}
@@ -524,7 +521,7 @@ export default function ProfileClient({ initial }: Props) {
 
         {tab === "smak" && (
           <div className="grid gap-5">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4">
               <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
               <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
             </div>

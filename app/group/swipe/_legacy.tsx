@@ -10,8 +10,10 @@ import { motion, useAnimation, useMotionValue, useTransform } from "framer-motio
 import {
   StaticCard,
   fetchDetailsWithFallback,
+  SwipeStampOverlays,
   type Card,
 } from "../../swipe/page_client";
+import ActionDock from "@/app/components/ui/ActionDock";
 
 type MediaType = "movie" | "tv";
 
@@ -181,6 +183,21 @@ export default function GroupSwipePage({ code }: { code: string }) {
     [code]
   );
 
+  function saveSeenRating(c: Card) {
+    void fetch("/api/rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: c.tmdbId,
+        mediaType: c.mediaType,
+        decision: "seen",
+      }),
+    }).catch(() => {
+      /* best-effort */
+    });
+  }
+
   function handleDislike(c: Card): void {
     popTop();
     sendVote(c, "DISLIKE");
@@ -207,6 +224,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   function handleSeen(c: Card): void {
     popTop();
+    saveSeenRating(c);
     sendVote(c, "DISLIKE");
   }
 
@@ -260,7 +278,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {cards[0] ? (
-          <div className="absolute inset-x-2 inset-y-2 isolate mx-auto max-w-[360px] overflow-hidden">
+          <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">
             {stackIndices.map((idx) => {
               const card = cards[idx];
               if (!card) return null;
@@ -269,7 +287,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 return (
                   <motion.div
                     key={card.id}
-                    className="absolute inset-0 z-10 flex items-center justify-center p-0.5"
+                    className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                     style={{ x, y, rotate }}
                     animate={controls}
                     drag
@@ -306,30 +324,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
                       onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
                     />
 
-                    <motion.div
-                      style={{ opacity: likeOpacity }}
-                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                    >
-                      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/25 text-5xl text-emerald-300 ring-4 ring-emerald-400 backdrop-blur-sm">
-                        ❤
-                      </div>
-                    </motion.div>
-                    <motion.div
-                      style={{ opacity: nopeOpacity }}
-                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                    >
-                      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-500/25 text-5xl text-rose-300 ring-4 ring-rose-400 backdrop-blur-sm">
-                        ✖
-                      </div>
-                    </motion.div>
-                    <motion.div
-                      style={{ opacity: seenOpacity }}
-                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                    >
-                      <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-sky-500/25 text-4xl text-sky-300 ring-4 ring-sky-400 backdrop-blur-sm">
-                        ✓
-                      </div>
-                    </motion.div>
+                    <SwipeStampOverlays
+                      likeOpacity={likeOpacity}
+                      nopeOpacity={nopeOpacity}
+                      seenOpacity={seenOpacity}
+                    />
                   </motion.div>
                 );
               }
@@ -365,11 +364,31 @@ export default function GroupSwipePage({ code }: { code: string }) {
         )}
       </div>
 
-      <div className="pointer-events-none flex shrink-0 items-center justify-center gap-4 px-2 pb-1 pt-1.5 text-[11px] text-neutral-500">
-        <span className="text-rose-400/80">← Nej</span>
-        <span className="text-sky-400/80">↑ Sett</span>
-        <span className="text-emerald-400/80">Gilla →</span>
-      </div>
+      <ActionDock
+        disabled={!cards[0] || loading}
+        onNope={() => void swipeOut("left")}
+        onInfo={() => {
+          const c = cards[0];
+          if (c) setFlippedId((p) => (p === c.id ? null : c.id));
+        }}
+        onWatchlist={() => {
+          const c = cards[0];
+          if (!c) return;
+          void fetch("/api/watchlist/like", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              tmdbId: c.tmdbId,
+              mediaType: c.mediaType,
+              title: c.title,
+              year: c.year,
+              poster: c.poster,
+            }),
+          }).catch(() => {});
+        }}
+        onLike={() => void swipeOut("right")}
+      />
     </div>
   );
 }

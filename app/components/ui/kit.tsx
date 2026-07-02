@@ -13,7 +13,10 @@ export function cx(...xs: Array<string | false | null | undefined>): string {
 
 /** Delad input/select-stil (matchar onboarding: mörk bg + cyan focus-ring). */
 export const fieldClass =
-  "w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40";
+  "w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40";
+
+/** Datumfält — WebKit date inputs behöver min-w-0 i smala kolumner. */
+export const dateFieldClass = `${fieldClass} [color-scheme:dark]`;
 
 /** Sidhuvud: liten cyan versal-etikett + titel + undertitel, med valfri höger-slot. */
 export function PageHeader({

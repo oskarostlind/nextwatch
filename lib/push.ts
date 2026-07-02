@@ -190,3 +190,47 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     console.warn("[push] sendPushToUser misslyckades:", e instanceof Error ? e.message : e);
   }
 }
+
+/**
+ * Skickar push till alla gruppmedlemmar när en titel precis nått match-tröskeln.
+ * Anropas efter LIKE-röst; triggar bara när likeCount === need (inte vid varje extra like).
+ */
+export async function notifyGroupMatchIfNeeded(
+  groupCode: string,
+  tmdbId: number,
+  tmdbType: "movie" | "tv"
+): Promise<void> {
+  try {
+    const size = await prisma.groupMember.count({ where: { groupCode } });
+    if (size === 0) return;
+
+    const need = Math.max(2, Math.ceil(size * 0.6));
+    const likeCount = await prisma.groupVote.count({
+      where: { groupCode, tmdbId, tmdbType, vote: "LIKE" },
+    });
+    if (likeCount !== need) return;
+
+    const members = await prisma.groupMember.findMany({
+      where: { groupCode },
+      select: { userId: true },
+    });
+
+    const mediaLabel = tmdbType === "movie" ? "film" : "serie";
+    await Promise.all(
+      members.map(({ userId }) =>
+        sendPushToUser(userId, {
+          title: "Gruppmatch! 🎬",
+          body: `Ni har hittat en ${mediaLabel} att titta på tillsammans!`,
+          data: {
+            type: "group_match",
+            groupCode,
+            tmdbId: String(tmdbId),
+            tmdbType,
+          },
+        })
+      )
+    );
+  } catch (e) {
+    console.warn("[push] notifyGroupMatchIfNeeded misslyckades:", e instanceof Error ? e.message : e);
+  }
+}

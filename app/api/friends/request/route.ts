@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         data: { fromUserId: me, toUserId, status: "pending" },
         select: { id: true },
       });
-      void sendPushToUser(toUserId, {
+      await sendPushToUser(toUserId, {
         title: "Ny vänförfrågan",
         body: `${fromUser.username ?? "Någon"} vill bli vän med dig`,
         data: { type: "friend_request", fromUserId: me },
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
               where: { id: fr.id },
               data: { status: "pending", decidedAt: null },
             });
-            void sendPushToUser(toUserId, {
+            await sendPushToUser(toUserId, {
               title: "Ny vänförfrågan",
               body: `${fromUser.username ?? "Någon"} vill bli vän med dig`,
               data: { type: "friend_request", fromUserId: me },

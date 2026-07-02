@@ -119,8 +119,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       select: { username: true },
     });
     const fromName = inviter?.username ?? "Någon";
-    const notify = () => {
-      void sendPushToUser(toUserId, {
+    const notify = async () => {
+      await sendPushToUser(toUserId, {
         title: "Gruppinbjudan",
         body: `${fromName} bjöd in dig till en grupp`,
         data: { type: "group_invite", groupCode, fromUserId },
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
           createdAt: new Date(), // bump sort
         },
       });
-      notify();
+      await notify();
       return NextResponse.json({ ok: true });
     }
 
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       },
     });
 
-    notify();
+    await notify();
     return NextResponse.json({ ok: true });
   } catch (e) {
     // fånga Prisma P2002 → returnera 409 (aldrig 500)

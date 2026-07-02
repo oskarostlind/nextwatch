@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 type Ok = { ok: true; friendship?: { userId: string; friendId: string } };
 type Err = { ok: false; message: string };
@@ -129,6 +130,18 @@ export async function POST(req: NextRequest) {
     VALUES (${a}, ${b}, NOW())
     ON CONFLICT (user_id, friend_id) DO NOTHING
   `;
+
+  const accepter = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { username: true, profile: { select: { displayName: true } } },
+  });
+  const accepterName =
+    accepter?.profile?.displayName ?? accepter?.username ?? "Någon";
+  await sendPushToUser(pending.from_user_id, {
+    title: "Vänförfrågan accepterad",
+    body: `${accepterName} accepterade din vänförfrågan`,
+    data: { type: "friend_accepted", userId: uid },
+  });
 
   return json(200, { ok: true, friendship: { userId: a, friendId: b } });
   } catch {

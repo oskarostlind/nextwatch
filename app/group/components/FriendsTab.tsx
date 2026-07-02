@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, Users, UserPlus, Check } from "lucide-react";
+import type { FriendsInitial } from "../page";
 
 type FriendsListUser = {
   id: string;
@@ -58,17 +59,17 @@ function displayName(u: { displayName?: string | null; username?: string | null;
   return u.displayName ?? u.username ?? "Okänd";
 }
 
-export default function FriendsTab() {
-  const [friends, setFriends] = useState<FriendsListUser[]>([]);
-  const [pendingIn, setPendingIn] = useState<{ requestId: string; from: FriendsListUser }[]>([]);
-  const [pendingOut, setPendingOut] = useState<{ requestId: string; to: FriendsListUser }[]>([]);
+export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
+  const [friends, setFriends] = useState<FriendsListUser[]>(initial.friends);
+  const [pendingIn, setPendingIn] = useState(initial.pendingIn);
+  const [pendingOut, setPendingOut] = useState(initial.pendingOut);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchRow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
 
-  const loadFriends = async () => {
+  const loadFriends = useCallback(async () => {
     const res = await fetch("/api/friends/list", { cache: "no-store" });
     if (!res.ok) return;
     const data = (await res.json()) as FriendsListApiResponse;
@@ -87,11 +88,11 @@ export default function FriendsTab() {
       setPendingIn(data.pendingIn || []);
       setPendingOut(data.pendingOut || []);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadFriends();
-  }, []);
+  }, [loadFriends]);
 
   useEffect(() => {
     const query = searchQuery.trim();

@@ -1,44 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
+import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
+import type { SwipeCard } from "@/lib/swipeDeck";
 
 /* ---------- types ---------- */
 
 type MediaType = "movie" | "tv";
 
-export type Card = {
-  id: string;
-  tmdbId: number;
-  mediaType: MediaType;
-  title: string;
-  year: string | null;
-  poster: string | null;
-  overview?: string | null;
-  rating?: number | null;
-};
-
-type UnifiedOk = {
-  ok: true;
-  mode: "group" | "individual";
-  group: { code: string; strictProviders: boolean } | null;
-  language: string;
-  region: string;
-  usedProviderIds: number[];
-  items: {
-    id: number;
-    tmdbType: MediaType;
-    title: string;
-    year?: string;
-    poster_path?: string | null;
-    vote_average?: number;
-  }[];
-};
-type UnifiedResp = UnifiedOk | { ok: false; message?: string };
+export type Card = SwipeCard;
 
 type MatchResp =
   | {
@@ -56,9 +31,6 @@ type MatchResp =
 const HIDE_KEY = "nw_disliked_until";
 const SEEN_KEY = "nw_seen_ids";
 
-/** Hämta nästa unified-sida när kön har färre kort än detta (aggressiv prefetch). */
-const PREFETCH_MIN_CARDS = 10;
-
 function readHideMap(): Record<string, number> {
   try {
     const raw = localStorage.getItem(HIDE_KEY);
@@ -72,11 +44,6 @@ function readHideMap(): Record<string, number> {
 function writeHideMap(map: Record<string, number>) {
   localStorage.setItem(HIDE_KEY, JSON.stringify(map));
 }
-function isHidden(tmdbId: number): boolean {
-  const map = readHideMap();
-  const until = map[String(tmdbId)];
-  return typeof until === "number" && Date.now() < until;
-}
 function hideFor7Days(tmdbId: number) {
   const map = readHideMap();
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
@@ -84,6 +51,7 @@ function hideFor7Days(tmdbId: number) {
   writeHideMap(map);
 }
 
+/** Kort som redan swipats lokalt — används vid markSeen/hide. */
 function readSeen(): Set<string> {
   try {
     const raw = localStorage.getItem(SEEN_KEY);
@@ -208,18 +176,14 @@ let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const [cards, setCards] = useState<Card[]>([]);
-  const [page, setPage] = useState<number>(1);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [feedLoading, setFeedLoading] = useState<boolean>(true);
-  const [feedError, setFeedError] = useState<string | null>(null);
+  const { solo, popSoloCard, updateSoloCards, retrySoloDeck } = useSoloSwipeDeck();
+  const { cards, mode, group, loading, error, ready } = solo;
+  const feedLoading = cards.length === 0 && (loading || !ready);
+  const feedError = cards.length === 0 ? error : null;
+
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<"group" | "individual">("individual");
-  const [group, setGroup] = useState<{ code: string; strictProviders: boolean } | null>(null);
-
   const controls = useAnimation();
-  const loadingRef = useRef(false);
 
   // Tinder-stil: kortet följer fingret, overlays togglas av drag-riktningen.
   const x = useMotionValue(0);
@@ -228,90 +192,6 @@ export default function SwipePageClient() {
   const likeOpacity = useTransform(x, [48, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
   const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
-
-  const loadPage = useCallback(
-    async (targetPage: number, replace: boolean) => {
-      if (loadingRef.current) return;
-      loadingRef.current = true;
-      if (replace) {
-        setFeedLoading(true);
-        setFeedError(null);
-      }
-      try {
-        const res = await fetch(`/api/recs/unified?page=${targetPage}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          if (replace) setFeedError("Kunde inte hämta förslag. Försök igen.");
-          setHasMore(false);
-          return;
-        }
-        const data = (await res.json()) as UnifiedResp;
-        if (!("ok" in data) || !data.ok) {
-          if (replace) setFeedError(data.message ?? "Kunde inte hämta förslag.");
-          setHasMore(false);
-          return;
-        }
-
-        setMode(data.mode);
-        setGroup(data.group);
-
-        if (data.mode === "group" && !groupRefreshAttempted) {
-          groupRefreshAttempted = true;
-          router.refresh();
-          return;
-        }
-
-        const mapped: Card[] = data.items
-          .map((it): Card | null => {
-            const id = `${it.tmdbType}_${it.id}`;
-            const poster = it.poster_path
-              ? it.poster_path.startsWith("http")
-                ? it.poster_path
-                : `https://image.tmdb.org/t/p/w780${it.poster_path}`
-              : null;
-            return {
-              id,
-              tmdbId: it.id,
-              mediaType: it.tmdbType,
-              title: it.title,
-              year: it.year ?? null,
-              poster,
-              overview: null,
-              rating:
-                typeof it.vote_average === "number" ? it.vote_average : null,
-            };
-          })
-          .filter((v): v is Card => Boolean(v))
-          .filter((c) => !isHidden(c.tmdbId))
-          .filter((c) => !readSeen().has(c.id));
-
-        if (replace) setCards(mapped);
-        else setCards((prev) => [...prev, ...mapped]);
-
-        setHasMore(data.items.length > 0);
-      } catch {
-        if (replace) setFeedError("Nätverksfel. Kontrollera anslutningen.");
-        setHasMore(false);
-      } finally {
-        loadingRef.current = false;
-        if (replace) setFeedLoading(false);
-      }
-    },
-    [router]
-  );
-
-  useEffect(() => {
-    void loadPage(1, true);
-  }, [loadPage]);
-
-  useEffect(() => {
-    if (!loadingRef.current && cards.length < PREFETCH_MIN_CARDS && hasMore) {
-      const next = page + 1;
-      setPage(next);
-      void loadPage(next, false);
-    }
-  }, [cards.length, hasMore, page, loadPage]);
 
   // lazy hydrering av details på topp- och nästa korten i stacken (parallellt)
   const fetched = useRef<Set<string>>(new Set());
@@ -332,7 +212,7 @@ export default function SwipePageClient() {
     ).then((results) => {
       results.forEach(({ id, det }) => {
         if (!det) return;
-        setCards((prev) =>
+        updateSoloCards((prev) =>
           prev.map((c) =>
             c.id === id
               ? {
@@ -348,11 +228,18 @@ export default function SwipePageClient() {
         );
       });
     });
-  }, [cards]);
+  }, [cards, updateSoloCards]);
+
+  useEffect(() => {
+    if (mode === "group" && group?.code && !groupRefreshAttempted) {
+      groupRefreshAttempted = true;
+      router.refresh();
+    }
+  }, [mode, group?.code, router]);
 
   function popTop() {
     setFlippedId(null);
-    setCards((prev) => prev.slice(1));
+    popSoloCard();
   }
 
   /* ---------- group helpers (fire-and-forget; blockerar inte UI) ---------- */
@@ -502,7 +389,7 @@ export default function SwipePageClient() {
       ) : feedError ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <p className="text-sm text-rose-300">{feedError}</p>
-          <Button variant="secondary" onClick={() => void loadPage(1, true)}>
+          <Button variant="secondary" onClick={() => void retrySoloDeck()}>
             Försök igen
           </Button>
         </div>

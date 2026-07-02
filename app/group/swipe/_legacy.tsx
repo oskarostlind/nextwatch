@@ -14,32 +14,19 @@ import {
   type Card,
 } from "../../swipe/page_client";
 import ActionDock from "@/app/components/ui/ActionDock";
+import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 
 type MediaType = "movie" | "tv";
-
-type RecItem = {
-  type: "rec";
-  tmdbId: number;
-  mediaType: MediaType;
-  title: string;
-  matchedProviders: string[];
-  unknown: boolean;
-};
-type FeedItem = RecItem | { type: "ad" };
-
-type FeedResp = { ok: true; feed: FeedItem[] } | { ok: false; error?: string };
 
 type MatchResp =
   | { ok: true; match: { tmdbId: number; tmdbType: MediaType } | null }
   | { ok: false };
 
-function isRec(x: FeedItem): x is RecItem {
-  return x.type === "rec";
-}
-
 export default function GroupSwipePage({ code }: { code: string }) {
-  const [cards, setCards] = useState<Card[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { deck, popCard, updateCards } = useGroupSwipeDeck(code);
+  const { cards, loading, error, ready } = deck;
+  const showLoading = cards.length === 0 && (loading || !ready);
+
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
   const controls = useAnimation();
@@ -50,39 +37,6 @@ export default function GroupSwipePage({ code }: { code: string }) {
   const likeOpacity = useTransform(x, [48, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
   const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
-
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      if (!code) return;
-      setLoading(true);
-      try {
-        const r = await fetch(`/api/recs/group?code=${encodeURIComponent(code)}`, {
-          cache: "no-store",
-        });
-        const j = (await r.json()) as FeedResp;
-        if (ignore) return;
-        if (j.ok) {
-          const mapped: Card[] = j.feed.filter(isRec).map((it) => ({
-            id: `${it.mediaType}_${it.tmdbId}`,
-            tmdbId: it.tmdbId,
-            mediaType: it.mediaType,
-            title: it.title,
-            year: null,
-            poster: null,
-            overview: null,
-            rating: null,
-          }));
-          setCards(mapped);
-        }
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, [code]);
 
   // Hydrera details (poster/år/betyg/beskrivning) för topp-3 i stacken, som solo.
   const fetched = useRef<Set<string>>(new Set());
@@ -100,7 +54,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     ).then((results) => {
       results.forEach(({ id, det }) => {
         if (!det) return;
-        setCards((prev) =>
+        updateCards((prev) =>
           prev.map((c) =>
             c.id === id
               ? {
@@ -116,11 +70,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
         );
       });
     });
-  }, [cards]);
+  }, [cards, updateCards]);
 
   function popTop() {
     setFlippedId(null);
-    setCards((prev) => prev.slice(1));
+    popCard();
   }
 
   /* ---------- gruppröst + match-koll (fire-and-forget, blockerar inte UI) ---------- */
@@ -261,7 +215,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     );
   }
 
-  if (loading) {
+  if (showLoading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <p className="text-neutral-400">Laddar förslag…</p>
@@ -365,7 +319,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
       </div>
 
       <ActionDock
-        disabled={!cards[0] || loading}
+        disabled={!cards[0] || showLoading}
         onNope={() => void swipeOut("left")}
         onInfo={() => {
           const c = cards[0];

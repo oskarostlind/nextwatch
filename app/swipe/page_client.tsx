@@ -494,7 +494,7 @@ export default function SwipePageClient() {
       {/* Kort-yta: flex-1 + min-h-0 + overflow-hidden => flexbox styr höjden och kortet kan aldrig växa förbi ytan och klippas bakom ikon-raden.
           OBS: kort-wrappern är absolut positionerad (inte h-full) eftersom procenthöjder
           kollapsar till 0 när förfäderna bara har min-h + flex-1 (indefinit höjd). */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
       {feedLoading ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <p className="text-sm text-neutral-400">Laddar förslag…</p>

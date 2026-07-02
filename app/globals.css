@@ -27,3 +27,19 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   overscroll-behavior: none;
 }
+
+/* iOS WebKit: type=date har stor intrinsic bredd och kan spränga smala kolumner. */
+input[type="date"].nw-date {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="date"].nw-date::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}

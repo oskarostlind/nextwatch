@@ -453,7 +453,7 @@ export default function ProfileClient({ initial }: Props) {
         <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="profile-tabs" />
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         {tab === "bas" && (
           <div className="grid gap-4">
             <div className="grid grid-cols-1 gap-4">
@@ -467,7 +467,7 @@ export default function ProfileClient({ initial }: Props) {
                   autoComplete="name"
                 />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 max-w-full overflow-hidden">
                 <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
                 <input
                   type="date"

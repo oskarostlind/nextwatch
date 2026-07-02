@@ -1,361 +1,375 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
+// Grupp-swipe med exakt samma kortlek-UI som solo-swipen (app/swipe/page_client.tsx):
+// framer-motion-drag, like/nope/sett-overlays, tap = info-flip, hint-rad istället
+// för fysiska knappar. Skillnaden mot solo är bara dataflödet: feed från
+// /api/recs/group och röster till /api/group/vote (+ /api/rate, watchlist på like).
 
-export const dynamic = "force-dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, useAnimation, useMotionValue, useTransform } from "framer-motion";
+import {
+  StaticCard,
+  fetchDetailsWithFallback,
+  type Card,
+} from "../../swipe/page_client";
+
+type MediaType = "movie" | "tv";
 
 type RecItem = {
   type: "rec";
   tmdbId: number;
-  mediaType: "movie" | "tv";
+  mediaType: MediaType;
   title: string;
   matchedProviders: string[];
   unknown: boolean;
 };
-type AdItem = { type: "ad"; id: string; headline: string; body: string; cta: string; href: string };
-type FeedItem = RecItem | AdItem;
+type FeedItem = RecItem | { type: "ad" };
 
-type Details = {
-  id: number;
-  mediaType: "movie" | "tv";
-  title: string;
-  overview: string;
-  posterUrl: string | null;
-  posterPath: string | null;
-  year: string | null;
-  voteAverage: number | null;
-  voteCount: number | null;
-  blurDataURL: string | null;
-};
-type ApiDetailsOk = Details & { ok: true };
-type ApiDetailsErr = { ok: false; error: string };
+type FeedResp = { ok: true; feed: FeedItem[] } | { ok: false; error?: string };
 
-function isRec(x: FeedItem): x is RecItem { return x.type === "rec"; }
-function fmtRating(v: number | null): string { return v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1); }
+type MatchResp =
+  | { ok: true; match: { tmdbId: number; tmdbType: MediaType } | null }
+  | { ok: false };
 
-type GroupSwipeInnerProps = { code: string };
+function isRec(x: FeedItem): x is RecItem {
+  return x.type === "rec";
+}
 
-function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
-
+export default function GroupSwipePage({ code }: { code: string }) {
+  const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [idx, setIdx] = useState(0);
-  const [flip, setFlip] = useState(false);
-  const [detailsMap, setDetailsMap] = useState<Record<string, Details>>({});
-  const feedRef = useRef<FeedItem[]>([]);
-  const indexRef = useRef(0);
-  const detailsRef = useRef<Record<string, Details>>({});
+  const [flippedId, setFlippedId] = useState<string | null>(null);
 
-  useEffect(() => { feedRef.current = feed; }, [feed]);
-  useEffect(() => { indexRef.current = idx; }, [idx]);
-  useEffect(() => { detailsRef.current = detailsMap; }, [detailsMap]);
+  const controls = useAnimation();
+
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotate = useTransform(x, [-260, 260], [-16, 16]);
+  const likeOpacity = useTransform(x, [48, 150], [0, 1]);
+  const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
+  const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
 
   useEffect(() => {
     let ignore = false;
-    async function run() {
+    (async () => {
       if (!code) return;
       setLoading(true);
-      const r = await fetch(`/api/recs/group?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-      const j = await r.json();
-      if (ignore) return;
-      if (j?.ok) setFeed(j.feed as FeedItem[]);
-      setIdx(0);
-      setFlip(false);
-      setLoading(false);
-    }
-    run();
-    return () => { ignore = true; };
+      try {
+        const r = await fetch(`/api/recs/group?code=${encodeURIComponent(code)}`, {
+          cache: "no-store",
+        });
+        const j = (await r.json()) as FeedResp;
+        if (ignore) return;
+        if (j.ok) {
+          const mapped: Card[] = j.feed.filter(isRec).map((it) => ({
+            id: `${it.mediaType}_${it.tmdbId}`,
+            tmdbId: it.tmdbId,
+            mediaType: it.mediaType,
+            title: it.title,
+            year: null,
+            poster: null,
+            overview: null,
+            rating: null,
+          }));
+          setCards(mapped);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
   }, [code]);
 
-  const fetchDetails = useCallback(async (type: "movie" | "tv", id: number, cache: RequestCache) => {
-    const key = `${type}:${id}`;
-    if (detailsRef.current[key]) return;
-    try {
-      const r = await fetch(`/api/tmdb/details?type=${type}&id=${id}`, { cache });
-      const js = (await r.json()) as ApiDetailsOk | ApiDetailsErr;
-      if (!js.ok) return;
-      setDetailsMap(prev => ({ ...prev, [`${js.mediaType}:${js.id}`]: js }));
-    } catch { /* ignore */ }
-  }, []);
-
+  // Hydrera details (poster/år/betyg/beskrivning) för topp-3 i stacken, som solo.
+  const fetched = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const cur = feed[idx];
-    if (cur && isRec(cur)) fetchDetails(cur.mediaType, cur.tmdbId, idx === 0 ? "no-store" : "force-cache");
-    const nxt = feed[idx + 1];
-    if (nxt && isRec(nxt)) fetchDetails(nxt.mediaType, nxt.tmdbId, "force-cache");
-  }, [feed, idx, fetchDetails]);
+    const toFetch = cards
+      .slice(0, 3)
+      .filter((c) => !fetched.current.has(c.id));
+    if (toFetch.length === 0) return;
 
-  // drag/tap
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const startX = useRef<number | null>(null);
-  const startT = useRef<number>(0);
-  const activePointer = useRef<number | null>(null);
-  const lastX = useRef<number>(0);
-  const lastT = useRef<number>(0);
-  const prevX = useRef<number>(0);
-  const prevT = useRef<number>(0);
-
-  const resetCard = useCallback(() => {
-    if (cardRef.current) {
-      cardRef.current.style.transition = "transform 180ms ease-out";
-      cardRef.current.style.transform = "";
-    }
-  }, []);
-
-  const decide = useCallback(async (decision: "like" | "dislike") => {
-    resetCard();
-    const item = feedRef.current[indexRef.current];
-    if (!item || !isRec(item)) {
-      setIdx((v) => v + 1);
-      setFlip(false);
-      return;
-    }
-    try {
-      const vote = decision === "like" ? "LIKE" : "DISLIKE";
-      if (code) {
-        await fetch("/api/group/vote", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            tmdbId: item.tmdbId,
-            tmdbType: item.mediaType,
-            vote,
-            groupCode: code,
-          }),
-        });
-      }
-      await fetch("/api/rate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          tmdbId: item.tmdbId,
-          mediaType: item.mediaType,
-          decision,
-        }),
+    toFetch.forEach((t) => fetched.current.add(t.id));
+    Promise.all(
+      toFetch.map((t) =>
+        fetchDetailsWithFallback(t.mediaType, t.tmdbId).then((det) => ({ id: t.id, det }))
+      )
+    ).then((results) => {
+      results.forEach(({ id, det }) => {
+        if (!det) return;
+        setCards((prev) =>
+          prev.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  overview: c.overview ?? det.overview,
+                  rating: typeof c.rating === "number" ? c.rating : det.rating ?? null,
+                  poster: c.poster ?? det.poster,
+                  title: c.title || det.title,
+                  year: c.year ?? det.year,
+                }
+              : c
+          )
+        );
       });
-    } catch {
-      /* ignore */
-    } finally {
-      setIdx((v) => v + 1);
-      setFlip(false);
-    }
-  }, [code, resetCard]);
-
-  const toggleWatch = useCallback(async () => {
-    const item = feedRef.current[indexRef.current];
-    if (!item || !isRec(item)) return;
-    await fetch("/api/watchlist/like", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tmdbId: item.tmdbId, mediaType: item.mediaType }),
     });
-  }, []);
+  }, [cards]);
 
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      const item = feedRef.current[indexRef.current];
-      if (!item) return;
-      if (e.key === "ArrowLeft") decide("dislike");
-      else if (e.key === "ArrowRight") decide("like");
-      else if (e.key === "ArrowUp") toggleWatch();
-      else if (e.key === " ") setFlip(f => !f);
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [decide, toggleWatch]);
+  function popTop() {
+    setFlippedId(null);
+    setCards((prev) => prev.slice(1));
+  }
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    // Fånga på containern (currentTarget), inte e.target (kan vara <img> som
-    // försvinner vid re-render) — annars tappas move/up-events på iOS.
-    activePointer.current = e.pointerId;
-    startX.current = e.clientX;
-    startT.current = e.timeStamp;
-    lastX.current = prevX.current = e.clientX;
-    lastT.current = prevT.current = e.timeStamp;
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    if (cardRef.current) cardRef.current.style.transition = "transform 0s";
-  }, []);
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (startX.current == null || e.pointerId !== activePointer.current || !cardRef.current) return;
-    prevX.current = lastX.current;
-    prevT.current = lastT.current;
-    lastX.current = e.clientX;
-    lastT.current = e.timeStamp;
-    const dx = e.clientX - startX.current;
-    cardRef.current.style.transform = `translateX(${dx}px) rotate(${dx / 20}deg)`;
-  }, []);
-  const onPointerEnd = useCallback((e: React.PointerEvent) => {
-    if (e.pointerId !== activePointer.current) return;
-    const sx = startX.current;
-    startX.current = null;
-    activePointer.current = null;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-    if (sx == null) return;
+  /* ---------- gruppröst + match-koll (fire-and-forget, blockerar inte UI) ---------- */
 
-    const dx = e.clientX - sx;
-    const dt = e.timeStamp - startT.current;
-    const isTap = Math.abs(dx) < 10 && dt < 300;
+  const sendVote = useCallback(
+    (c: Card, vote: "LIKE" | "DISLIKE") => {
+      void fetch("/api/group/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          groupCode: code,
+          tmdbId: c.tmdbId,
+          tmdbType: c.mediaType,
+          vote,
+        }),
+      })
+        .then((res) => {
+          if (!res.ok) return null;
+          return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
+            cache: "no-store",
+          });
+        })
+        .then((matchRes) => {
+          if (!matchRes || !matchRes.ok) return null;
+          return matchRes.json() as Promise<unknown>;
+        })
+        .then((m: unknown) => {
+          const parsed = m as MatchResp | null;
+          if (parsed && "ok" in parsed && parsed.ok && parsed.match) {
+            window.dispatchEvent(
+              new CustomEvent("nw:group-match", {
+                detail: {
+                  code,
+                  tmdbId: parsed.match.tmdbId,
+                  tmdbType: parsed.match.tmdbType,
+                },
+              })
+            );
+          }
+        })
+        .catch(() => {
+          /* best-effort */
+        });
 
-    // Velocity från de två senaste pointermove:en → snabba flicks räknas
-    // även om avståndet är kort.
-    const vdt = lastT.current - prevT.current;
-    const vx = vdt > 0 ? (lastX.current - prevX.current) / vdt : 0;
-    const flick = Math.abs(vx) > 0.6 && Math.abs(dx) > 30 && Math.sign(vx) === Math.sign(dx);
+      // Personlig rating i bakgrunden (smakmodellen), som tidigare.
+      void fetch("/api/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          tmdbId: c.tmdbId,
+          mediaType: c.mediaType,
+          decision: vote === "LIKE" ? "like" : "dislike",
+        }),
+      }).catch(() => {
+        /* best-effort */
+      });
+    },
+    [code]
+  );
 
-    if (isTap) { setFlip(f => !f); resetCard(); return; }
-    if (dx > 90 || (flick && dx > 0)) { decide("like"); return; }
-    if (dx < -90 || (flick && dx < 0)) { decide("dislike"); return; }
-    resetCard();
-  }, [decide, resetCard]);
-  // pointercancel = webview:n avbröt gesten (scroll, systemgest). Det får
-  // ALDRIG tolkas som tap/swipe — bara återställ kortet.
-  const onPointerCancel = useCallback((e: React.PointerEvent) => {
-    if (e.pointerId !== activePointer.current) return;
-    startX.current = null;
-    activePointer.current = null;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-    resetCard();
-  }, [resetCard]);
+  function handleDislike(c: Card): void {
+    popTop();
+    sendVote(c, "DISLIKE");
+  }
 
-  const current = feed[idx];
-  const details = current && isRec(current) ? detailsMap[`${current.mediaType}:${current.tmdbId}`] : undefined;
+  function handleLike(c: Card): void {
+    popTop();
+    void fetch("/api/watchlist/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: c.tmdbId,
+        mediaType: c.mediaType,
+        title: c.title,
+        year: c.year,
+        poster: c.poster,
+      }),
+    }).catch(() => {
+      /* best-effort */
+    });
+    sendVote(c, "LIKE");
+  }
+
+  function handleSeen(c: Card): void {
+    popTop();
+    sendVote(c, "DISLIKE");
+  }
+
+  /* ---------- render (identisk med solo-swipen) ---------- */
+
+  const DIST_THRESHOLD = 110;
+  const VELOCITY_THRESHOLD = 700;
+
+  async function swipeOut(dir: "left" | "right" | "up") {
+    const c = cards[0];
+    if (!c) return;
+    const target =
+      dir === "right"
+        ? { x: 560, opacity: 0 }
+        : dir === "left"
+        ? { x: -560, opacity: 0 }
+        : { y: -760, opacity: 0 };
+    await controls.start({ ...target, transition: { duration: 0.22 } });
+    if (dir === "right") handleLike(c);
+    else if (dir === "left") handleDislike(c);
+    else handleSeen(c);
+    x.set(0);
+    y.set(0);
+    controls.set({ x: 0, y: 0, opacity: 1 });
+  }
 
   if (!code) {
     return (
-      <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 max-w-xl mx-auto w-full justify-center">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-2">Grupp-swipe</h1>
-        <p className="text-sm opacity-80">Saknar <code>?code=XXXXXX</code> i URL:en.</p>
-      </main>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center">
+        <p className="text-sm text-neutral-400">
+          Saknar <code>?code=XXXXXX</code> i URL:en.
+        </p>
+      </div>
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <p className="text-neutral-400">Laddar förslag…</p>
+      </div>
+    );
+  }
+
+  const stackIndices: number[] = [];
+  if (cards.length > 0) {
+    for (let i = Math.min(2, cards.length - 1); i >= 0; i--) stackIndices.push(i);
+  }
+
   return (
-    <main className="flex min-h-0 flex-1 flex-col p-4 sm:p-6 max-w-xl mx-auto w-full">
-      <header className="shrink-0 mb-2">
-        <h1 className="text-xl sm:text-2xl font-semibold">Grupp-swipe</h1>
-        <p className="text-sm opacity-80">Kod: <span className="font-mono">{code}</span></p>
-      </header>
-
-      {loading && (
-        <div className="flex flex-1 items-center justify-center py-8">
-          <p className="text-neutral-400">Laddar förslag…</p>
-        </div>
-      )}
-
-      {!loading && current && (
-        <div className="flex flex-1 flex-col min-h-0">
-          <div
-            className="flex-1 flex flex-col min-h-0 [perspective:1000px] select-none cursor-grab active:cursor-grabbing"
-            // touch-action: none — med pan-y kapade iOS horisontella drag som
-            // lutade lite vertikalt (pointercancel mitt i swipen).
-            style={{ touchAction: "none" }}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerEnd}
-            onPointerCancel={onPointerCancel}
-          >
-            <div
-              ref={cardRef}
-              className="relative w-full max-w-sm mx-auto overflow-hidden rounded-xl border shadow flex-shrink-0"
-              style={{ aspectRatio: "2 / 3" }}
-            >
-              <div className={`absolute inset-0 transition-transform duration-300 [transform-style:preserve-3d] ${flip ? "[transform:rotateY(180deg)]" : ""}`}>
-                {/* FRONT */}
-                <div className="absolute inset-0 [backface-visibility:hidden]">
-                  {details?.posterPath ? (
-                    <Image
-                      src={`https://image.tmdb.org/t/p/w780${details.posterPath}`}
-                      alt={details.title}
-                      fill
-                      sizes="(min-width: 768px) 640px, 100vw"
-                      className="object-cover"
-                      placeholder={details.blurDataURL ? "blur" : undefined}
-                      blurDataURL={details.blurDataURL || undefined}
-                      priority={idx === 0}
-                      draggable={false}
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {cards[0] ? (
+          <div className="absolute inset-x-2 inset-y-2 isolate mx-auto max-w-[360px] overflow-hidden">
+            {stackIndices.map((idx) => {
+              const card = cards[idx];
+              if (!card) return null;
+              const isTop = idx === 0;
+              if (isTop) {
+                return (
+                  <motion.div
+                    key={card.id}
+                    className="absolute inset-0 z-10 flex items-center justify-center p-0.5"
+                    style={{ x, y, rotate }}
+                    animate={controls}
+                    drag
+                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                    dragElastic={0.8}
+                    onDragEnd={(_, info) => {
+                      const { offset, velocity } = info;
+                      const up =
+                        (offset.y < -DIST_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD) &&
+                        Math.abs(offset.y) > Math.abs(offset.x);
+                      if (up) {
+                        void swipeOut("up");
+                        return;
+                      }
+                      if (offset.x > DIST_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
+                        void swipeOut("right");
+                        return;
+                      }
+                      if (offset.x < -DIST_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
+                        void swipeOut("left");
+                        return;
+                      }
+                      void controls.start({
+                        x: 0,
+                        y: 0,
+                        transition: { type: "spring", stiffness: 320, damping: 28 },
+                      });
+                    }}
+                  >
+                    <StaticCard
+                      card={card}
+                      flipped={flippedId === card.id}
+                      interactive
+                      onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
                     />
-                  ) : (
-                    <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.06)_25%,rgba(255,255,255,0.12)_37%,rgba(255,255,255,0.06)_63%)] bg-[length:400%_100%] animate-[shimmer_1.2s_infinite] rounded-xl" />
-                  )}
 
-                  {/* Overlay (titel · år · betyg) */}
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-3 bg-gradient-to-t from-black/70 via-black/20 to-transparent text-white">
-                    <div className="flex items-end justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-base font-semibold truncate">
-                          {details?.title ?? (isRec(current) ? current.title : "")}
-                        </div>
-                        <div className="text-xs opacity-90">{details?.year ?? "—"}</div>
+                    <motion.div
+                      style={{ opacity: likeOpacity }}
+                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                    >
+                      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/25 text-5xl text-emerald-300 ring-4 ring-emerald-400 backdrop-blur-sm">
+                        ❤
                       </div>
-                      <div className="text-sm font-medium shrink-0">★ {fmtRating(details?.voteAverage ?? null)}</div>
-                    </div>
-                  </div>
+                    </motion.div>
+                    <motion.div
+                      style={{ opacity: nopeOpacity }}
+                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                    >
+                      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-500/25 text-5xl text-rose-300 ring-4 ring-rose-400 backdrop-blur-sm">
+                        ✖
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      style={{ opacity: seenOpacity }}
+                      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+                    >
+                      <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-sky-500/25 text-4xl text-sky-300 ring-4 ring-sky-400 backdrop-blur-sm">
+                        ✓
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                );
+              }
+              const depth = idx;
+              const scale = depth === 1 ? 0.95 : 0.9;
+              const translateY = depth === 1 ? 10 : 20;
+              const z = depth === 1 ? 9 : 8;
+              return (
+                <div
+                  key={card.id}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92]"
+                  style={{
+                    zIndex: z,
+                    transform: `translateY(${translateY}px) scale(${scale})`,
+                    filter: "brightness(0.88)",
+                  }}
+                >
+                  <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
                 </div>
-
-                {/* BACK */}
-                <div className="absolute inset-0 p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] bg-black/55 text-white">
-                  {isRec(current) && (
-                    <>
-                      <div className="text-lg font-semibold mb-1">
-                        {details?.title || current.title} {details?.year ? <span className="text-xs opacity-70">[{details.year}]</span> : null}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 mt-2 mb-3">
-                        {(current.matchedProviders.length ? current.matchedProviders : (current.unknown ? ["Okänd"] : []))
-                          .map((p) => (
-                            <span key={p} className="px-2 py-1 text-xs rounded-full border border-white/30 bg-white/10">
-                              {p}
-                            </span>
-                          ))}
-                      </div>
-
-                      <p className="text-sm opacity-90">{details ? details.overview || "Ingen beskrivning." : "Laddar info…"}</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
-
-          {/* Knappar – touch-vänliga, flex för RN-port */}
-          <div className="shrink-0 mt-4 flex flex-wrap gap-2 justify-center">
-            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={() => decide("dislike")}>
-              Nej (←)
-            </button>
-            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={() => setFlip((f) => !f)}>
-              Info
-            </button>
-            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-emerald-600 bg-emerald-800/80 text-white active:bg-emerald-700" onClick={() => decide("like")}>
-              Ja (→)
-            </button>
-            <button type="button" className="min-h-[44px] px-5 py-2.5 rounded-xl border border-neutral-600 bg-neutral-800/80 text-neutral-200 active:bg-neutral-700" onClick={toggleWatch}>
-              Watchlist (↑)
-            </button>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
+            <p className="opacity-70">Slut på förslag nu.</p>
+            <a
+              className="text-cyan-400 underline underline-offset-2"
+              href={`/group/match?code=${encodeURIComponent(code)}`}
+            >
+              Visa matchlista
+            </a>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {!loading && !current && (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-neutral-700 bg-neutral-900/50 p-6 text-center">
-          <p className="mb-3 text-neutral-300">Slut på förslag nu.</p>
-          <a className="text-emerald-400 underline underline-offset-2" href={`/group/match?code=${encodeURIComponent(code)}`}>
-            Visa matchlista
-          </a>
-        </div>
-      )}
-
-      <style jsx>{`@keyframes shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }`}</style>
-    </main>
-  );
-}
-
-type GroupSwipePageProps = { code: string };
-
-export default function GroupSwipePage({ code }: GroupSwipePageProps) {
-  return (
-    <Suspense fallback={<main className="p-6 max-w-xl mx-auto">Laddar…</main>}>
-      <GroupSwipeInner code={code} />
-    </Suspense>
+      <div className="pointer-events-none flex shrink-0 items-center justify-center gap-4 px-2 pb-1 pt-1.5 text-[11px] text-neutral-500">
+        <span className="text-rose-400/80">← Nej</span>
+        <span className="text-sky-400/80">↑ Sett</span>
+        <span className="text-emerald-400/80">Gilla →</span>
+      </div>
+    </div>
   );
 }

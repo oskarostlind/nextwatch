@@ -19,7 +19,8 @@ export default async function GroupSwipePageWrapper() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl pb-16">
+    // Flex-kolumn hela vägen ner så kortleken (flex-1) får riktig höjd, som på /swipe.
+    <main className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
       <Suspense fallback={<div className="p-6 text-neutral-400">Laddar…</div>}>
         <Client />
       </Suspense>

@@ -164,7 +164,7 @@ function parseDetails(d: unknown) {
       : null;
   return { overview, rating, poster, title, year: y };
 }
-async function fetchDetailsWithFallback(type: MediaType, id: number) {
+export async function fetchDetailsWithFallback(type: MediaType, id: number) {
   const p1 = fetch(`/api/tmdb/details?type=${type}&id=${id}`, {
     cache: "force-cache",
   })
@@ -561,7 +561,7 @@ export default function SwipePageClient() {
 
 /* ---------- Card components (oförändrat utseende) ---------- */
 
-function StaticCard({
+export function StaticCard({
   card,
   flipped,
   onFlip,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { PageHeader, Chip, Button, Note } from "../components/ui/kit";
+import { PageHeader, Chip, Button, Note, SegmentedTabs } from "../components/ui/kit";
 
 type Item = {
   id: number;
@@ -75,40 +75,44 @@ export default function DiscoverPage() {
   }
 
   return (
-      <main className="mx-auto max-w-6xl p-6">
+      <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
 
-        <div className="mb-4 grid gap-3 md:grid-cols-[auto_auto_1fr]">
+        <div className="mb-4 space-y-3">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-400">Typ</label>
+            <div className="min-w-0 flex-1">
+              <SegmentedTabs
+                layoutId="discover-type"
+                tabs={[
+                  { id: "movie", label: "Film" },
+                  { id: "tv", label: "Serier" },
+                ]}
+                value={type}
+                onChange={(t) => { setType(t); setPage(1); setGenres([]); }}
+              />
+            </div>
             <select
-              value={type}
-              onChange={(e) => { setType(e.target.value as "movie" | "tv"); setPage(1); setGenres([]); }}
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
-            >
-              <option value="movie">Film</option>
-              <option value="tv">Serier</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-400">Sortera</label>
-            <select
+              aria-label="Sortera"
               value={sort}
               onChange={(e) => { setSort(e.target.value); setPage(1); }}
-              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
+              className="shrink-0 rounded-full border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
             >
-              <option value="popularity.desc">Popularitet</option>
-              <option value="vote_average.desc">Betyg</option>
+              <option value="popularity.desc">Populärast</option>
+              <option value="vote_average.desc">Högst betyg</option>
               <option value={type === "movie" ? "primary_release_date.desc" : "first_air_date.desc"}>
                 Nyast
               </option>
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {genreList.map(([id, name]) => (
-              <Chip key={id} selected={genres.includes(id)} onClick={() => toggleGenre(id)}>
+              <Chip
+                key={id}
+                selected={genres.includes(id)}
+                onClick={() => toggleGenre(id)}
+                className="shrink-0 whitespace-nowrap"
+              >
                 {name}
               </Chip>
             ))}
@@ -116,7 +120,7 @@ export default function DiscoverPage() {
         </div>
 
         {err && <div className="mb-3"><Note tone="error">{err}</Note></div>}
-        {busy && <div className="mb-3 text-neutral-400">Laddar…</div>}
+        {busy && <div className="mb-3 text-sm text-neutral-400">Laddar…</div>}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {items.map((it) => (

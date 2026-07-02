@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useCallback, useMemo, useState } from 'react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
+import { bestWatchUrl, providerWatchUrl } from '@/lib/watchLinks';
 
 type WatchItem = {
   id: number;
@@ -100,26 +101,38 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
     return out;
   }, [providers]);
 
+  // "Kolla nu" ska öppna streamingtjänsten direkt (universal link → appen på mobil),
+  // inte TMDB:s watch-sida. TMDB-länken är bara sista fallback.
+  const watchUrl = useMemo(() => {
+    if (!active) return undefined;
+    const names = [
+      ...(providers?.flatrate ?? []),
+      ...(providers?.rent ?? []),
+      ...(providers?.buy ?? []),
+    ].map((p) => p.provider_name);
+    return bestWatchUrl(names, active.title, providers?.link);
+  }, [providers, active]);
+
   return (
     <>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex items-center gap-2">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Sök titel…"
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40 sm:max-w-sm"
+          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
         />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">Visa:</span>
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
           {[1, 2, 3, 4].map((n) => (
             <button
               key={n}
               onClick={() => setCols(n as 1 | 2 | 3 | 4)}
-              className={`rounded-md px-2 py-1 text-xs transition ${
-                cols === n ? 'bg-cyan-500 text-black' : 'bg-white/5 text-neutral-200 hover:bg-white/10'
+              aria-label={`${n} per rad`}
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                cols === n ? 'bg-cyan-500 text-black' : 'text-neutral-400 hover:text-white'
               }`}
             >
-              {n}/rad
+              {n}
             </button>
           ))}
         </div>
@@ -132,22 +145,22 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
           {filtered.map((it) => (
             <div
               key={`${it.tmdbType}-${it.id}`}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/60 transition hover:ring-2 hover:ring-cyan-500/60"
+              className="group relative overflow-hidden rounded-xl border border-white/10 bg-neutral-900/60 transition hover:ring-2 hover:ring-cyan-500/60"
             >
               <button
                 aria-label="Ta bort från watchlist"
                 onClick={() => remove(it)}
-                className="absolute right-2 top-2 z-10 rounded-full bg-neutral-900/70 p-2 text-neutral-200 opacity-0 ring-1 ring-neutral-700 transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
+                className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-rose-600 hover:text-white"
               >
                 {/* trash icon */}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 6h18M9 6v-.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V6m-8 0v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   <path d="M10 10v6M14 10v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
               </button>
 
-              <button onClick={() => open(it)} className="block w-full">
-                <div className="relative h-72 w-full">
+              <button onClick={() => open(it)} className="block w-full text-left">
+                <div className="relative aspect-[2/3] w-full">
                   <Image
                     src={it.posterUrl}
                     alt={it.title}
@@ -157,17 +170,15 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                     priority={false}
                   />
                 </div>
-                <div className="flex items-center justify-between px-3 py-2 text-left">
-                  <div className="truncate">
+                {cols <= 2 && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-2.5 pt-8">
                     <p className="truncate text-sm font-semibold text-white">{it.title}</p>
-                    <p className="text-xs text-neutral-400">
-                      {it.year ?? ''}{it.year && typeof it.rating === 'number' ? ' • ' : ''}{typeof it.rating === 'number' ? it.rating.toFixed(1) : ''}
+                    <p className="flex items-center justify-between text-xs text-neutral-300">
+                      <span>{it.year ?? '—'}</span>
+                      {typeof it.rating === 'number' && <span>★ {it.rating.toFixed(1)}</span>}
                     </p>
                   </div>
-                  <span className="ml-2 rounded-md bg-neutral-700 px-2 py-0.5 text-xs text-neutral-200">
-                    Visa
-                  </span>
-                </div>
+                )}
               </button>
             </div>
           ))}
@@ -199,35 +210,52 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                 )}
                 {providerGroups.map(({ label, list }) => (
                   <div key={label}>
-                    <p className="mb-2 text-xs uppercase tracking-wide text-neutral-400">{label}</p>
+                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{label}</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {list.map((p) => (
-                        <span
-                          key={p.provider_name}
-                          className="inline-flex items-center gap-2 rounded-full bg-neutral-800 px-3 py-1 text-sm text-neutral-200"
-                          title={p.provider_name}
-                        >
-                          {p.logo_path && (
-                            <span className="relative inline-block h-5 w-5 overflow-hidden rounded">
-                              <Image
-                                src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
-                                alt={p.provider_name}
-                                fill
-                                sizes="20px"
-                                className="object-contain"
-                              />
-                            </span>
-                          )}
-                          {p.provider_name}
-                        </span>
-                      ))}
+                      {list.map((p) => {
+                        const href = providerWatchUrl(p.provider_name, active.title);
+                        const inner = (
+                          <>
+                            {p.logo_path && (
+                              <span className="relative inline-block h-5 w-5 overflow-hidden rounded">
+                                <Image
+                                  src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
+                                  alt={p.provider_name}
+                                  fill
+                                  sizes="20px"
+                                  className="object-contain"
+                                />
+                              </span>
+                            )}
+                            {p.provider_name}
+                          </>
+                        );
+                        const cls =
+                          'inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-neutral-200';
+                        return href ? (
+                          <a
+                            key={p.provider_name}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
+                            title={`Öppna ${p.provider_name}`}
+                          >
+                            {inner}
+                          </a>
+                        ) : (
+                          <span key={p.provider_name} className={cls} title={p.provider_name}>
+                            {inner}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
               </div>
 
               <div className="mt-5">
-                <WatchNowButton url={providers?.link} />
+                <WatchNowButton url={watchUrl} />
               </div>
             </div>
           </div>

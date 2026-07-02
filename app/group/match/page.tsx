@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { PageHeader, Card, Note } from "../../components/ui/kit";
 
 export default function GroupMatchPage() {
   return (
@@ -44,20 +45,22 @@ function GroupMatchInner() {
 
   if (!code) {
     return (
-      <div className="p-6">
-        Ingen kod. Gå till <a className="underline" href="/group">/group</a>.
+      <div className="p-6 text-sm text-neutral-400">
+        Ingen kod. Gå till <a className="text-cyan-400 underline underline-offset-2" href="/group">gruppsidan</a>.
       </div>
     );
   }
-  if (err) return <div className="p-6 text-red-500">{err}</div>;
-  if (!data) return <div className="p-6">Laddar…</div>;
+  if (err) return <div className="p-6"><Note tone="error">{err}</Note></div>;
+  if (!data) return <div className="p-6 text-neutral-400">Laddar…</div>;
   if (!data.match) {
     return (
-      <div className="p-6">
-        Inga träffar ännu. Fortsätt svepa!
-        <div className="mt-2 text-sm opacity-70">
-          Gruppstorlek: {data.size}. Kräver minst {data.need} likes.
-        </div>
+      <div className="mx-auto w-full max-w-2xl px-4 py-6">
+        <PageHeader eyebrow="Grupp" title="Ingen träff ännu" subtitle="Fortsätt svepa!" />
+        <Card>
+          <p className="text-sm text-neutral-400">
+            Gruppstorlek: {data.size}. Kräver minst {data.need} likes på samma titel.
+          </p>
+        </Card>
       </div>
     );
   }
@@ -65,30 +68,31 @@ function GroupMatchInner() {
   const m = data.match;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-3 p-6">
-      <h1 className="text-2xl font-bold">Gruppens träff</h1>
-      <div className="text-sm opacity-70">
-        Gruppstorlek: {data.size}. Kräver minst {data.need} likes. Nuvarande: {data.count}.
-      </div>
-      <div className="flex items-center justify-between rounded border p-3">
-        <div>
-          <div className="font-medium">
+    <div className="mx-auto w-full max-w-2xl px-4 py-6">
+      <PageHeader
+        eyebrow="Grupp"
+        title="Gruppens träff"
+        subtitle={`Gruppstorlek: ${data.size} · Kräver ${data.need} likes · Nuvarande: ${data.count}`}
+      />
+      <Card className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium text-white">
             {m.title || `TMDb #${m.tmdbId}`}{" "}
-            <span className="text-xs opacity-60">({m.tmdbType})</span>
+            <span className="text-xs text-neutral-500">({m.tmdbType === "movie" ? "film" : "serie"})</span>
           </div>
           {typeof m.rating === "number" && (
-            <div className="text-sm opacity-70">Betyg: {m.rating.toFixed(1)}</div>
+            <div className="text-sm text-neutral-400">★ {m.rating.toFixed(1)}</div>
           )}
         </div>
         <a
-          className="text-sm underline"
+          className="shrink-0 text-sm text-cyan-400 underline underline-offset-2"
           href={`https://www.themoviedb.org/${m.tmdbType}/${m.tmdbId}`}
           target="_blank"
           rel="noreferrer"
         >
           Öppna på TMDb
         </a>
-      </div>
+      </Card>
     </div>
   );
 }

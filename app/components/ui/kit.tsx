@@ -95,11 +95,13 @@ export function Chip({
   tone = "default",
   children,
   onClick,
+  className,
 }: {
   selected?: boolean;
   tone?: ChipTone;
   children: React.ReactNode;
   onClick?: () => void;
+  className?: string;
 }) {
   const on =
     tone === "like"
@@ -113,7 +115,8 @@ export function Chip({
       onClick={onClick}
       className={cx(
         "rounded-full border px-3 py-1.5 text-sm transition",
-        selected ? on : "border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10"
+        selected ? on : "border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+        className
       )}
     >
       {children}

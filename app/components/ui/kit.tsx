@@ -15,8 +15,9 @@ export function cx(...xs: Array<string | false | null | undefined>): string {
 export const fieldClass =
   "w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40";
 
-/** Datumfält — WebKit date inputs behöver min-w-0 i smala kolumner. */
-export const dateFieldClass = `${fieldClass} [color-scheme:dark]`;
+/** Datumfält — WebKit date inputs behöver explicit begränsning på iOS. */
+export const dateFieldClass =
+  "nw-date block w-full min-w-0 max-w-full appearance-none box-border rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40 [color-scheme:dark]";
 
 /** Sidhuvud: liten cyan versal-etikett + titel + undertitel, med valfri höger-slot. */
 export function PageHeader({

@@ -49,16 +49,14 @@ function RoundBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition disabled:opacity-60 ${cls}`}
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition disabled:opacity-60 ${cls}`}
     >
       {children}
     </button>
   );
 }
 
-/** Ovanför BottomTabs — samma vertikala mått som AppShell MAIN_BOTTOM_PADDING (tab-rad + safe area). */
-const DOCK_BOTTOM = "bottom-[calc(env(safe-area-inset-bottom)+4.25rem)]";
-
+/** Inline under kortleken — AppShell ger redan utrymme ovanför BottomTabs. */
 export default function ActionDock({
   onNope,
   onInfo,
@@ -67,9 +65,7 @@ export default function ActionDock({
   disabled,
 }: Props) {
   return (
-    <div
-      className={`fixed left-1/2 z-40 mx-auto flex w-full max-w-md -translate-x-1/2 items-center justify-center gap-5 px-4 ${DOCK_BOTTOM}`}
-    >
+    <div className="flex shrink-0 items-center justify-center gap-4 px-4 pb-1 pt-2">
       <RoundBtn
         title="Nej"
         intent="danger"
@@ -79,11 +75,11 @@ export default function ActionDock({
           onNope();
         }}
       >
-        <X className="h-7 w-7" />
+        <X className="h-6 w-6" />
       </RoundBtn>
 
       <RoundBtn title="Info" intent="info" disabled={disabled} onClick={onInfo}>
-        <Info className="h-7 w-7" />
+        <Info className="h-6 w-6" />
       </RoundBtn>
 
       <RoundBtn
@@ -95,7 +91,7 @@ export default function ActionDock({
           onWatchlist();
         }}
       >
-        <Bookmark className="h-7 w-7" />
+        <Bookmark className="h-6 w-6" />
       </RoundBtn>
 
       <RoundBtn
@@ -107,7 +103,7 @@ export default function ActionDock({
           onLike();
         }}
       >
-        <Heart className="h-7 w-7" />
+        <Heart className="h-6 w-6" />
       </RoundBtn>
     </div>
   );

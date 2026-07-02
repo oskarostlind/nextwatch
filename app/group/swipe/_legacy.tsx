@@ -276,7 +276,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
         {cards[0] ? (
           <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">
             {stackIndices.map((idx) => {

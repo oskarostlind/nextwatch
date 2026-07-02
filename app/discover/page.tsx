@@ -75,7 +75,7 @@ export default function DiscoverPage() {
   }
 
   return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-6">
+      <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
         <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
 
         <div className="mb-4 space-y-3">

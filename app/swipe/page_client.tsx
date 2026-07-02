@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { motion, useAnimation, useMotionValue, useTransform } from "framer-motion";
+import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
+import ActionDock from "@/app/components/ui/ActionDock";
+import { Button } from "@/app/components/ui/kit";
 
 /* ---------- types ---------- */
 
@@ -102,6 +104,21 @@ function markSeen(id: string) {
   writeSeen(s);
 }
 
+function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
+  void fetch("/api/rate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({
+      tmdbId: c.tmdbId,
+      mediaType: c.mediaType,
+      decision,
+    }),
+  }).catch(() => {
+    /* best-effort */
+  });
+}
+
 /* ---------- Details helpers (fallback sv → en) ---------- */
 
 type DetailsDTO = {
@@ -194,6 +211,8 @@ export default function SwipePageClient() {
   const [cards, setCards] = useState<Card[]>([]);
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const [feedLoading, setFeedLoading] = useState<boolean>(true);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
   const [mode, setMode] = useState<"group" | "individual">("individual");
@@ -214,12 +233,22 @@ export default function SwipePageClient() {
     async (targetPage: number, replace: boolean) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
+      if (replace) {
+        setFeedLoading(true);
+        setFeedError(null);
+      }
       try {
         const res = await fetch(`/api/recs/unified?page=${targetPage}`, {
           cache: "no-store",
         });
+        if (!res.ok) {
+          if (replace) setFeedError("Kunde inte hämta förslag. Försök igen.");
+          setHasMore(false);
+          return;
+        }
         const data = (await res.json()) as UnifiedResp;
         if (!("ok" in data) || !data.ok) {
+          if (replace) setFeedError(data.message ?? "Kunde inte hämta förslag.");
           setHasMore(false);
           return;
         }
@@ -227,10 +256,6 @@ export default function SwipePageClient() {
         setMode(data.mode);
         setGroup(data.group);
 
-        // Den här komponenten är solo-vyn. Om API:t säger att en grupp är aktiv
-        // har servern renderat en inaktuell vy (t.ex. via Next.js router-cache
-        // efter att gruppen skapades). Tvinga en server-omrendering så att
-        // gruppswipe-vyn visas i stället.
         if (data.mode === "group" && !groupRefreshAttempted) {
           groupRefreshAttempted = true;
           router.refresh();
@@ -264,9 +289,13 @@ export default function SwipePageClient() {
         if (replace) setCards(mapped);
         else setCards((prev) => [...prev, ...mapped]);
 
-        setHasMore(mapped.length > 0);
+        setHasMore(data.items.length > 0);
+      } catch {
+        if (replace) setFeedError("Nätverksfel. Kontrollera anslutningen.");
+        setHasMore(false);
       } finally {
         loadingRef.current = false;
+        if (replace) setFeedLoading(false);
       }
     },
     [router]
@@ -374,12 +403,14 @@ export default function SwipePageClient() {
   function handleDislike(c: Card): void {
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
+    saveRating(c, "dislike");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
   }
 
   function handleLike(c: Card): void {
     markSeen(c.id);
+    saveRating(c, "like");
     popTop();
     void fetch("/api/watchlist/like", {
       method: "POST",
@@ -401,8 +432,26 @@ export default function SwipePageClient() {
   function handleSeen(c: Card): void {
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
+    saveRating(c, "seen");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
+  }
+
+  function handleWatchlistOnly(c: Card): void {
+    void fetch("/api/watchlist/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: c.tmdbId,
+        mediaType: c.mediaType,
+        title: c.title,
+        year: c.year,
+        poster: c.poster,
+      }),
+    }).catch(() => {
+      /* best-effort */
+    });
   }
 
   /* ---------- render ---------- */
@@ -438,7 +487,7 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       {mode === "group" && group?.code && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
-          Swiping as: <span className="font-mono tracking-wider">{group.code}</span>
+          Grupp: <span className="font-mono tracking-wider">{group.code}</span>
         </div>
       )}
 
@@ -446,9 +495,20 @@ export default function SwipePageClient() {
           OBS: kort-wrappern är absolut positionerad (inte h-full) eftersom procenthöjder
           kollapsar till 0 när förfäderna bara har min-h + flex-1 (indefinit höjd). */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-      {cards[0] ? (
+      {feedLoading ? (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-sm text-neutral-400">Laddar förslag…</p>
+        </div>
+      ) : feedError ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-sm text-rose-300">{feedError}</p>
+          <Button variant="secondary" onClick={() => void loadPage(1, true)}>
+            Försök igen
+          </Button>
+        </div>
+      ) : cards[0] ? (
           <div
-            className="absolute inset-x-2 inset-y-2 isolate mx-auto max-w-[360px] overflow-hidden"
+            className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden"
           >
           {stackIndices.map((idx) => {
             const card = cards[idx];
@@ -458,7 +518,7 @@ export default function SwipePageClient() {
               return (
                 <motion.div
                   key={card.id}
-                  className="absolute inset-0 z-10 flex items-center justify-center p-0.5"
+                  className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                   style={{ x, y, rotate }}
                   animate={controls}
                   drag
@@ -495,31 +555,11 @@ export default function SwipePageClient() {
                     onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
                   />
 
-                  {/* Swipe-feedback (Tinder-stil): visas gradvis medan man drar */}
-                  <motion.div
-                    style={{ opacity: likeOpacity }}
-                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                  >
-                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/25 text-5xl text-emerald-300 ring-4 ring-emerald-400 backdrop-blur-sm">
-                      ❤
-                    </div>
-                  </motion.div>
-                  <motion.div
-                    style={{ opacity: nopeOpacity }}
-                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                  >
-                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-rose-500/25 text-5xl text-rose-300 ring-4 ring-rose-400 backdrop-blur-sm">
-                      ✖
-                    </div>
-                  </motion.div>
-                  <motion.div
-                    style={{ opacity: seenOpacity }}
-                    className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-                  >
-                    <div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-sky-500/25 text-4xl text-sky-300 ring-4 ring-sky-400 backdrop-blur-sm">
-                      ✓
-                    </div>
-                  </motion.div>
+                  <SwipeStampOverlays
+                    likeOpacity={likeOpacity}
+                    nopeOpacity={nopeOpacity}
+                    seenOpacity={seenOpacity}
+                  />
                 </motion.div>
               );
             }
@@ -549,13 +589,55 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      {/* Diskret hint istället för knapprad: swipe vänster = nej, höger = gilla, upp = redan sett. Tryck = info. */}
-      <div className="pointer-events-none flex shrink-0 items-center justify-center gap-4 px-2 pb-1 pt-1.5 text-[11px] text-neutral-500">
-        <span className="text-rose-400/80">← Nej</span>
-        <span className="text-sky-400/80">↑ Sett</span>
-        <span className="text-emerald-400/80">Gilla →</span>
-      </div>
+      <ActionDock
+        disabled={!cards[0] || feedLoading}
+        onNope={() => void swipeOut("left")}
+        onInfo={() => {
+          const c = cards[0];
+          if (c) setFlippedId((p) => (p === c.id ? null : c.id));
+        }}
+        onWatchlist={() => {
+          const c = cards[0];
+          if (c) handleWatchlistOnly(c);
+        }}
+        onLike={() => void swipeOut("right")}
+      />
     </div>
+  );
+}
+
+/* ---------- Tinder-stil swipe-stämplar ---------- */
+
+export function SwipeStampOverlays({
+  likeOpacity,
+  nopeOpacity,
+  seenOpacity,
+}: {
+  likeOpacity: MotionValue<number>;
+  nopeOpacity: MotionValue<number>;
+  seenOpacity: MotionValue<number>;
+}) {
+  return (
+    <>
+      <motion.div
+        style={{ opacity: likeOpacity }}
+        className="pointer-events-none absolute left-5 top-8 z-20 -rotate-12 rounded-lg border-4 border-emerald-400 px-3 py-1 text-2xl font-black uppercase tracking-widest text-emerald-400"
+      >
+        Gilla
+      </motion.div>
+      <motion.div
+        style={{ opacity: nopeOpacity }}
+        className="pointer-events-none absolute right-5 top-8 z-20 rotate-12 rounded-lg border-4 border-rose-400 px-3 py-1 text-2xl font-black uppercase tracking-widest text-rose-400"
+      >
+        Nope
+      </motion.div>
+      <motion.div
+        style={{ opacity: seenOpacity }}
+        className="pointer-events-none absolute left-1/2 top-8 z-20 -translate-x-1/2 rounded-lg border-4 border-sky-400 px-3 py-1 text-xl font-black uppercase tracking-widest text-sky-400"
+      >
+        Sett
+      </motion.div>
+    </>
   );
 }
 
@@ -602,7 +684,7 @@ function Front({ card }: { card: Card }) {
             alt={card.title}
             fill
             sizes="(max-width: 768px) 100vw, 600px"
-            className="object-contain object-center"
+            className="object-cover object-center"
             priority={false}
             draggable={false}
           />

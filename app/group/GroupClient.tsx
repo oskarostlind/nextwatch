@@ -19,7 +19,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
   return (
     <div className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4">
-      <PageHeader title="Tillsammans" subtitle="Swipa i grupp eller lägg till vänner." />
+      <PageHeader eyebrow="Socialt" title="Tillsammans" subtitle="Swipa i grupp eller lägg till vänner." />
 
       <IncomingInvites />
 

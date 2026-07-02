@@ -85,7 +85,7 @@ export default function MatchOverlay({ open, item, onClose, code }: Props) {
           <span role="img" aria-label="confetti" className="mr-1">
             🎉
           </span>
-          Group Match!
+          Gruppmatch!
         </div>
 
         <div
@@ -109,8 +109,8 @@ export default function MatchOverlay({ open, item, onClose, code }: Props) {
                 priority
               />
             ) : (
-              <div className="flex h-full items-center justify-center rounded-2xl bg-neutral-800 text-neutral-300">
-                No image
+                <div className="flex h-full items-center justify-center rounded-2xl bg-neutral-800 text-neutral-300">
+                Ingen bild
               </div>
             )}
             <div className="absolute inset-x-0 bottom-0 rounded-b-2xl bg-gradient-to-t from-black/80 to-transparent p-4">
@@ -134,14 +134,14 @@ export default function MatchOverlay({ open, item, onClose, code }: Props) {
                 {item.overview ? (
                   <p className="whitespace-pre-line">{item.overview}</p>
                 ) : (
-                  <p>No description available.</p>
+                  <p>Ingen beskrivning tillgänglig.</p>
                 )}
               </div>
 
               {providers.length > 0 && (
                 <div className="mt-3">
                   <div className="mb-1 text-xs uppercase tracking-wide text-neutral-400">
-                    Available on
+                    Tillgänglig på
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {providers.map((p) => (
@@ -169,14 +169,14 @@ export default function MatchOverlay({ open, item, onClose, code }: Props) {
             onClick={onFlip}
             className="rounded-xl border border-neutral-600 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-400 hover:text-white"
           >
-            {flipped ? "Front" : "More info"}
+            {flipped ? "Framsida" : "Mer info"}
           </button>
           <button
             type="button"
             onClick={ackAndClose}
             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
           >
-            Continue swiping
+            Fortsätt swipa
           </button>
         </div>
       </div>

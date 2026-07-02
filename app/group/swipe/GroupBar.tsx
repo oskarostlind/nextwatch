@@ -47,12 +47,12 @@ export default function GroupBar({ code }: { code: string }) {
     try {
       const n = navigator as ShareCapableNavigator;
       if (typeof n.share === "function") {
-        await n.share({ title: "NextWatch group", text: `Join my group: ${code}`, url });
+        await n.share({ title: "NextWatch-grupp", text: `Gå med i min grupp: ${code}`, url });
         return;
       }
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        alert("Link copied!");
+        alert("Länk kopierad!");
         return;
       }
     } catch {
@@ -64,22 +64,22 @@ export default function GroupBar({ code }: { code: string }) {
     ta.select();
     document.execCommand("copy");
     document.body.removeChild(ta);
-    alert("Link copied!");
+    alert("Länk kopierad!");
   };
 
   return (
-    <div className="sticky top-0 z-20 border-b border-neutral-800 bg-neutral-900/80 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-        <div className="text-base font-semibold">Group: {code}</div>
+    <div className="sticky top-0 z-20 border-b border-white/10 bg-neutral-950/80 backdrop-blur">
+      <div className="mx-auto flex w-full items-center justify-between px-4 py-2.5">
+        <div className="text-sm font-semibold">Grupp: <span className="font-mono tracking-wider text-cyan-300">{code}</span></div>
         <div className="flex items-center gap-2">
           {members.map((m) => (
-            <div key={m.userId} className="hidden items-center gap-2 rounded-full bg-neutral-800 px-2 py-1 text-xs text-neutral-200 sm:flex">
+            <div key={m.userId} className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-neutral-200 sm:flex">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-neutral-900">{m.initials}</span>
               <span>{m.displayName}</span>
             </div>
           ))}
-          <button onClick={invite} className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800">
-            Invite
+          <button onClick={invite} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-neutral-200 transition hover:bg-white/10">
+            Bjud in
           </button>
         </div>
       </div>

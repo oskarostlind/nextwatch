@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         select: { username: true, profile: { select: { displayName: true } } },
       });
       const name = accepter?.profile?.displayName ?? accepter?.username ?? "Någon";
-      void sendPushToUser(invite.fromUserId, {
+      await sendPushToUser(invite.fromUserId, {
         title: "Inbjudan accepterad",
         body: `${name} gick med i din grupp ${group.code} – dags att swipa!`,
         data: { type: "group_invite_accepted", groupCode: group.code },

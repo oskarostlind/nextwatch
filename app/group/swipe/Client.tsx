@@ -4,7 +4,6 @@
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import GroupBar from "./GroupBar";
-import OverlayMount from "../../components/client/OverlayMount";
 
 const LegacyGroupSwipe = dynamic(() => import("./_legacy"), { ssr: false });
 
@@ -20,7 +19,6 @@ export default function Client({ initialCode = null }: Props) {
     <>
       <GroupBar code={code} />
       <LegacyGroupSwipe code={code} />
-      <OverlayMount />
     </>
   );
 }

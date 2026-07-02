@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { notifyGroupMatchIfNeeded } from "@/lib/push";
 
 type Body = {
   tmdbId: number;
@@ -44,6 +45,10 @@ export async function POST(req: NextRequest) {
     ON CONFLICT (group_code, user_id, tmdb_id, tmdb_type)
     DO UPDATE SET vote = EXCLUDED.vote, decided_at = NOW()
   `;
+
+  if (body.vote === "LIKE") {
+    await notifyGroupMatchIfNeeded(code, body.tmdbId, body.tmdbType);
+  }
 
   return NextResponse.json({ ok: true } as Ok);
 }

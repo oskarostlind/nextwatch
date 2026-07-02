@@ -71,7 +71,7 @@ export default function ActionDock({
       className={`fixed left-1/2 z-40 mx-auto flex w-full max-w-md -translate-x-1/2 items-center justify-center gap-5 px-4 ${DOCK_BOTTOM}`}
     >
       <RoundBtn
-        title="Nope"
+        title="Nej"
         intent="danger"
         disabled={disabled}
         onClick={() => {
@@ -87,7 +87,7 @@ export default function ActionDock({
       </RoundBtn>
 
       <RoundBtn
-        title="Watchlist"
+        title="Spara"
         intent="save"
         disabled={disabled}
         onClick={() => {
@@ -99,7 +99,7 @@ export default function ActionDock({
       </RoundBtn>
 
       <RoundBtn
-        title="Like"
+        title="Gilla"
         intent="like"
         disabled={disabled}
         onClick={() => {

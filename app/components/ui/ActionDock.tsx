@@ -39,7 +39,7 @@ function RoundBtn({
       : intent === "info"
       ? "border-blue-500/40 bg-blue-600/20 hover:bg-blue-600/30"
       : intent === "save"
-      ? "border-violet-500/40 bg-violet-600/20 hover:bg-violet-600/30"
+      ? "border-cyan-500/40 bg-cyan-600/20 hover:bg-cyan-600/30"
       : "border-green-500/40 bg-green-600/20 hover:bg-green-600/30";
 
   return (

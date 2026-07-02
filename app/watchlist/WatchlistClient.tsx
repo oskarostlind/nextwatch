@@ -107,7 +107,7 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Sök titel…"
-          className="w-full rounded-xl bg-neutral-800 px-3 py-2 text-sm text-white outline-none ring-1 ring-neutral-700 focus:ring-violet-500 sm:max-w-sm"
+          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40 sm:max-w-sm"
         />
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-400">Visa:</span>
@@ -115,8 +115,8 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
             <button
               key={n}
               onClick={() => setCols(n as 1 | 2 | 3 | 4)}
-              className={`rounded-md px-2 py-1 text-xs ${
-                cols === n ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-200'
+              className={`rounded-md px-2 py-1 text-xs transition ${
+                cols === n ? 'bg-cyan-500 text-black' : 'bg-white/5 text-neutral-200 hover:bg-white/10'
               }`}
             >
               {n}/rad
@@ -132,7 +132,7 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
           {filtered.map((it) => (
             <div
               key={`${it.tmdbType}-${it.id}`}
-              className="group relative overflow-hidden rounded-2xl bg-neutral-800 transition hover:ring-2 hover:ring-violet-500"
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/60 transition hover:ring-2 hover:ring-cyan-500/60"
             >
               <button
                 aria-label="Ta bort från watchlist"

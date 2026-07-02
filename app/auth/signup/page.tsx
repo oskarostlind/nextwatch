@@ -48,7 +48,7 @@ export default function SignupVerifyPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="namn@exempel.se"
-            className="w-full rounded-lg bg-neutral-900 border border-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-neutral-500"
+            className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-neutral-100 outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
           />
         </label>
 
@@ -66,7 +66,7 @@ export default function SignupVerifyPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-neutral-100 text-neutral-900 font-medium py-2.5 disabled:opacity-60"
+            className="w-full rounded-xl bg-cyan-500 text-black font-medium py-2.5 hover:bg-cyan-400 disabled:opacity-60"
           >
             {loading ? "Skickar…" : "Skicka verifieringslänk"}
           </button>

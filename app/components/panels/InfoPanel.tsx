@@ -71,7 +71,7 @@ export default function InfoPanel({
         </button>
         <button
           onClick={onwatchlist}
-          className="rounded-xl border border-violet-500/40 bg-violet-600/20 py-2 text-sm hover:bg-violet-600/30"
+          className="rounded-xl border border-cyan-500/40 bg-cyan-600/20 py-2 text-sm hover:bg-cyan-600/30"
         >
           watchlist
         </button>

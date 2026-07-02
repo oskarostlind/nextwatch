@@ -3,9 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
+import { Button, Card, Chip, PageHeader, SegmentedTabs, fieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 
 export type FavoriteItem = {
@@ -31,8 +31,7 @@ export type ProfileDTO = {
   favoriteShow?: FavoriteItem | null;
 };
 
-const FIELD_CLASS =
-  "w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-white/30 focus:bg-white/10";
+const FIELD_CLASS = fieldClass;
 
 const DATE_INPUT_CLASS = `${FIELD_CLASS} [color-scheme:dark]`;
 
@@ -450,34 +449,13 @@ export default function ProfileClient({ initial }: Props) {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Profil</h1>
-        <LogoutButton />
+      <PageHeader eyebrow="Ditt konto" title="Profil" right={<LogoutButton />} />
+
+      <div className="mb-6">
+        <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="profile-tabs" />
       </div>
 
-      <div className="mb-6 flex w-full items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className="relative flex-1 px-3 py-2 text-sm font-medium transition-colors"
-          >
-            {tab === t.id && (
-              <motion.div
-                layoutId="profile-tabs"
-                className="absolute inset-0 rounded-full bg-white"
-                transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              />
-            )}
-            <span className={`relative z-10 ${tab === t.id ? "text-black" : "text-white/60 hover:text-white"}`}>
-              {t.label}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-neutral-900/50 p-5">
+      <Card>
         {tab === "bas" && (
           <div className="grid gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -532,8 +510,8 @@ export default function ProfileClient({ initial }: Props) {
                     type="button"
                     onClick={() => setUiLanguage(code)}
                     className={cx(
-                      "rounded-xl border px-4 py-2 text-sm",
-                      uiLanguage === code ? "border-violet-500 bg-violet-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
+                      "rounded-xl border px-4 py-2 text-sm transition",
+                      uiLanguage === code ? "border-cyan-400 bg-cyan-400/10 text-cyan-300" : "border-white/10 bg-white/5 hover:bg-white/10"
                     )}
                   >
                     {code === "sv" ? "Svenska" : "English"}
@@ -554,17 +532,9 @@ export default function ProfileClient({ initial }: Props) {
               <label className="mb-2 block text-sm text-white/70">Gillar</label>
               <div className="flex flex-wrap gap-2">
                 {ALL_GENRES_SV.map((g) => (
-                  <button
-                    type="button"
-                    key={`like-${g}`}
-                    onClick={() => toggle("favoriteGenres", g)}
-                    className={cx(
-                      "rounded-full border px-3 py-1.5 text-sm",
-                      favoriteGenres.includes(g) ? "border-emerald-500 bg-emerald-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                    )}
-                  >
+                  <Chip key={`like-${g}`} tone="like" selected={favoriteGenres.includes(g)} onClick={() => toggle("favoriteGenres", g)}>
                     {g}
-                  </button>
+                  </Chip>
                 ))}
               </div>
             </div>
@@ -572,17 +542,9 @@ export default function ProfileClient({ initial }: Props) {
               <label className="mb-2 block text-sm text-white/70">Undvik</label>
               <div className="flex flex-wrap gap-2">
                 {ALL_GENRES_SV.map((g) => (
-                  <button
-                    type="button"
-                    key={`dislike-${g}`}
-                    onClick={() => toggle("dislikedGenres", g)}
-                    className={cx(
-                      "rounded-full border px-3 py-1.5 text-sm",
-                      dislikedGenres.includes(g) ? "border-rose-500 bg-rose-600/20" : "border-white/10 bg-black/30 hover:bg-white/5"
-                    )}
-                  >
+                  <Chip key={`dislike-${g}`} tone="dislike" selected={dislikedGenres.includes(g)} onClick={() => toggle("dislikedGenres", g)}>
                     {g}
-                  </button>
+                  </Chip>
                 ))}
               </div>
             </div>
@@ -604,16 +566,12 @@ export default function ProfileClient({ initial }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       <div className="mt-5 flex items-center gap-3">
-        <button
-          onClick={submit}
-          disabled={busy || !canSubmit}
-          className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <Button onClick={submit} disabled={busy || !canSubmit}>
           {busy ? "Sparar…" : "Spara"}
-        </button>
+        </Button>
         {msg && <p className="text-sm text-neutral-300">{msg}</p>}
       </div>
     </main>

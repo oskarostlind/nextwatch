@@ -90,6 +90,11 @@ function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const startX = useRef<number | null>(null);
   const startT = useRef<number>(0);
+  const activePointer = useRef<number | null>(null);
+  const lastX = useRef<number>(0);
+  const lastT = useRef<number>(0);
+  const prevX = useRef<number>(0);
+  const prevT = useRef<number>(0);
 
   const resetCard = useCallback(() => {
     if (cardRef.current) {
@@ -161,31 +166,57 @@ function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
   }, [decide, toggleWatch]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Fånga på containern (currentTarget), inte e.target (kan vara <img> som
+    // försvinner vid re-render) — annars tappas move/up-events på iOS.
+    activePointer.current = e.pointerId;
     startX.current = e.clientX;
     startT.current = e.timeStamp;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    lastX.current = prevX.current = e.clientX;
+    lastT.current = prevT.current = e.timeStamp;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     if (cardRef.current) cardRef.current.style.transition = "transform 0s";
   }, []);
   const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (startX.current == null || !cardRef.current) return;
+    if (startX.current == null || e.pointerId !== activePointer.current || !cardRef.current) return;
+    prevX.current = lastX.current;
+    prevT.current = lastT.current;
+    lastX.current = e.clientX;
+    lastT.current = e.timeStamp;
     const dx = e.clientX - startX.current;
     cardRef.current.style.transform = `translateX(${dx}px) rotate(${dx / 20}deg)`;
   }, []);
   const onPointerEnd = useCallback((e: React.PointerEvent) => {
+    if (e.pointerId !== activePointer.current) return;
     const sx = startX.current;
     startX.current = null;
-    (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+    activePointer.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
     if (sx == null) return;
 
     const dx = e.clientX - sx;
     const dt = e.timeStamp - startT.current;
     const isTap = Math.abs(dx) < 10 && dt < 300;
 
+    // Velocity från de två senaste pointermove:en → snabba flicks räknas
+    // även om avståndet är kort.
+    const vdt = lastT.current - prevT.current;
+    const vx = vdt > 0 ? (lastX.current - prevX.current) / vdt : 0;
+    const flick = Math.abs(vx) > 0.6 && Math.abs(dx) > 30 && Math.sign(vx) === Math.sign(dx);
+
     if (isTap) { setFlip(f => !f); resetCard(); return; }
-    if (dx > 120) { decide("like"); return; }
-    if (dx < -120) { decide("dislike"); return; }
+    if (dx > 90 || (flick && dx > 0)) { decide("like"); return; }
+    if (dx < -90 || (flick && dx < 0)) { decide("dislike"); return; }
     resetCard();
   }, [decide, resetCard]);
+  // pointercancel = webview:n avbröt gesten (scroll, systemgest). Det får
+  // ALDRIG tolkas som tap/swipe — bara återställ kortet.
+  const onPointerCancel = useCallback((e: React.PointerEvent) => {
+    if (e.pointerId !== activePointer.current) return;
+    startX.current = null;
+    activePointer.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    resetCard();
+  }, [resetCard]);
 
   const current = feed[idx];
   const details = current && isRec(current) ? detailsMap[`${current.mediaType}:${current.tmdbId}`] : undefined;
@@ -216,11 +247,13 @@ function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
         <div className="flex flex-1 flex-col min-h-0">
           <div
             className="flex-1 flex flex-col min-h-0 [perspective:1000px] select-none cursor-grab active:cursor-grabbing"
-            style={{ touchAction: "pan-y" }}
+            // touch-action: none — med pan-y kapade iOS horisontella drag som
+            // lutade lite vertikalt (pointercancel mitt i swipen).
+            style={{ touchAction: "none" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
-            onPointerCancel={onPointerEnd}
+            onPointerCancel={onPointerCancel}
           >
             <div
               ref={cardRef}
@@ -240,6 +273,7 @@ function GroupSwipeInner({ code }: GroupSwipeInnerProps) {
                       placeholder={details.blurDataURL ? "blur" : undefined}
                       blurDataURL={details.blurDataURL || undefined}
                       priority={idx === 0}
+                      draggable={false}
                     />
                   ) : (
                     <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.06)_25%,rgba(255,255,255,0.12)_37%,rgba(255,255,255,0.06)_63%)] bg-[length:400%_100%] animate-[shimmer_1.2s_infinite] rounded-xl" />

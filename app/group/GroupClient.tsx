@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import GroupTab from "./components/GroupTab";
 import FriendsTab from "./components/FriendsTab";
 import IncomingInvites from "./components/IncomingInvites";
+import { PageHeader, SegmentedTabs } from "@/app/components/ui/kit";
 
 export type PublicMember = {
   userId: string;
@@ -30,33 +30,12 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-8 pt-4">
-      <header className="mb-5">
-        <h1 className="text-2xl font-semibold">Tillsammans</h1>
-        <p className="mt-1 text-sm text-white/50">Swipa i grupp eller lägg till vänner.</p>
-      </header>
+      <PageHeader title="Tillsammans" subtitle="Swipa i grupp eller lägg till vänner." />
 
       <IncomingInvites />
 
-      <div className="mb-5 flex w-full items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className="relative flex-1 px-4 py-2 text-sm font-semibold transition-colors"
-          >
-            {tab === t.id && (
-              <motion.div
-                layoutId="group-tabs"
-                className="absolute inset-0 rounded-full bg-white"
-                transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              />
-            )}
-            <span className={`relative z-10 ${tab === t.id ? "text-black" : "text-white/60 hover:text-white"}`}>
-              {t.label}
-            </span>
-          </button>
-        ))}
+      <div className="mb-5 mt-1">
+        <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="group-tabs" />
       </div>
 
       {tab === "group" ? (

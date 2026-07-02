@@ -189,7 +189,7 @@ export default function FriendsTab() {
                     <button
                       type="button"
                       onClick={() => void sendFriendRequest(user.id)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-xs font-bold text-black transition active:scale-[0.98] hover:bg-white/90"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500 px-4 py-2 text-xs font-bold text-black transition active:scale-[0.98] hover:bg-cyan-400"
                     >
                       <Plus className="h-3.5 w-3.5" /> Lägg till
                     </button>

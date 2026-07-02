@@ -13,6 +13,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lås zoom: utan maximumScale zoomar iOS-WebView:n in vid input-fokus
+  // (text < 16px) och zoomen ligger kvar — appen upplevs "in-zoomad" i TestFlight.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 

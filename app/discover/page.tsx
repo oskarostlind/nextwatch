@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { PageHeader, Chip, Button, Note } from "../components/ui/kit";
 
 type Item = {
   id: number;
@@ -75,15 +76,15 @@ export default function DiscoverPage() {
 
   return (
       <main className="mx-auto max-w-6xl p-6">
-        <h1 className="mb-3 text-2xl font-semibold">Discover</h1>
+        <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
 
         <div className="mb-4 grid gap-3 md:grid-cols-[auto_auto_1fr]">
           <div className="flex items-center gap-2">
-            <label className="text-sm opacity-80">Typ</label>
+            <label className="text-sm text-neutral-400">Typ</label>
             <select
               value={type}
               onChange={(e) => { setType(e.target.value as "movie" | "tv"); setPage(1); setGenres([]); }}
-              className="rounded-md border border-white/15 bg-black/40 px-2 py-1"
+              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
             >
               <option value="movie">Film</option>
               <option value="tv">Serier</option>
@@ -91,11 +92,11 @@ export default function DiscoverPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm opacity-80">Sortera</label>
+            <label className="text-sm text-neutral-400">Sortera</label>
             <select
               value={sort}
               onChange={(e) => { setSort(e.target.value); setPage(1); }}
-              className="rounded-md border border-white/15 bg-black/40 px-2 py-1"
+              className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
             >
               <option value="popularity.desc">Popularitet</option>
               <option value="vote_average.desc">Betyg</option>
@@ -107,31 +108,22 @@ export default function DiscoverPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {genreList.map(([id, name]) => (
-              <button
-                key={id}
-                onClick={() => toggleGenre(id)}
-                className={
-                  "rounded-full border px-2 py-1 text-xs " +
-                  (genres.includes(id)
-                    ? "border-white/40 bg-white/15"
-                    : "border-white/15 bg-white/5 hover:bg-white/10")
-                }
-              >
+              <Chip key={id} selected={genres.includes(id)} onClick={() => toggleGenre(id)}>
                 {name}
-              </button>
+              </Chip>
             ))}
           </div>
         </div>
 
-        {err && <div className="mb-3 text-red-400">{err}</div>}
-        {busy && <div className="mb-3 opacity-80">Laddar…</div>}
+        {err && <div className="mb-3"><Note tone="error">{err}</Note></div>}
+        {busy && <div className="mb-3 text-neutral-400">Laddar…</div>}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {items.map((it) => (
             <a
               key={`${it.mediaType}:${it.id}`}
               href={`/swipe?media=${it.mediaType}`}
-              className="group relative overflow-hidden rounded-xl border"
+              className="group relative overflow-hidden rounded-xl border border-white/10 transition hover:ring-2 hover:ring-cyan-500/60"
               title={it.title}
             >
               {it.posterPath ? (
@@ -157,20 +149,13 @@ export default function DiscoverPage() {
         </div>
 
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="rounded-md border border-white/20 px-3 py-1 disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
             ← Föregående
-          </button>
-          <span className="text-sm opacity-80">Sida {page}</span>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded-md border border-white/20 px-3 py-1"
-          >
+          </Button>
+          <span className="text-sm text-neutral-400">Sida {page}</span>
+          <Button variant="secondary" onClick={() => setPage((p) => p + 1)}>
             Nästa →
-          </button>
+          </Button>
         </div>
       </main>
 

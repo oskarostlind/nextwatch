@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { cookies, headers } from 'next/headers';
 import WatchlistClient from './WatchlistClient';
+import { PageHeader } from '../components/ui/kit';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -136,7 +137,7 @@ export default async function Page() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
-      <h1 className="mb-4 text-2xl font-bold">Watchlist</h1>
+      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du gillat och vill se." />
       <WatchlistClient items={items} />
     </main>
   );

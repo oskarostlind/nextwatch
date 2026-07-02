@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import BottomTabs from "../navigation/BottomTabs";
 import InviteToasts from "../InviteToasts";
 import PushRegistration from "../client/PushRegistration";
+import { SwipeDeckProvider } from "@/app/recs/SwipeDeckProvider";
 
 const PUBLIC_ROUTES = [
   /^\/$/,
@@ -36,17 +37,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
       <PushRegistration />
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
-        <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
-          {children}
-        </main>
+      <SwipeDeckProvider>
+        <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
+          <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
+            {children}
+          </main>
 
-        <div className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 backdrop-blur supports-[backdrop-filter]:bg-neutral-950/60">
-          <BottomTabs />
+          <div className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 backdrop-blur supports-[backdrop-filter]:bg-neutral-950/60">
+            <BottomTabs />
+          </div>
+
+          <InviteToasts />
         </div>
-
-        <InviteToasts />
-      </div>
+      </SwipeDeckProvider>
     </div>
   );
 }

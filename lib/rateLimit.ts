@@ -52,7 +52,10 @@ export function rateLimitAllow(
 
 /** Limits suitable for heavy endpoints (e.g. recs, group/match) */
 export const RECS_LIMIT = 30;   // per minute
-export const MATCH_LIMIT = 30;  // per minute
+// Match är en billig läsning som pollas var 8:e sek + en gång per röst. Under snabb
+// gruppswipe (1 röst = 1 poll) sprängde 30/min gränsen → 429 → matchen visades inte.
+// Höjt till 120 för att ge pollningen marginal (TMDB-anropet sker bara vid faktisk match).
+export const MATCH_LIMIT = 120; // per minute
 export const TMDB_DETAILS_LIMIT = 60;
 export const AUTH_LIMIT = 10;   // login/register per minute
 

@@ -48,6 +48,8 @@ export function useGroupMatchPolling() {
 
   const timerRef = useRef<number | null>(null);
   const busyRef = useRef(false);
+  const retryRef = useRef<number | null>(null);
+  const voteDebounceRef = useRef<number | null>(null);
 
   // Hämta ev. befintlig grupp direkt
   useEffect(() => {
@@ -58,6 +60,14 @@ export function useGroupMatchPolling() {
     if (timerRef.current !== null) {
       window.clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (retryRef.current !== null) {
+      window.clearTimeout(retryRef.current);
+      retryRef.current = null;
+    }
+    if (voteDebounceRef.current !== null) {
+      window.clearTimeout(voteDebounceRef.current);
+      voteDebounceRef.current = null;
     }
   }, []);
 
@@ -74,6 +84,17 @@ export function useGroupMatchPolling() {
     try {
       const url = `/api/group/match?code=${encodeURIComponent(current)}`;
       const res = await fetch(url, { cache: "no-store" });
+      if (res.status === 429) {
+        // Rate-limitad (t.ex. mitt i snabb swipe). Ge inte upp tyst – schemalägg
+        // EN kort retry så att en match inte missas bara för att pollen råkade 429:a.
+        if (retryRef.current === null) {
+          retryRef.current = window.setTimeout(() => {
+            retryRef.current = null;
+            void fetchOnce();
+          }, 2_000);
+        }
+        return;
+      }
       if (!res.ok) {
         return;
       }
@@ -124,8 +145,15 @@ export function useGroupMatchPolling() {
   }, []);
 
   const notifyVoted = useCallback(() => {
-    // trigga en extra koll direkt när någon röstat (lokalt)
-    void fetchOnce();
+    // Trigga en extra koll när någon röstat, men debounca så att snabb swipe
+    // (1 röst per kort) inte spammar /api/group/match och spränger rate-limiten.
+    if (voteDebounceRef.current !== null) {
+      window.clearTimeout(voteDebounceRef.current);
+    }
+    voteDebounceRef.current = window.setTimeout(() => {
+      voteDebounceRef.current = null;
+      void fetchOnce();
+    }, 800);
   }, [fetchOnce]);
 
   return useMemo(

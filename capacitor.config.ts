@@ -17,6 +17,18 @@ const config: CapacitorConfig = {
       // Visa notiser även när appen är i förgrunden.
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    SplashScreen: {
+      // launchAutoHide: false håller kvar native launch-skärmen (svart + logga)
+      // tills JS explicit döljer den (se app/components/client/SplashScreenHide.tsx).
+      // Utan detta döljer iOS launch-skärmen så fort WKWebView:ns view-controller
+      // laddats – long innan den fjärrladdade sidan (server.url) hunnit rendera
+      // något, vilket visar sig som en vit blixt (WKWebView:ns default-bakgrund).
+      launchAutoHide: false,
+      backgroundColor: '#000000',
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: true,
+    },
   },
 };
 

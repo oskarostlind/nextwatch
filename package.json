@@ -16,6 +16,7 @@
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
     "@capacitor/push-notifications": "^8.1.1",
+    "@capacitor/splash-screen": "^8.0.1",
     "@prisma/client": "^6.16.2",
     "@vercel/speed-insights": "^1.2.0",
     "bcryptjs": "^3.0.2",

@@ -143,6 +143,24 @@ function recencyBonus(year?: string): number {
   return 0.1;
 }
 
+/* ---------- Åldersgräns (grupp) ---------- */
+function ageFromDob(d: Date): number {
+  const n = new Date();
+  let a = n.getFullYear() - d.getFullYear();
+  const m = n.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && n.getDate() < d.getDate())) a--;
+  return a;
+}
+
+// SE-certifieringstak utifrån ålder. I grupp använder vi yngsta medlemmen
+// så att inget kort bryter mot åldersgränsen för någon i sällskapet.
+function seMaxCert(age: number): string {
+  if (age >= 15) return "15";
+  if (age >= 11) return "11";
+  if (age >= 7) return "7";
+  return "0";
+}
+
 function dedupe(items: { id: number; tmdbType: MediaType; item: TMDBListItem }[]) {
   const seen = new Set<string>();
   const out: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
@@ -258,7 +276,9 @@ export async function GET(req: Request) {
     const uid = c.get("nw_uid")?.value;
     const region = c.get("nw_region")?.value || "SE";
     const locale = c.get("nw_locale")?.value || "sv-SE";
-    const groupCode = c.get("nw_group")?.value || null;
+    const reqUrl = new URL(req.url);
+    // Gruppkod kan komma explicit via query (t.ex. gruppdäcket) eller från cookie.
+    const groupCode = reqUrl.searchParams.get("group") || c.get("nw_group")?.value || null;
 
     if (!uid) return fail("Ingen användare inloggad.", 401);
 
@@ -279,21 +299,45 @@ export async function GET(req: Request) {
 
     if (!profile) return fail("Ingen profil hittades.");
 
+    // Gruppläge kräver minst en laddad medlem (utöver kod).
+    const isGroup = !!groupCode && groupMembers.length > 0;
+    // Alla medlemsprofiler (för providers, genrer, ålder och seeds).
+    const memberProfiles = isGroup
+      ? groupMembers
+          .map((m) => m.user.profile)
+          .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      : [];
+
+    // Grupp: hämta ALLA medlemmars watchlists så smakmodellen får seeds från hela sällskapet.
+    const groupWatchlist = isGroup
+      ? await prisma.watchlist.findMany({
+          where: { userId: { in: groupMembers.map((m) => m.userId) } },
+          select: { tmdbId: true, mediaType: true },
+        })
+      : [];
+
     // 2. Extrahera och slå ihop providers (för solo eller grupp)
     const providerStrings = new Set<string>();
-    if (groupCode && groupMembers.length > 0) {
+    if (isGroup) {
       // Om grupp: Samla ALLA tjänster som någon i gruppen har (OR-logik via TMDB)
-      for (const member of groupMembers) {
-        const pProviders = member.user.profile?.providers as string[] | undefined;
-        if (Array.isArray(pProviders)) pProviders.forEach(p => providerStrings.add(p));
+      for (const p of memberProfiles) {
+        const pProviders = p.providers as string[] | undefined;
+        if (Array.isArray(pProviders)) pProviders.forEach((s) => providerStrings.add(s));
       }
     } else {
       const pProviders = profile.providers as string[] | undefined;
-      if (Array.isArray(pProviders)) pProviders.forEach(p => providerStrings.add(p));
+      if (Array.isArray(pProviders)) pProviders.forEach((s) => providerStrings.add(s));
     }
-    
+
     const usedProviderIds = getProviderIds(Array.from(providerStrings));
     const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join('|') : undefined;
+
+    // Åldersgräns i grupp: utgå från yngsta medlemmen (SE-certifiering).
+    let certMax: string | undefined;
+    if (isGroup && memberProfiles.length > 0) {
+      const ages = memberProfiles.map((p) => ageFromDob(new Date(p.dob)));
+      certMax = seMaxCert(Math.min(...ages));
+    }
 
     // Bygg WatchKeys (för att filtrera bort sedda)
     const watchKeys = new Set<string>();
@@ -307,29 +351,45 @@ export async function GET(req: Request) {
     ]);
     const movieIdToName = new Map(movieGenres.genres.map((g) => [g.id, g.name] as const));
     const tvIdToName = new Map(tvGenres.genres.map((g) => [g.id, g.name] as const));
-    const likedGenres = new Set(profile.favoriteGenres ?? []);
-    const dislikedGenres = new Set(profile.dislikedGenres ?? []);
+    // Genrer: i grupp unionerar vi allas gillade genrer. Ogillade genrer räknas bara
+    // om INGEN i gruppen gillar dem (annars skulle en persons favorit straffas bort).
+    let likedGenres: Set<string>;
+    let dislikedGenres: Set<string>;
+    if (isGroup) {
+      likedGenres = new Set<string>();
+      dislikedGenres = new Set<string>();
+      for (const p of memberProfiles) {
+        for (const g of p.favoriteGenres ?? []) likedGenres.add(g);
+        for (const g of p.dislikedGenres ?? []) dislikedGenres.add(g);
+      }
+      for (const g of likedGenres) dislikedGenres.delete(g);
+    } else {
+      likedGenres = new Set(profile.favoriteGenres ?? []);
+      dislikedGenres = new Set(profile.dislikedGenres ?? []);
+    }
 
     const page = new URL(req.url).searchParams.get("page");
     const pageNum = Math.max(1, Number(page || "1"));
 
     // 3. TMDB Discover med inbyggd provider-filtrering! (Detta löser N+1)
     const [popMovie, popTv] = await Promise.all([
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", { 
-        language: locale, 
-        region, 
+      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
+        language: locale,
+        region,
+        watch_region: region,
+        with_watch_providers: tmdbProviderString,
+        certification_country: certMax ? "SE" : undefined,
+        "certification.lte": certMax,
+        sort_by: "popularity.desc",
+        page: pageNum
+      }, "force-cache"),
+      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
+        language: locale,
+        region,
         watch_region: region,
         with_watch_providers: tmdbProviderString,
         sort_by: "popularity.desc",
         page: pageNum
-      }, "force-cache"),
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", { 
-        language: locale, 
-        region, 
-        watch_region: region,
-        with_watch_providers: tmdbProviderString,
-        sort_by: "popularity.desc",
-        page: pageNum 
       }, "force-cache"),
     ]);
 
@@ -341,17 +401,31 @@ export async function GET(req: Request) {
       if (!watchKeys.has(`tv_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
     }
 
-    // Seeds (favoriter + watchlist – för taste)
-    const favMovie = profile.favoriteMovie as FavoriteItem | null;
-    const favShow = profile.favoriteShow as FavoriteItem | null;
+    // Seeds (favoriter + watchlist – för taste). I grupp tar vi favoriter från ALLA
+    // medlemmar först (starkast signal), sedan hela gruppens watchlists.
     const seedsSet: { id: number; type: MediaType }[] = [];
-    
-    if (favMovie?.id) seedsSet.push({ id: favMovie.id, type: "movie" });
-    if (favShow?.id) seedsSet.push({ id: favShow.id, type: "tv" });
-    for (const w of watchlist) {
-      seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+    if (isGroup) {
+      for (const p of memberProfiles) {
+        const fm = p.favoriteMovie as FavoriteItem | null;
+        const fs = p.favoriteShow as FavoriteItem | null;
+        if (fm?.id) seedsSet.push({ id: fm.id, type: "movie" });
+        if (fs?.id) seedsSet.push({ id: fs.id, type: "tv" });
+      }
+      for (const w of groupWatchlist) {
+        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+      }
+    } else {
+      const favMovie = profile.favoriteMovie as FavoriteItem | null;
+      const favShow = profile.favoriteShow as FavoriteItem | null;
+      if (favMovie?.id) seedsSet.push({ id: favMovie.id, type: "movie" });
+      if (favShow?.id) seedsSet.push({ id: favShow.id, type: "tv" });
+      for (const w of watchlist) {
+        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+      }
     }
 
+    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
+    const seedCap = isGroup ? 12 : 6;
     const seenSeed = new Set<string>();
     const seeds: { id: number; type: MediaType }[] = [];
     for (const s of seedsSet) {
@@ -359,7 +433,7 @@ export async function GET(req: Request) {
       if (seenSeed.has(k)) continue;
       seenSeed.add(k);
       seeds.push(s);
-      if (seeds.length >= 6) break;
+      if (seeds.length >= seedCap) break;
     }
 
     // Dedupe + index
@@ -474,8 +548,8 @@ export async function GET(req: Request) {
 
     const payload: UnifiedOk = {
       ok: true,
-      mode: groupCode ? "group" : "individual",
-      group: groupCode ? { code: groupCode, strictProviders: false } : null,
+      mode: isGroup ? "group" : "individual",
+      group: isGroup ? { code: groupCode as string, strictProviders: false } : null,
       language: locale,
       region,
       usedProviderIds,

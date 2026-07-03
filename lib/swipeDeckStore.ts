@@ -1,5 +1,4 @@
 import {
-  mapGroupFeed,
   mapUnifiedItems,
   readGroupCodeFromCookie,
   type SwipeCard,
@@ -204,24 +203,26 @@ export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) 
   setGroupDeck(key, { loading: !(existing?.cards.length), error: null });
 
   try {
-    const res = await fetch(`/api/recs/group?code=${encodeURIComponent(key)}`, {
+    // Gruppdäcket kör samma recommender som solo, men i gruppläge (?group=CODE):
+    // providers unioneras och smakmodellen aggregeras över alla medlemmar.
+    const res = await fetch(`/api/recs/unified?group=${encodeURIComponent(key)}&page=1`, {
       cache: "no-store",
     });
     const data = (await res.json()) as
-      | { ok: true; feed: Parameters<typeof mapGroupFeed>[0] }
-      | { ok: false; error?: string };
+      | { ok: true; items: Parameters<typeof mapUnifiedItems>[0] }
+      | { ok: false; message?: string };
 
-    if (!data.ok) {
+    if (!("ok" in data) || !data.ok) {
       setGroupDeck(key, {
         loading: false,
-        error: data.error ?? "Kunde inte hämta gruppförslag.",
+        error: ("message" in data && data.message) || "Kunde inte hämta gruppförslag.",
         ready: true,
       });
       return;
     }
 
     setGroupDeck(key, {
-      cards: mapGroupFeed(data.feed),
+      cards: mapUnifiedItems(data.items),
       loading: false,
       error: null,
       ready: true,

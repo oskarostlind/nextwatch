@@ -93,27 +93,3 @@ export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
       .filter((v): v is SwipeCard => Boolean(v))
   );
 }
-
-type GroupRecItem = {
-  type: "rec";
-  tmdbId: number;
-  mediaType: SwipeMediaType;
-  title: string;
-};
-
-export function mapGroupFeed(
-  feed: Array<GroupRecItem | { type: string }>
-): SwipeCard[] {
-  return feed
-    .filter((x): x is GroupRecItem => x.type === "rec")
-    .map((it) => ({
-      id: `${it.mediaType}_${it.tmdbId}`,
-      tmdbId: it.tmdbId,
-      mediaType: it.mediaType,
-      title: it.title,
-      year: null,
-      poster: null,
-      overview: null,
-      rating: null,
-    }));
-}

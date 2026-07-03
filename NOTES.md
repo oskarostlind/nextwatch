@@ -52,7 +52,7 @@ Trots `NEXTAUTH_SECRET` finns ingen NextAuth. Session = httpOnly-cookie.
 4. **V2 smakmodell:** keywords + top cast + regissör/skapare för favoriter/watchlist-"seeds", viktat, scorar kandidater på overlap.
 5. **MMR-diversifiering** (Jaccard, λ=0.3) för slutlig ranking.
 - Klient-hook: `app/recs/useUnifiedRecs.ts`.
-- **Efter dead-code-städning (2026-07) finns bara två recs-routes kvar:** `recs/unified` (kanonisk) och `recs/group` (används av aktiva `group/swipe/_legacy.tsx`). Borttagna: `recs/route.ts`, `recs/smart`, `recs/personal`, `recs/for-you`, `recs/group-smart`, `_known-filter.ts` + test-sidorna `recs-test`/`group/recs-test`. Konsolidera mot `unified` istället för nya varianter.
+- **`recs/unified` är nu den enda recs-routen.** Kärnlogiken (`computeUnifiedRecs`) bor i `lib/unifiedRecs.ts`, delad med det dagliga push-cronjobbet `cron/daily-recs`. Gruppswipe (`group/swipe/_legacy.tsx`, via `swipeDeckStore.ts`s `ensureGroupDeck`) anropar samma route med `?group=CODE` istället för en egen group-recommender. `recs/group` (klientsidig provider-intersektion, ingen smakmodell) togs bort som fullt ersatt. Tidigare borttaget (2026-07 dead-code-städning): `recs/route.ts`, `recs/smart`, `recs/personal`, `recs/for-you`, `recs/group-smart`, `_known-filter.ts` + test-sidorna `recs-test`/`group/recs-test`. Konsolidera mot `unified`/`computeUnifiedRecs` istället för nya varianter.
 
 ## 6. Swipe & gruppmatch
 - **Solo:** `app/api/swipe/decide/route.ts` skriver `Rating`, upsertar `watchlist` på "like". Även `app/api/rate` och `app/api/ratings/save`.

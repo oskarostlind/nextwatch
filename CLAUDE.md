@@ -42,14 +42,14 @@ Most API routes read `const uid = (await cookies()).get("nw_uid")?.value` and re
 `User` (id, email, plan, username, appleSub) is the hub. Related: `Profile` (taste profile — `favoriteGenres`/`dislikedGenres`, `favoriteMovie`/`favoriteShow` as JSON, `providers` as JSON array of service names, region/locale/year preferences), `Rating`, `watchlist` (lowercase model name), `Purchase` (Stripe lifetime), `Verification`, `PushToken`. Social/group graph: `Group` → `GroupMember` / `GroupVote` / `GroupInvite` (5-min TTL via `expiresAt`) / `GroupMatchSeen`, plus `FriendRequest` / `Friendship`. Column names are snake_cased via `@map`.
 
 ### Recommendation engine
-The current, canonical recommender is **`app/api/recs/unified/route.ts`**. Pipeline:
-1. Load profile + ratings + watchlist (and group members if `nw_group` cookie present) via Prisma.
-2. Union the streaming providers (solo, or OR-combined across the whole group), map service names → TMDB provider IDs (`PROVIDER_MAP` inside the file), and let TMDB `/discover` do provider filtering server-side (avoids N+1).
+The canonical recommender pipeline lives in **`lib/unifiedRecs.ts`** (`computeUnifiedRecs`), shared by `app/api/recs/unified/route.ts` (cookie/rate-limit wrapper) and the daily push cron `app/api/cron/daily-recs/route.ts`. Pipeline:
+1. Load profile + ratings + watchlist via Prisma. In group mode (`?group=CODE` query param or `nw_group` cookie), also load every member's profile + watchlist.
+2. Union the streaming providers (solo, or OR-combined across the whole group), map service names → TMDB provider IDs (`PROVIDER_MAP`), and let TMDB `/discover` do provider filtering server-side (avoids N+1). Group genre preferences are aggregated too (liked = union, disliked = union minus anything anyone likes), and the SE age-certification cap uses the youngest member.
 3. **V1 score**: genre match (liked/disliked) + quality (vote avg × log vote count) + recency bonus.
-4. **V2 taste model**: fetch keywords + top cast + director/creator for the user's favorite + watchlist "seeds", weight them, and score candidates by keyword/people overlap.
+4. **V2 taste model**: fetch keywords + top cast + director/creator for "seeds" (favorite + watchlist items — in group mode, from *all* members, capped at 12), weight them, and score candidates by keyword/people overlap.
 5. **MMR diversification** (Jaccard similarity, λ=0.3) for the final ranked list.
 
-Only two recs routes remain after the 2026-07 dead-code cleanup: **`recs/unified`** (canonical, used by client hook `app/recs/useUnifiedRecs.ts`) and **`recs/group`** (used by the active group swipe `app/group/swipe/_legacy.tsx`). The older overlapping variants (`recs/route.ts`, `recs/smart`, `recs/personal`, `recs/for-you`, `recs/group-smart`, plus the `_known-filter.ts` helper and the `recs-test`/`group/recs-test` dev pages) were removed as unreferenced. Before extending recommendations, prefer consolidating onto `unified` rather than adding a new variant.
+`recs/unified` is the only recs route — group swipe (`app/group/swipe/_legacy.tsx`, via `lib/swipeDeckStore.ts`'s `ensureGroupDeck`) calls it with `?group=CODE` instead of using a separate group recommender. The old `recs/group` route (client-side provider intersection, no taste model) was removed as fully superseded. Other older overlapping variants (`recs/route.ts`, `recs/smart`, `recs/personal`, `recs/for-you`, `recs/group-smart`, plus the `_known-filter.ts` helper and the `recs-test`/`group/recs-test` dev pages) were removed earlier (2026-07 dead-code cleanup) as unreferenced. Before extending recommendations, prefer extending `computeUnifiedRecs` rather than adding a new variant.
 
 ### Swipe & group match
 - Solo swipe: `app/api/swipe/decide/route.ts` writes a `Rating` and, on "like", upserts into `watchlist`. Also `app/api/rate` and `app/api/ratings/save`.

@@ -3,7 +3,8 @@
 // Grupp-swipe med exakt samma kortlek-UI som solo-swipen (app/swipe/page_client.tsx):
 // framer-motion-drag, like/nope/sett-overlays, tap = info-flip, hint-rad istället
 // för fysiska knappar. Skillnaden mot solo är bara dataflödet: feed från
-// /api/recs/group och röster till /api/group/vote (+ /api/rate, watchlist på like).
+// /api/recs/unified?group=CODE (via lib/swipeDeckStore.ts ensureGroupDeck) och
+// röster till /api/group/vote (+ /api/rate, watchlist på like).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useAnimation, useMotionValue, useTransform } from "framer-motion";

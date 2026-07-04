@@ -1,13 +1,22 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import React from "react";
+import Script from "next/script";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import { cookies } from "next/headers";
+import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
+
+const ADSENSE_CLIENT_FALLBACK = "ca-pub-2616665688666431";
 
 export const metadata: Metadata = {
   title: "NextWatch",
   description: "Swipe your next watch",
+  other: {
+    // AdSense site-verification (works independent of the ads feature flag,
+    // so Google can verify/review the site before ads are switched on).
+    "google-adsense-account": ADSENSE_CLIENT_FALLBACK,
+  },
 };
 
 export const viewport: Viewport = {
@@ -28,9 +37,20 @@ export default async function RootLayout({
   // App Router-regeln: anropa cookies() på serversidan
   await cookies();
 
+  const adsClient = adsenseClientId() ?? ADSENSE_CLIENT_FALLBACK;
+
   return (
     <html lang="sv" className="min-h-[100dvh] overscroll-none bg-neutral-950">
       <body className="min-h-[100dvh] overscroll-none bg-neutral-950 text-neutral-100 antialiased">
+        {adsFeatureEnabled() && (
+          <Script
+            async
+            strategy="afterInteractive"
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adsClient}`}
+            crossOrigin="anonymous"
+          />
+        )}
+
         <AppShell>{children}</AppShell>
 
         {/* Global overlay – körs endast på klienten via OverlayMount */}

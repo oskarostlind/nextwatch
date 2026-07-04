@@ -11,7 +11,11 @@ export default function PremiumPage() {
     setErr("");
     setLoading(true);
     try {
-      const r = await fetch("/api/stripe/checkout", { method: "POST" });
+      const r = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: "monthly" }),
+      });
       const js: { ok: boolean; url?: string; error?: string; message?: string } =
         await r.json();
       if (js.ok && js.url) {
@@ -31,20 +35,20 @@ export default function PremiumPage() {
     <div className="mx-auto max-w-lg px-4 py-8">
       <PageHeader
         eyebrow="Uppgradera"
-        title="Premium (lifetime)"
-        subtitle="Ett engångsköp – inga prenumerationer."
+        title="Premium"
+        subtitle="19 kr/mån – avsluta när du vill."
       />
       <Card className="space-y-4">
         <p className="text-sm text-neutral-300">
-          Lås upp större grupper och ta bort annonser. Betala en gång, gäller för alltid.
+          Ta bort annonser och lås upp större grupper. 19 kr/mån, inga bindningstider.
         </p>
         <ul className="space-y-2 text-sm text-neutral-200">
+          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Helt annonsfritt</li>
           <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Större grupper</li>
-          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Inga annonser</li>
           <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Stötta utvecklingen</li>
         </ul>
         <Button onClick={buy} disabled={loading} className="w-full">
-          {loading ? "Startar Stripe…" : "Köp lifetime"}
+          {loading ? "Startar Stripe…" : "Bli Premium – 19 kr/mån"}
         </Button>
         {err && <Note tone="error">{err}</Note>}
       </Card>

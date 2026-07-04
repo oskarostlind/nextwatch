@@ -2,6 +2,8 @@ export type SwipeMediaType = "movie" | "tv";
 
 export type SwipeCard = {
   id: string;
+  /** "title" (default) = riktig film/serie, "ad" = annonskort (gratisanvändare). */
+  kind?: "title" | "ad";
   tmdbId: number;
   mediaType: SwipeMediaType;
   title: string;

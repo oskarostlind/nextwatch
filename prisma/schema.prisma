@@ -14,6 +14,14 @@ model User {
   planSince DateTime? @map("plan_since")
   createdAt DateTime  @default(now()) @map("created_at")
 
+  // Prenumeration / entitlement.
+  // plan: "free" | "premium" | "lifetime" (lifetime = grandfathad engångsköpare).
+  // subProvider anger var det aktiva köpet kom ifrån: "stripe" (webb) eller "apple" (iOS/RevenueCat).
+  stripeCustomerId    String?   @unique @map("stripe_customer_id")
+  subProvider         String?   @map("sub_provider")
+  subStatus           String?   @map("sub_status")
+  subCurrentPeriodEnd DateTime? @map("sub_current_period_end")
+
   // Verifiering & login
   emailVerified DateTime? @map("email_verified")
   passwordHash  String?   @map("password_hash")
@@ -82,6 +90,13 @@ model Profile {
   favoriteShow   Json?    @map("favorite_show")
   favoriteGenres String[] @default([]) @map("favorite_genres")
   dislikedGenres String[] @default([]) @map("disliked_genres")
+
+  // Notisinställningar (per användare). Default: allt på.
+  notifyDailyRecs      Boolean @default(true) @map("notify_daily_recs")
+  notifyGroupMatches   Boolean @default(true) @map("notify_group_matches")
+  notifyFriendRequests Boolean @default(true) @map("notify_friend_requests")
+  notifyGroupInvites   Boolean @default(true) @map("notify_group_invites")
+  notifyMarketing      Boolean @default(false) @map("notify_marketing")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

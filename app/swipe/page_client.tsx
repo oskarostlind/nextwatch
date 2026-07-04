@@ -8,6 +8,7 @@ import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard } from "@/lib/swipeDeck";
+import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 
 /* ---------- types ---------- */
 
@@ -200,9 +201,10 @@ export default function SwipePageClient() {
     const nxt = cards[1];
     const third = cards[2];
     const toFetch: { id: string; mediaType: MediaType; tmdbId: number }[] = [];
-    if (cur && !fetched.current.has(cur.id)) toFetch.push({ id: cur.id, mediaType: cur.mediaType, tmdbId: cur.tmdbId });
-    if (nxt && !fetched.current.has(nxt.id)) toFetch.push({ id: nxt.id, mediaType: nxt.mediaType, tmdbId: nxt.tmdbId });
-    if (third && !fetched.current.has(third.id))
+    // Annonskort (kind === "ad") har ingen riktig tmdbId – hoppa över hämtning.
+    if (cur && cur.kind !== "ad" && !fetched.current.has(cur.id)) toFetch.push({ id: cur.id, mediaType: cur.mediaType, tmdbId: cur.tmdbId });
+    if (nxt && nxt.kind !== "ad" && !fetched.current.has(nxt.id)) toFetch.push({ id: nxt.id, mediaType: nxt.mediaType, tmdbId: nxt.tmdbId });
+    if (third && third.kind !== "ad" && !fetched.current.has(third.id))
       toFetch.push({ id: third.id, mediaType: third.mediaType, tmdbId: third.tmdbId });
     if (toFetch.length === 0) return;
 
@@ -288,6 +290,7 @@ export default function SwipePageClient() {
   /* ---------- actions (optimistic: popTop direkt; API i bakgrunden) ---------- */
 
   function handleDislike(c: Card): void {
+    if (c.kind === "ad") { popTop(); return; }
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "dislike");
@@ -296,6 +299,7 @@ export default function SwipePageClient() {
   }
 
   function handleLike(c: Card): void {
+    if (c.kind === "ad") { popTop(); return; }
     markSeen(c.id);
     saveRating(c, "like");
     popTop();
@@ -317,6 +321,7 @@ export default function SwipePageClient() {
   }
 
   function handleSeen(c: Card): void {
+    if (c.kind === "ad") { popTop(); return; }
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "seen");
@@ -325,6 +330,7 @@ export default function SwipePageClient() {
   }
 
   function handleWatchlistOnly(c: Card): void {
+    if (c.kind === "ad") return;
     void fetch("/api/watchlist/like", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -541,6 +547,14 @@ export function StaticCard({
   interactive?: boolean;
   onFlip: () => void;
 }) {
+  // Annonskort: ingen flip, ingen poster – renderar AdCard (AdSense/AdMob).
+  if (card.kind === "ad") {
+    return (
+      <div className="relative h-full max-h-full w-full min-h-0">
+        <AdCard adId={card.id} />
+      </div>
+    );
+  }
   return (
     <div
       className={`relative h-full max-h-full w-full min-h-0 [perspective:1000px] ${interactive ? "cursor-pointer" : "cursor-default"}`}
@@ -557,6 +571,50 @@ export function StaticCard({
           <Back card={card} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Annonskort (AdSense på webb, AdMob på iOS i Fas 2) ---------- */
+
+function AdCard({ adId }: { adId: string }) {
+  const client = adsenseClientId();
+  const slot = adsenseSlotId();
+
+  useEffect(() => {
+    if (!client || !slot) return;
+    try {
+      const w = window as unknown as { adsbygoogle?: unknown[] };
+      w.adsbygoogle = w.adsbygoogle || [];
+      w.adsbygoogle.push({});
+    } catch {
+      /* AdSense-scriptet kanske inte laddat än – no-op */
+    }
+  }, [client, slot, adId]);
+
+  return (
+    <div className="relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-neutral-950">
+      <div className="absolute left-3 top-3 z-10 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-white/60">
+        Annons
+      </div>
+      {client && slot ? (
+        <ins
+          className="adsbygoogle"
+          style={{ display: "block", width: "100%", height: "100%" }}
+          data-ad-client={client}
+          data-ad-slot={slot}
+          data-ad-format="fluid"
+          data-full-width-responsive="true"
+        />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="text-2xl">🎬</div>
+          <div className="text-sm text-white/70">Reklamplats</div>
+          <p className="max-w-[16rem] text-xs leading-relaxed text-white/40">
+            Swipa vidare som vanligt. Uppgradera till Premium för en helt annonsfri upplevelse.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

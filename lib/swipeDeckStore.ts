@@ -3,8 +3,19 @@ import {
   readGroupCodeFromCookie,
   type SwipeCard,
 } from "@/lib/swipeDeck";
+import { injectAdCards } from "@/lib/ads";
 
 export const PREFETCH_MIN_CARDS = 10;
+
+// Sätts av klienten (SwipeDeckPreloader) efter att premium-status hämtats.
+// Endast gratisanvändare med aktiverad annons-flagga får true.
+let adsEnabled = false;
+export function setSwipeAdsEnabled(enabled: boolean) {
+  adsEnabled = enabled;
+}
+function withAdsMaybe(titles: SwipeCard[], pageKey: string | number): SwipeCard[] {
+  return adsEnabled ? injectAdCards(titles, pageKey) : titles;
+}
 
 type GroupInfo = { code: string; strictProviders: boolean };
 
@@ -130,7 +141,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       return;
     }
 
-    const mapped = mapUnifiedItems(data.items);
+    const mapped = withAdsMaybe(mapUnifiedItems(data.items), targetPage);
     soloState = {
       ...soloState,
       cards: replace ? mapped : [...soloState.cards, ...mapped],

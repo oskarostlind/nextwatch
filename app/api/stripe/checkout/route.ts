@@ -1,11 +1,14 @@
 // app/api/stripe/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type CheckoutBody = {
+  /** "monthly" (19 kr/mån, default) eller "lifetime" (engångsköp). */
+  plan?: "monthly" | "lifetime";
   priceId?: string;
   successUrl?: string;
   cancelUrl?: string;
@@ -20,6 +23,28 @@ function resolveOrigin(req: NextRequest): string {
   return new URL(req.url).origin;
 }
 
+/** Hämtar (eller skapar) Stripe-customer för uid och sparar id:t på användaren. */
+async function ensureStripeCustomer(stripe: Stripe, uid: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { stripeCustomerId: true, email: true },
+  });
+  if (user?.stripeCustomerId) return user.stripeCustomerId;
+
+  const customer = await stripe.customers.create({
+    email: user?.email ?? undefined,
+    metadata: { uid },
+  });
+
+  await prisma.user
+    .update({ where: { id: uid }, data: { stripeCustomerId: customer.id } })
+    .catch(() => {
+      /* om användarraden saknas skapas den av webhooken senare */
+    });
+
+  return customer.id;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const key = process.env.STRIPE_SECRET_KEY;
@@ -32,13 +57,22 @@ export async function POST(req: NextRequest) {
 
     const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
 
-    // Body är valfri – allt kan härledas på servern.
     const body = (await req.json().catch(() => ({}))) as CheckoutBody;
+    const plan = body.plan ?? "monthly";
+    const isSubscription = plan !== "lifetime";
 
-    const priceId = body.priceId ?? process.env.STRIPE_PRICE_LIFETIME;
+    const priceId =
+      body.priceId ??
+      (isSubscription ? process.env.STRIPE_PRICE_PREMIUM_MONTHLY : process.env.STRIPE_PRICE_LIFETIME);
+
     if (!priceId) {
       return NextResponse.json(
-        { ok: false, message: "Missing price (set STRIPE_PRICE_LIFETIME)." },
+        {
+          ok: false,
+          message: isSubscription
+            ? "Missing price (set STRIPE_PRICE_PREMIUM_MONTHLY)."
+            : "Missing price (set STRIPE_PRICE_LIFETIME).",
+        },
         { status: 400 }
       );
     }
@@ -47,17 +81,23 @@ export async function POST(req: NextRequest) {
     const successUrl = body.successUrl ?? `${origin}/premium/success`;
     const cancelUrl = body.cancelUrl ?? `${origin}/premium`;
 
-    // Koppla köpet till nuvarande session-användare så webhooken kan sätta premium.
     const uid = req.cookies.get("nw_uid")?.value ?? undefined;
 
+    // För prenumerationer kopplar vi en riktig Stripe-customer så att
+    // förnyelser och Billing Portal fungerar.
+    const customerId = isSubscription && uid ? await ensureStripeCustomer(stripe, uid) : undefined;
+
     const session = await stripe.checkout.sessions.create({
-      // Lifetime = engångsköp → "payment" (inte "subscription").
-      mode: "payment",
+      mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
       cancel_url: cancelUrl,
       client_reference_id: uid,
-      metadata: uid ? { uid, product: "lifetime" } : { product: "lifetime" },
+      ...(customerId ? { customer: customerId } : {}),
+      metadata: uid ? { uid, product: plan } : { product: plan },
+      ...(isSubscription
+        ? { subscription_data: { metadata: uid ? { uid } : {} } }
+        : {}),
     });
 
     return NextResponse.json({ ok: true, url: session.url }, { status: 200 });

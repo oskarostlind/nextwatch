@@ -317,12 +317,13 @@ export default function ProfileClient({ initial }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [tab, setTab] = useState<"bas" | "smak" | "tjanster">("bas");
+  const [tab, setTab] = useState<"bas" | "smak" | "tjanster" | "installningar">("bas");
 
   const TABS = [
     { id: "bas" as const, label: "Profil" },
     { id: "smak" as const, label: "Smak" },
     { id: "tjanster" as const, label: "Tjänster" },
+    { id: "installningar" as const, label: "Inställningar" },
   ];
 
   // Bakåtkompatibel hydrering om initial saknar fält
@@ -563,14 +564,256 @@ export default function ProfileClient({ initial }: Props) {
             </div>
           </div>
         )}
+
+        {tab === "installningar" && <SettingsTab />}
       </Card>
 
-      <div className="mt-5 flex items-center gap-3">
-        <Button onClick={submit} disabled={busy || !canSubmit}>
-          {busy ? "Sparar…" : "Spara"}
-        </Button>
-        {msg && <p className="text-sm text-neutral-300">{msg}</p>}
-      </div>
+      {tab !== "installningar" && (
+        <div className="mt-5 flex items-center gap-3">
+          <Button onClick={submit} disabled={busy || !canSubmit}>
+            {busy ? "Sparar…" : "Spara"}
+          </Button>
+          {msg && <p className="text-sm text-neutral-300">{msg}</p>}
+        </div>
+      )}
     </main>
+  );
+}
+
+// —————————————————————— Inställningar ——————————————————————
+
+type NotifPrefs = {
+  dailyRecs: boolean;
+  groupMatches: boolean;
+  friendRequests: boolean;
+  groupInvites: boolean;
+  marketing: boolean;
+};
+
+type BillingStatus = {
+  plan: string;
+  isPremium: boolean;
+  source: "stripe" | "apple" | "lifetime" | null;
+  status: string | null;
+  renewsAt: string | null;
+};
+
+const NOTIF_LABELS: { key: keyof NotifPrefs; label: string; hint: string }[] = [
+  { key: "dailyRecs", label: "Dagens tips", hint: "En daglig film-/serierekommendation." },
+  { key: "groupMatches", label: "Gruppmatchningar", hint: "När din grupp hittar en gemensam titel." },
+  { key: "friendRequests", label: "Vänförfrågningar", hint: "Nya förfrågningar och accepterade vänner." },
+  { key: "groupInvites", label: "Gruppinbjudningar", hint: "När någon bjuder in dig till en grupp." },
+  { key: "marketing", label: "Nyheter & erbjudanden", hint: "Enstaka uppdateringar om NextWatch." },
+];
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition",
+        checked ? "bg-cyan-500" : "bg-white/15",
+        disabled ? "opacity-50" : "hover:opacity-90"
+      )}
+    >
+      <span
+        className={cx(
+          "inline-block h-5 w-5 transform rounded-full bg-white transition",
+          checked ? "translate-x-5" : "translate-x-1"
+        )}
+      />
+    </button>
+  );
+}
+
+function isNativeIOS(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string } };
+  try {
+    return w.Capacitor?.getPlatform?.() === "ios" || w.Capacitor?.isNativePlatform?.() === true;
+  } catch {
+    return false;
+  }
+}
+
+function SettingsTab() {
+  const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [savingKey, setSavingKey] = useState<keyof NotifPrefs | null>(null);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      try {
+        const [nRes, bRes] = await Promise.all([
+          fetch("/api/profile/notifications", { cache: "no-store" }),
+          fetch("/api/billing/status", { cache: "no-store" }),
+        ]);
+        if (nRes.ok) {
+          const nj = (await nRes.json()) as { ok?: boolean; prefs?: NotifPrefs };
+          if (!ignore && nj.ok && nj.prefs) setPrefs(nj.prefs);
+        }
+        if (bRes.ok) {
+          const bj = (await bRes.json()) as { ok?: boolean } & BillingStatus;
+          if (!ignore && bj.ok) {
+            setBilling({
+              plan: bj.plan,
+              isPremium: bj.isPremium,
+              source: bj.source,
+              status: bj.status,
+              renewsAt: bj.renewsAt,
+            });
+          }
+        }
+      } catch {
+        /* noop */
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  async function updatePref(key: keyof NotifPrefs, value: boolean) {
+    if (!prefs) return;
+    const prev = prefs;
+    setPrefs({ ...prefs, [key]: value }); // optimistiskt
+    setSavingKey(key);
+    setNote(null);
+    try {
+      const res = await fetch("/api/profile/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!res.ok) {
+        setPrefs(prev); // rulla tillbaka
+        const j = (await res.json().catch(() => ({}))) as { message?: string };
+        setNote(j.message ?? "Kunde inte spara inställningen.");
+      }
+    } catch {
+      setPrefs(prev);
+      setNote("Nätverksfel.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function openStripePortal() {
+    setPortalBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST", cache: "no-store" });
+      const j = (await res.json()) as { ok?: boolean; url?: string; message?: string };
+      if (j.ok && j.url) {
+        window.location.href = j.url;
+      } else {
+        setNote(j.message ?? "Kunde inte öppna prenumerationshanteringen.");
+      }
+    } catch {
+      setNote("Nätverksfel.");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  const ios = isNativeIOS();
+
+  return (
+    <div className="grid gap-8">
+      {/* Prenumeration */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Prenumeration</h3>
+        {billing === null ? (
+          <p className="text-sm text-white/50">Laddar…</p>
+        ) : billing.isPremium ? (
+          <div className="grid gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                {billing.plan === "lifetime" ? "Premium (lifetime)" : "Premium"}
+              </span>
+              {billing.status ? <span className="text-xs text-white/50">{billing.status}</span> : null}
+            </div>
+            <p className="text-sm text-white/60">
+              Du har en annonsfri upplevelse.
+              {billing.renewsAt
+                ? ` Förnyas/upphör ${new Date(billing.renewsAt).toLocaleDateString("sv-SE")}.`
+                : ""}
+            </p>
+            {billing.plan !== "lifetime" &&
+              (billing.source === "apple" || ios ? (
+                <p className="text-xs text-white/50">
+                  Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn →
+                  Prenumerationer.
+                </p>
+              ) : (
+                <Button variant="secondary" onClick={openStripePortal} disabled={portalBusy}>
+                  {portalBusy ? "Öppnar…" : "Hantera prenumeration"}
+                </Button>
+              ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-white/70">
+              Du använder <span className="font-semibold">gratisversionen</span> med annonser.
+            </p>
+            <p className="text-sm text-white/50">Uppgradera till Premium (19 kr/mån) för en helt annonsfri upplevelse.</p>
+            <a
+              href="/premium"
+              className="inline-flex w-fit items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400"
+            >
+              Uppgradera till Premium
+            </a>
+          </div>
+        )}
+      </section>
+
+      {/* Notiser */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Notiser</h3>
+        {prefs === null ? (
+          <p className="text-sm text-white/50">Laddar…</p>
+        ) : (
+          <div className="grid gap-1">
+            {NOTIF_LABELS.map(({ key, label, hint }) => (
+              <div
+                key={key}
+                className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm text-white/85">{label}</div>
+                  <div className="text-xs text-white/45">{hint}</div>
+                </div>
+                <Toggle
+                  checked={prefs[key]}
+                  disabled={savingKey === key}
+                  onChange={(v) => void updatePref(key, v)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-white/40">
+          Push kräver att du tillåtit notiser för appen i systeminställningarna.
+        </p>
+      </section>
+
+      {note && <p className="text-sm text-rose-300">{note}</p>}
+    </div>
   );
 }

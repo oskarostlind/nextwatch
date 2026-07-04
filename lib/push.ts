@@ -26,6 +26,52 @@ export type PushPayload = {
   data?: Record<string, string>;
 };
 
+// Kopplar notis-"type" (som anropare sätter i payload.data.type) till
+// motsvarande kolumn på Profile. Saknas mappning skickas notisen alltid.
+const TYPE_TO_PREF_COLUMN: Record<string, keyof PrefRow> = {
+  daily_rec: "notifyDailyRecs",
+  group_match: "notifyGroupMatches",
+  friend_request: "notifyFriendRequests",
+  friend_accepted: "notifyFriendRequests",
+  group_invite: "notifyGroupInvites",
+  group_invite_accepted: "notifyGroupInvites",
+  marketing: "notifyMarketing",
+};
+
+type PrefRow = {
+  notifyDailyRecs: boolean;
+  notifyGroupMatches: boolean;
+  notifyFriendRequests: boolean;
+  notifyGroupInvites: boolean;
+  notifyMarketing: boolean;
+};
+
+/**
+ * True om användaren tillåter denna notistyp. Okänd typ => alltid true.
+ * Saknad profil => true (hellre skicka än tappa viktiga notiser).
+ */
+async function userAllowsNotification(userId: string, type: string | undefined): Promise<boolean> {
+  if (!type) return true;
+  const column = TYPE_TO_PREF_COLUMN[type];
+  if (!column) return true;
+  try {
+    const prof = await prisma.profile.findUnique({
+      where: { userId },
+      select: {
+        notifyDailyRecs: true,
+        notifyGroupMatches: true,
+        notifyFriendRequests: true,
+        notifyGroupInvites: true,
+        notifyMarketing: true,
+      },
+    });
+    if (!prof) return true;
+    return prof[column] !== false;
+  } catch {
+    return true;
+  }
+}
+
 type ApnsCredentials = {
   teamId: string;
   keyId: string;
@@ -152,6 +198,11 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     const creds = getCredentials();
     if (!creds) {
       console.warn("[push] APNS_* env saknas – push skickas inte.");
+      return;
+    }
+
+    // Respektera användarens notisinställningar (baserat på payload.data.type).
+    if (!(await userAllowsNotification(userId, payload.data?.type))) {
       return;
     }
 

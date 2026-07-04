@@ -13,6 +13,7 @@ import {
   preloadSwipeDecksIdle,
   retrySoloDeck,
   setSwipeBackgroundPrefetch,
+  setSwipeAdsEnabled,
   subscribeSwipeDeck,
   updateGroupCards,
   updateSoloCards,
@@ -20,6 +21,7 @@ import {
   type SoloDeckState,
 } from "@/lib/swipeDeckStore";
 import type { SwipeCard } from "@/lib/swipeDeck";
+import { adsFeatureEnabled } from "@/lib/ads";
 
 export type { SoloDeckState, GroupDeckState };
 
@@ -29,6 +31,30 @@ export type { SoloDeckState, GroupDeckState };
  */
 export function SwipeDeckPreloader() {
   const pathname = usePathname() ?? "/";
+
+  // Avgör om annonser ska visas (gratisanvändare + feature-flagga på).
+  // Körs före däcket hinner ladda flera sidor, så annonser injiceras stabilt.
+  useEffect(() => {
+    if (!adsFeatureEnabled()) {
+      setSwipeAdsEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/billing/status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { isPremium?: boolean } | null) => {
+        if (cancelled) return;
+        // Annonser bara för icke-premium.
+        setSwipeAdsEnabled(!(j?.isPremium ?? false));
+      })
+      .catch(() => {
+        /* vid fel: visa hellre inga annonser */
+        if (!cancelled) setSwipeAdsEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     preloadSwipeDecksIdle();

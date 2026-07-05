@@ -125,11 +125,20 @@ export async function fetchAppStoreTransaction(
   return assertTransactionFields(decodeSignedPayload<DecodedTransactionInfo>(data.signedTransactionInfo));
 }
 
+export type GrantResult =
+  | { granted: true }
+  | { granted: false; reason: "expired" | "other_account" };
+
 /**
- * Ger användaren premium utifrån en verifierad Apple-transaktion.
- * Idempotent per transactionId. Entitlement gatas därefter av
- * subCurrentPeriodEnd (= Apples expiresDate) i lib/entitlements.ts, så
- * premium upphör automatiskt om prenumerationen inte förnyas/omsynkas.
+ * Ger användaren premium utifrån en verifierad Apple-transaktion. Anropas både
+ * vid köp och vid "Återställ köp" (samma transactionId kan alltså komma igen
+ * efter ominstallation — då uppdateras användarraden på nytt, men en
+ * transaktion som redan hör till ett ANNAT konto ger aldrig premium här).
+ * Utgångna transaktioner registreras för statusuppslag men rör inte
+ * entitlementet — annars skulle en restore av en gammal prenumeration kunna
+ * skriva över t.ex. en aktiv Stripe-prenumeration.
+ * Entitlement gatas därefter av subCurrentPeriodEnd (= Apples expiresDate)
+ * i lib/entitlements.ts.
  */
 export async function grantPremiumFromIap(params: {
   uid: string;
@@ -138,24 +147,36 @@ export async function grantPremiumFromIap(params: {
   environment?: string;
   purchasedAt: Date;
   expiresAt: Date | null;
-}): Promise<void> {
+}): Promise<GrantResult> {
   const existing = await prisma.appleIapTransaction.findUnique({
     where: { transactionId: params.transactionId },
-    select: { transactionId: true },
+    select: { userId: true },
   });
-  if (existing) return;
+  if (existing && existing.userId !== params.uid) {
+    return { granted: false, reason: "other_account" };
+  }
+
+  const txUpsert = prisma.appleIapTransaction.upsert({
+    where: { transactionId: params.transactionId },
+    update: { expiresAt: params.expiresAt },
+    create: {
+      transactionId: params.transactionId,
+      userId: params.uid,
+      productId: params.productId,
+      environment: params.environment ?? null,
+      purchasedAt: params.purchasedAt,
+      expiresAt: params.expiresAt,
+    },
+  });
+
+  const isActive = !params.expiresAt || params.expiresAt.getTime() > Date.now();
+  if (!isActive) {
+    await txUpsert;
+    return { granted: false, reason: "expired" };
+  }
 
   await prisma.$transaction([
-    prisma.appleIapTransaction.create({
-      data: {
-        transactionId: params.transactionId,
-        userId: params.uid,
-        productId: params.productId,
-        environment: params.environment ?? null,
-        purchasedAt: params.purchasedAt,
-        expiresAt: params.expiresAt,
-      },
-    }),
+    txUpsert,
     prisma.user.update({
       where: { id: params.uid },
       data: {
@@ -167,6 +188,7 @@ export async function grantPremiumFromIap(params: {
       },
     }),
   ]);
+  return { granted: true };
 }
 
 // --- Lazy förnyelsesynk -----------------------------------------------------

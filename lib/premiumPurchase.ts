@@ -102,6 +102,93 @@ async function startStripeCheckout(): Promise<PurchaseResult> {
 }
 
 /**
+ * Återställer tidigare köp (App Store-krav för prenumerationer, guideline 3.8):
+ * synkar StoreKit, letar upp den aktiva prenumerationstransaktionen för vår
+ * produkt och verifierar den server-side — samma verify-endpoint som vid köp.
+ * Endast native iOS.
+ */
+export async function restorePremiumPurchases(): Promise<PurchaseResult> {
+  if (!isNativeIos()) {
+    return { ok: false, message: "Återställning av köp görs i iOS-appen." };
+  }
+  try {
+    const configRes = await fetch("/api/apple/iap/config", { cache: "no-store" });
+    const config = (await configRes.json()) as {
+      enabled?: boolean;
+      products?: { monthly?: string | null };
+    };
+    const productId = config.products?.monthly ?? null;
+    if (!config.enabled || !productId) {
+      return { ok: false, message: "Premium-köp är inte tillgängligt i appen ännu." };
+    }
+
+    const { NativePurchases } = await import("@capgo/native-purchases");
+
+    await NativePurchases.restorePurchases();
+    // Endast aktiva entitlements för inloggat Apple-id (inte hela enhetshistoriken).
+    const { purchases } = await NativePurchases.getPurchases({
+      onlyCurrentEntitlements: true,
+    });
+
+    const latest = purchases
+      .filter((p) => p.productIdentifier === productId)
+      .sort((a, b) => (b.purchaseDate ?? "").localeCompare(a.purchaseDate ?? ""))[0];
+
+    if (!latest) {
+      return {
+        ok: false,
+        message: "Ingen aktiv prenumeration hittades på det här Apple-kontot.",
+      };
+    }
+
+    const verifyRes = await fetch("/api/apple/iap/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        transactionId: latest.transactionId,
+        environment: latest.environment,
+      }),
+    });
+    const js = (await verifyRes.json().catch(() => null)) as {
+      ok?: boolean;
+      active?: boolean;
+      message?: string;
+    } | null;
+
+    if (!verifyRes.ok || !js?.ok) {
+      return { ok: false, message: js?.message ?? "Kunde inte verifiera köpet." };
+    }
+    if (js.active === false) {
+      return { ok: false, message: "Prenumerationen har gått ut." };
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isUserCancelled(message)) {
+      return { ok: false, message: "", cancelled: true };
+    }
+    console.error("[premiumPurchase] restore misslyckades:", message);
+    return { ok: false, message: "Kunde inte återställa köp. Försök igen." };
+  }
+}
+
+/**
+ * Öppnar App Stores prenumerationshantering (native iOS). Returnerar false om
+ * arket inte kunde öppnas — visa då instruktionstext istället.
+ */
+export async function openSubscriptionManagement(): Promise<boolean> {
+  if (!isNativeIos()) return false;
+  try {
+    const { NativePurchases } = await import("@capgo/native-purchases");
+    await NativePurchases.manageSubscriptions();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Startar ett premium-köp på rätt sätt för plattformen. Vid lyckat köp:
  *   - iOS: premium är aktivt direkt (verifierat server-side) — anroparen kan
  *     t.ex. ladda om sidan eller navigera till /premium/success.

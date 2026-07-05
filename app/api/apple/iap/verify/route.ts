@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const purchasedAt = transaction.purchaseDate ? new Date(transaction.purchaseDate) : new Date();
     const expiresAt = transaction.expiresDate ? new Date(transaction.expiresDate) : null;
 
-    await grantPremiumFromIap({
+    const result = await grantPremiumFromIap({
       uid,
       transactionId: transaction.transactionId,
       productId: transaction.productId,
@@ -64,7 +64,19 @@ export async function POST(req: NextRequest) {
       expiresAt,
     });
 
-    return NextResponse.json({ ok: true, productId: transaction.productId, expiresAt });
+    if (!result.granted && result.reason === "other_account") {
+      return NextResponse.json(
+        { ok: false, message: "Köpet är kopplat till ett annat NextWatch-konto." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      active: result.granted,
+      productId: transaction.productId,
+      expiresAt,
+    });
   } catch (error) {
     console.error("[apple/iap/verify]", error);
     return NextResponse.json(

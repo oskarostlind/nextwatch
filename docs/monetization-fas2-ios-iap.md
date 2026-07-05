@@ -23,6 +23,14 @@ App Store Server API:s subscriptions-endpoint när en apple-prenumeration är
 inom 12 h från (eller förbi) periodslut. App Store Server Notifications är ett
 naturligt nästa steg men krävs inte för korrekt entitlement.
 
+**Återställ köp** (App Store guideline 3.8): "Återställ tidigare köp" på
+`/premium` (endast iOS) — `restorePremiumPurchases()` synkar StoreKit, hittar
+den aktiva transaktionen för vår produkt och kör samma server-verifiering som
+vid köp. Servern ger aldrig premium för utgångna transaktioner eller
+transaktioner som hör till ett annat NextWatch-konto (409). Profilens
+prenumerationssektion har dessutom "Hantera i App Store"
+(`manageSubscriptions()`) på native iOS.
+
 ## CTA-ytor (alla → `goPremium()`: iOS = IAP-flöde, webb = /premium)
 
 - Annonsplatshållarkortet i swipe-däcket är tappbart.

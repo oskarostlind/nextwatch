@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Button, Card, Note, PageHeader } from "@/app/components/ui/kit";
-import { isNativeIos, startPremiumPurchase } from "@/lib/premiumPurchase";
+import {
+  isNativeIos,
+  restorePremiumPurchases,
+  startPremiumPurchase,
+} from "@/lib/premiumPurchase";
 
 export default function PremiumPage() {
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [err, setErr] = useState<string>("");
   // Avgörs i effect (inte vid render) så SSR-html:en är stabil.
   const [onIos, setOnIos] = useState(false);
@@ -34,6 +39,21 @@ export default function PremiumPage() {
     }
   }
 
+  async function restore() {
+    setErr("");
+    setRestoring(true);
+    try {
+      const result = await restorePremiumPurchases();
+      if (result.ok) {
+        window.location.href = "/premium/success";
+        return;
+      }
+      if (!result.cancelled) setErr(result.message || "Kunde inte återställa köp.");
+    } finally {
+      setRestoring(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
       <PageHeader
@@ -59,9 +79,19 @@ export default function PremiumPage() {
             : "Bli Premium – 19 kr/mån"}
         </Button>
         {onIos && (
-          <p className="text-center text-xs text-neutral-500">
-            Betalningen hanteras av App Store och kan avslutas i dina Apple-inställningar.
-          </p>
+          <>
+            <button
+              type="button"
+              onClick={restore}
+              disabled={loading || restoring}
+              className="w-full text-center text-xs text-neutral-400 underline underline-offset-2 transition hover:text-neutral-200 disabled:opacity-50"
+            >
+              {restoring ? "Återställer…" : "Återställ tidigare köp"}
+            </button>
+            <p className="text-center text-xs text-neutral-500">
+              Betalningen hanteras av App Store och kan avslutas i dina Apple-inställningar.
+            </p>
+          </>
         )}
         {err && <Note tone="error">{err}</Note>}
       </Card>

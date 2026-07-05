@@ -16,6 +16,7 @@ import {
 } from "../../swipe/page_client";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
+import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 
 type MediaType = "movie" | "tv";
 
@@ -94,7 +95,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
         }),
       })
         .then((res) => {
-          if (!res.ok) return null;
+          if (!res.ok) {
+            // 429 = daglig swipegräns nådd — visa väggen (SwipeLimitWall lyssnar).
+            reportSwipeLimitFrom(res);
+            return null;
+          }
           return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
             cache: "no-store",
           });
@@ -231,6 +236,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <SwipeLimitWall />
       <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
         {cards[0] ? (
           <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">

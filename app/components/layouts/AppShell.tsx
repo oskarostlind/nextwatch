@@ -7,6 +7,7 @@ import BottomTabs from "../navigation/BottomTabs";
 import InviteToasts from "../InviteToasts";
 import PushRegistration from "../client/PushRegistration";
 import SplashScreenHide from "../client/SplashScreenHide";
+import PremiumBadge from "../client/PremiumBadge";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 
 const PUBLIC_ROUTES = [
@@ -41,7 +42,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <SplashScreenHide />
       <PushRegistration />
       <SwipeDeckPreloader />
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
+      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
+        {/* Diskret uppgraderings-ingång för gratisanvändare (döljs för premium). */}
+        <PremiumBadge />
         <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
           {children}
         </main>

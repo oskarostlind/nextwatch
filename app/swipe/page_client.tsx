@@ -9,6 +9,9 @@ import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
+import { goPremium } from "@/lib/premiumPurchase";
+import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
 
 /* ---------- types ---------- */
 
@@ -83,9 +86,14 @@ function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
       mediaType: c.mediaType,
       decision,
     }),
-  }).catch(() => {
-    /* best-effort */
-  });
+  })
+    .then((res) => {
+      // 429 = daglig swipegräns nådd — visa väggen (SwipeLimitWall lyssnar).
+      reportSwipeLimitFrom(res);
+    })
+    .catch(() => {
+      /* best-effort */
+    });
 }
 
 /* ---------- Details helpers (fallback sv → en) ---------- */
@@ -239,6 +247,16 @@ export default function SwipePageClient() {
     }
   }, [mode, group?.code, router]);
 
+  // Upsell-popup: räkna annonsvisningar (när ett annonskort blir överst) och
+  // trigga popupen var 3:e annons — en gång per session (se PremiumUpsellModal).
+  const countedAds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const top = cards[0];
+    if (!top || top.kind !== "ad" || countedAds.current.has(top.id)) return;
+    countedAds.current.add(top.id);
+    maybeTriggerAdUpsell();
+  }, [cards]);
+
   function popTop() {
     setFlippedId(null);
     popSoloCard();
@@ -378,6 +396,8 @@ export default function SwipePageClient() {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <SwipeLimitWall />
+      <PremiumUpsellModal />
       {mode === "group" && group?.code && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
           Grupp: <span className="font-mono tracking-wider">{group.code}</span>
@@ -607,12 +627,24 @@ function AdCard({ adId }: { adId: string }) {
           data-full-width-responsive="true"
         />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        // Platshållaren är en premium-CTA: tap -> köpflöde (iOS) / /premium (webb).
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => void goPremium()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") void goPremium();
+          }}
+          className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center"
+        >
           <div className="text-2xl">🎬</div>
           <div className="text-sm text-white/70">Reklamplats</div>
           <p className="max-w-[16rem] text-xs leading-relaxed text-white/40">
-            Swipa vidare som vanligt. Uppgradera till Premium för en helt annonsfri upplevelse.
+            Swipa vidare som vanligt — eller slipp annonserna helt.
           </p>
+          <span className="mt-1 rounded-full bg-amber-400/15 px-4 py-1.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-400/40">
+            Uppgradera till Premium
+          </span>
         </div>
       )}
     </div>

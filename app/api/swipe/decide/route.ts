@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
+import { getSwipeAllowance, swipeLimitPayload } from "../../../../lib/swipeLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
 
   if (!tmdbId || !mediaType || (decision !== "like" && decision !== "dislike")) {
     return NextResponse.json({ ok: false, message: "Ogiltig payload." }, { status: 400 });
+  }
+
+  // Daglig swipegräns för gratisanvändare (premium = obegränsat).
+  const allowance = await getSwipeAllowance(uid);
+  if (!allowance.allowed) {
+    return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
   }
 
   // Spara rating

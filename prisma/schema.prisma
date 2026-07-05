@@ -38,6 +38,8 @@ model User {
   watchlist watchlist[]
   purchases Purchase[]
 
+  appleIapTransactions AppleIapTransaction[]
+
   // Groups
   groupMembers  GroupMember[] @relation("UserGroupMembers")
   groupsCreated Group[]       @relation("UserGroupsCreated")
@@ -160,6 +162,24 @@ model Purchase {
 
   @@index([userId, createdAt], map: "idx_purchases_user")
   @@map("purchases")
+}
+
+// Apple In-App Purchase-transaktioner (iOS). Idempotens: samma transactionId
+// får aldrig ge premium två gånger. Motsvarar Stripe-webhookens roll för
+// App Store-köp — se lib/appleIap.ts.
+model AppleIapTransaction {
+  transactionId String    @id @map("transaction_id")
+  userId        String    @map("user_id")
+  productId     String    @map("product_id")
+  environment   String?
+  purchasedAt   DateTime  @map("purchased_at")
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_apple_iap_user")
+  @@map("apple_iap_transactions")
 }
 
 model Group {

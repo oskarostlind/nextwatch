@@ -57,6 +57,8 @@ Ny tabell: `apple_iap_transactions`.
 
 ## Env-variabler (Vercel)
 
+Se `.env.example` för hela listan. IAP-relevanta:
+
 ```
 APPLE_IAP_ISSUER_ID=…          # App Store Connect → Users and Access → Integrations → In-App Purchase
 APPLE_IAP_KEY_ID=…             # nyckel-id för In-App Purchase-API-nyckeln
@@ -68,19 +70,54 @@ APPLE_IAP_PREMIUM_MONTHLY=com.nextwatch.premium.monthly
 Utan dessa svarar `/api/apple/iap/config` `enabled:false` och iOS-knappen visar
 "inte tillgängligt ännu" — inget kraschar.
 
-## App Store Connect (måste göras manuellt)
+### Verifiera att produktion är redo
 
-1. **Skapa en In-App Purchase-API-nyckel**: Users and Access → Integrations →
-   In-App Purchase → generera nyckel → ger `ISSUER_ID`, `KEY_ID`, `.p8`.
-2. **Skapa auto-förnyande prenumeration** på appen `com.nextwatch.app`:
+Efter deploy + env i Vercel:
+
+```bash
+curl -s https://www.nextwatch.se/api/apple/iap/config
+```
+
+Förväntat svar när allt är klart:
+
+```json
+{
+  "ok": true,
+  "enabled": true,
+  "products": { "monthly": "com.nextwatch.premium.monthly" },
+  "bundleId": "com.nextwatch.app"
+}
+```
+
+Dev-only: `GET /api/debug/env` visar om IAP-nycklar finns (maskerade, inga hemligheter).
+
+## App Store Connect — checklista
+
+| Steg | Vad | Status |
+|------|-----|--------|
+| 0–1 | Paid Apps Agreement, bank, skatt | ✅ |
+| 2 | In-App Purchase API-nyckel (`.p8` → `ISSUER_ID`, `KEY_ID`, `PRIVATE_KEY`) | ✅ |
+| 3 | Prenumerationsgrupp + `com.nextwatch.premium.monthly` @ 19 SEK/mån | ✅ |
+| 4 | `APPLE_IAP_*` i Vercel + redeploy | ✅ |
+| 5 | `/api/apple/iap/config` → `enabled: true` | ✅ |
+| 6 | Skicka in prenumerationen med nästa app-version till App Review | ⏳ vid release |
+| 7 | Sandbox-köp / restore på TestFlight (valfritt före submit) | hoppas över |
+
+Detaljer för steg 2–3:
+
+1. **In-App Purchase-API-nyckel**: Users and Access → Integrations →
+   In-App Purchase → generera nyckel.
+2. **Auto-förnyande prenumeration** på `com.nextwatch.app`:
    - Subscription group: t.ex. "NextWatch Premium".
-   - Produkt-id: `com.nextwatch.premium.monthly` (samma namnkonvention som
+   - Produkt-id: `com.nextwatch.premium.monthly` (samma konvention som
      AvyraCards: `<domän baklänges>.premium.<period>`).
    - Pris: 19 kr/mån (SEK), 1 månads period.
-3. Fyll i lokaliserad beskrivning + granskningsinformation och skicka in
-   prenumerationen tillsammans med nästa app-version.
-4. Testa i sandbox (TestFlight): köp verifieras automatiskt mot
-   sandbox-miljön via fallbacken i `lib/appleIap.ts`.
+3. Lokaliserad beskrivning + granskningsinformation — skickas in tillsammans
+   med nästa app-version.
+
+Servern hanterar sandbox automatiskt vid TestFlight-köp (fallback i
+`lib/appleIap.ts`); manuell sandbox-testning krävs inte för att aktivera IAP i
+produktion.
 
 ## Nytt iOS-beroende
 

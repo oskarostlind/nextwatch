@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useCallback, useMemo, useState } from 'react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
+import RatingModal from '@/app/components/client/RatingModal';
 import { bestWatchUrl, providerWatchUrl } from '@/lib/watchLinks';
 
 type WatchItem = {
@@ -14,6 +15,20 @@ type WatchItem = {
   rating?: number;
   posterUrl: string;
 };
+
+// Titlar med eget betyg (Betyg-fliken) — från POST /api/ratings/list.
+type RatedItem = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  year: string | null;
+  poster: string | null;
+  userRating: number;
+};
+
+type RatedListResp = { ok: boolean; items: RatedItem[] };
+
+type Tab = 'watchlist' | 'ratings';
 
 type Providers = {
   link?: string;
@@ -44,11 +59,90 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
 
+  // Betyg-fliken: lazy-hämtas första gången fliken öppnas.
+  const [tab, setTab] = useState<Tab>('watchlist');
+  const [rated, setRated] = useState<RatedItem[] | null>(null); // null = inte hämtad än
+  const [ratedLoading, setRatedLoading] = useState(false);
+  const [editing, setEditing] = useState<RatedItem | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openTab = useCallback(
+    (next: Tab) => {
+      setTab(next);
+      if (next === 'ratings' && rated === null && !ratedLoading) {
+        setRatedLoading(true);
+        void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
+          .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
+          .then((data) => {
+            setRated(data && data.ok ? data.items : []);
+          })
+          .catch(() => setRated([]))
+          .finally(() => setRatedLoading(false));
+      }
+    },
+    [rated, ratedLoading]
+  );
+
+  const saveEditedRating = useCallback(
+    (rating: number) => {
+      const it = editing;
+      if (!it) return;
+      setEditSaving(true);
+      void fetch('/api/ratings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ tmdbId: it.tmdbId, mediaType: it.mediaType, rating }),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setRated((cur) =>
+              (cur ?? []).map((x) =>
+                x.tmdbId === it.tmdbId && x.mediaType === it.mediaType ? { ...x, userRating: rating } : x
+              )
+            );
+          }
+        })
+        .catch(() => {
+          /* best-effort */
+        })
+        .finally(() => {
+          setEditSaving(false);
+          setEditing(null);
+        });
+    },
+    [editing]
+  );
+
+  const removeRating = useCallback(() => {
+    const it = editing;
+    if (!it) return;
+    // Optimistisk borttagning
+    setRated((cur) => (cur ?? []).filter((x) => !(x.tmdbId === it.tmdbId && x.mediaType === it.mediaType)));
+    setEditing(null);
+    void fetch('/api/ratings/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ tmdbId: it.tmdbId, mediaType: it.mediaType }),
+    }).catch(() => {
+      // Rollback om API faller
+      setRated((cur) => [it, ...(cur ?? [])]);
+    });
+  }, [editing]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((it) => it.title.toLowerCase().includes(needle));
   }, [q, items]);
+
+  const filteredRated = useMemo(() => {
+    const list = rated ?? [];
+    const needle = q.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((it) => it.title.toLowerCase().includes(needle));
+  }, [q, rated]);
 
   const open = useCallback(async (item: WatchItem) => {
     setActive(item);
@@ -105,6 +199,27 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
 
   return (
     <>
+      <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1">
+        {(
+          [
+            { key: 'watchlist' as Tab, label: 'Watchlist' },
+            { key: 'ratings' as Tab, label: 'Betyg' },
+          ]
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => openTab(t.key)}
+            aria-pressed={tab === t.key}
+            className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+              tab === t.key ? 'bg-white text-neutral-900' : 'text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4">
         <input
           value={q}
@@ -114,7 +229,50 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {tab === 'ratings' ? (
+        ratedLoading ? (
+          <p className="text-neutral-400">Laddar dina betyg…</p>
+        ) : filteredRated.length === 0 ? (
+          <p className="text-neutral-400">
+            {rated && rated.length > 0 ? 'Inga träffar.' : 'Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.'}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {filteredRated.map((it) => (
+              <button
+                key={`${it.mediaType}-${it.tmdbId}`}
+                type="button"
+                onClick={() => setEditing(it)}
+                className="group relative block overflow-hidden rounded-xl border border-white/10 text-left transition hover:ring-2 hover:ring-cyan-500/60"
+              >
+                {it.poster ? (
+                  <Image
+                    src={it.poster}
+                    alt={it.title}
+                    width={342}
+                    height={513}
+                    className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-neutral-800 p-2 text-center text-xs text-neutral-400">
+                    {it.title}
+                  </div>
+                )}
+                <div className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-emerald-300 backdrop-blur">
+                  {it.userRating}/10
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2 text-[12px]">
+                  <div className="truncate font-medium text-white">{it.title}</div>
+                  <div className="flex items-center justify-between opacity-90">
+                    <span>{it.year ?? '—'}</span>
+                    <span>Ditt betyg: {it.userRating}</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <p className="text-neutral-400">Inga träffar.</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -232,6 +390,28 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
           </div>
         )}
       </Modal>
+
+      <RatingModal
+        open={editing !== null}
+        item={
+          editing
+            ? {
+                tmdbId: editing.tmdbId,
+                mediaType: editing.mediaType,
+                title: editing.title,
+                year: editing.year,
+                poster: editing.poster,
+              }
+            : null
+        }
+        heading="Ändra ditt betyg"
+        skipLabel="Avbryt"
+        saving={editSaving}
+        initialRating={editing?.userRating}
+        onRate={saveEditedRating}
+        onSkip={() => setEditing(null)}
+        onRemove={removeRating}
+      />
     </>
   );
 }

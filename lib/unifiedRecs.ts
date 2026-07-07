@@ -194,9 +194,13 @@ function increment(map: Map<number, number>, key: number, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+// Vikter kan vara negativa (lågt betygsatta seeds), så topp-K väljs på
+// absolutbelopp och normaliseras mot max |w| med bibehållet tecken.
 function normalizeTopK(map: Map<number, number>, k: number) {
-  const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, k);
-  const max = entries[0]?.[1] ?? 1;
+  const entries = Array.from(map.entries())
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, k);
+  const max = Math.abs(entries[0]?.[1] ?? 1) || 1;
   const out = new Map<number, number>();
   for (const [id, w] of entries) out.set(id, w / max);
   return out;
@@ -240,12 +244,16 @@ async function fetchFeatures(type: MediaType, id: number, locale: string) {
   return { keywords: extractKeywordIds(fallback), people: extractPeopleIds(fallback, type) };
 }
 
-async function buildTaste(seeds: { id: number; type: MediaType }[], locale: string): Promise<Taste> {
+type Seed = { id: number; type: MediaType; weight: number };
+
+async function buildTaste(seeds: Seed[], locale: string): Promise<Taste> {
   const keywordW = new Map<number, number>(), peopleW = new Map<number, number>();
   const feats = await Promise.all(seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({ keywords: [], people: [] }))));
-  for (const f of feats) {
-    for (const kw of f.keywords) increment(keywordW, kw, 1);
-    for (const p of f.people) increment(peopleW, p, 1);
+  for (let i = 0; i < seeds.length; i++) {
+    const w = seeds[i].weight;
+    const f = feats[i];
+    for (const kw of f.keywords) increment(keywordW, kw, w);
+    for (const p of f.people) increment(peopleW, p, w);
   }
   return { keywordW: normalizeTopK(keywordW, 60), peopleW: normalizeTopK(peopleW, 60) };
 }
@@ -290,7 +298,10 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // 1. Hämta data från databasen direkt via Prisma
     const [profile, ratings, watchlist, groupMembers, groupRow] = await Promise.all([
       prisma.profile.findUnique({ where: { userId: uid } }),
-      prisma.rating.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
+      prisma.rating.findMany({
+        where: { userId: uid },
+        select: { tmdbId: true, mediaType: true, rating: true, decision: true },
+      }),
       prisma.watchlist.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
       groupCode
         ? prisma.groupMember.findMany({ where: { groupCode }, include: { user: { include: { profile: true } } } })
@@ -458,40 +469,58 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
-    // Seeds (favoriter + watchlist – för taste). I grupp tar vi favoriter från ALLA
-    // medlemmar först (starkast signal), sedan hela gruppens watchlists.
-    const seedsSet: { id: number; type: MediaType }[] = [];
+    // Seeds (favoriter + watchlist + betygsatta titlar – för taste).
+    // Viktade: favoriter/watchlist = 1.0; betygsatta titlar viktas efter betyg
+    // (>=7 positivt, <=4 negativt så att liknande titlar straffas).
+    // Dubbletter slås ihop genom att behålla vikten med störst absolutbelopp.
+    const seedWeights = new Map<string, Seed>();
+    function addSeed(id: number, type: MediaType, weight: number) {
+      const k = `${type}_${id}`;
+      const prev = seedWeights.get(k);
+      if (!prev || Math.abs(weight) > Math.abs(prev.weight)) {
+        seedWeights.set(k, { id, type, weight });
+      }
+    }
+
+    // I grupp tar vi favoriter från ALLA medlemmar först (starkast signal),
+    // sedan hela gruppens watchlists.
     if (isGroup) {
       for (const p of memberProfiles) {
         const fm = p.favoriteMovie as FavoriteItem | null;
         const fs = p.favoriteShow as FavoriteItem | null;
-        if (fm?.id) seedsSet.push({ id: fm.id, type: "movie" });
-        if (fs?.id) seedsSet.push({ id: fs.id, type: "tv" });
+        if (fm?.id) addSeed(fm.id, "movie", 1.0);
+        if (fs?.id) addSeed(fs.id, "tv", 1.0);
       }
       for (const w of groupWatchlist) {
-        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
       }
     } else {
       const favMovie = profile.favoriteMovie as FavoriteItem | null;
       const favShow = profile.favoriteShow as FavoriteItem | null;
-      if (favMovie?.id) seedsSet.push({ id: favMovie.id, type: "movie" });
-      if (favShow?.id) seedsSet.push({ id: favShow.id, type: "tv" });
+      if (favMovie?.id) addSeed(favMovie.id, "movie", 1.0);
+      if (favShow?.id) addSeed(favShow.id, "tv", 1.0);
       for (const w of watchlist) {
-        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
       }
     }
 
-    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
-    const seedCap = isGroup ? 12 : 6;
-    const seenSeed = new Set<string>();
-    const seeds: { id: number; type: MediaType }[] = [];
-    for (const s of seedsSet) {
-      const k = `${s.type}_${s.id}`;
-      if (seenSeed.has(k)) continue;
-      seenSeed.add(k);
-      seeds.push(s);
-      if (seeds.length >= seedCap) break;
+    // Betygsatta titlar (aktuell användare) — additivt även i gruppläge.
+    for (const r of ratings) {
+      if (typeof r.rating !== "number") continue;
+      if (r.rating >= 7) {
+        addSeed(r.tmdbId, r.mediaType as MediaType, (r.rating - 6) / 4); // 0.25–1.0
+      } else if (r.rating <= 4) {
+        addSeed(r.tmdbId, r.mediaType as MediaType, -(5 - r.rating) / 4); // -0.25 till -1.0
+      }
+      // 5–6 = neutralt, hoppas över.
     }
+
+    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
+    // Prioritera på |vikt| så både starka positiva och negativa signaler ryms.
+    const seedCap = isGroup ? 16 : 12;
+    const seeds = Array.from(seedWeights.values())
+      .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+      .slice(0, seedCap);
 
     // Dedupe + index
     const uniq = dedupe(baseRaw);

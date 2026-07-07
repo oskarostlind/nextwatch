@@ -15,6 +15,7 @@ import { notify } from "@/app/components/lib/notify";
 import { bestWatchUrl } from "@/lib/watchLinks";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
+import RatingModal from "@/app/components/client/RatingModal";
 
 /* ---------- types ---------- */
 
@@ -231,6 +232,11 @@ export default function SwipePageClient() {
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
+  // Betygs-popup efter swipe upp ("Sett"). Kortet är redan sparat som "seen"
+  // — popupen är valfri och lägger bara till ett 1–10-betyg ovanpå.
+  const [ratePrompt, setRatePrompt] = useState<Card | null>(null);
+  const [ratingSaving, setRatingSaving] = useState(false);
+
   const controls = useAnimation();
 
   // Tinder-stil: kortet följer fingret, overlays togglas av drag-riktningen.
@@ -393,6 +399,29 @@ export default function SwipePageClient() {
     saveRating(c, "seen");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
+    setRatePrompt(c);
+  }
+
+  function submitSeenRating(rating: number): void {
+    const c = ratePrompt;
+    if (!c) return;
+    setRatingSaving(true);
+    void fetch("/api/ratings/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, rating }),
+    })
+      .then((res) => {
+        if (!res.ok) notify("Kunde inte spara betyget");
+      })
+      .catch(() => {
+        notify("Kunde inte spara betyget");
+      })
+      .finally(() => {
+        setRatingSaving(false);
+        setRatePrompt(null);
+      });
   }
 
   function handleWatchlistOnly(c: Card): void {
@@ -450,6 +479,24 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
+      <RatingModal
+        open={ratePrompt !== null}
+        item={
+          ratePrompt
+            ? {
+                tmdbId: ratePrompt.tmdbId,
+                mediaType: ratePrompt.mediaType,
+                title: ratePrompt.title,
+                year: ratePrompt.year,
+                poster: ratePrompt.poster,
+              }
+            : null
+        }
+        heading="Vad tyckte du?"
+        saving={ratingSaving}
+        onRate={submitSeenRating}
+        onSkip={() => setRatePrompt(null)}
+      />
       {mode === "group" && group?.code && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
           Grupp: <span className="font-mono tracking-wider">{group.code}</span>

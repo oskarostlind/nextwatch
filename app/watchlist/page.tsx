@@ -137,7 +137,7 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du gillat och vill se." />
+      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du vill se — och betyg på dem du redan sett." />
       <WatchlistClient items={items} />
     </main>
   );

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
     await prisma.rating.upsert({
       where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
-      update: { decision, decidedAt: new Date() },
+      update: { decision, decidedAt: new Date(), rating: null },
       create: { id: newId(), userId: uid, tmdbId, mediaType, decision },
     });
     return NextResponse.json({ ok: true });

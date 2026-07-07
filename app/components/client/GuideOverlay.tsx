@@ -168,43 +168,6 @@ export default function GuideOverlay({ guideId, steps, open, onClose, onStepChan
     if (h > 0 && Math.abs(h - tooltipH) > 4) setTooltipH(h);
   }, [open, step, stepIndex, spot, tooltipH]);
 
-  // #region agent log
-  useEffect(() => {
-    if (!open || !step || typeof window === "undefined") return;
-    const el = tooltipRef.current;
-    const tr = el?.getBoundingClientRect();
-    const naiveTop = spot ? spot.top + spot.height + 12 : null;
-    fetch("http://127.0.0.1:7635/ingest/a9407576-b1bc-470a-b950-dd4fe9204616", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6d1022" },
-      body: JSON.stringify({
-        sessionId: "6d1022",
-        hypothesisId: "A-B",
-        location: "GuideOverlay.tsx:layout",
-        message: "guide tooltip layout",
-        data: {
-          guideId,
-          stepIndex,
-          stepTitle: step.title,
-          placement: step.placement ?? "bottom",
-          spot,
-          innerHeight: window.innerHeight,
-          innerWidth: window.innerWidth,
-          naiveTop,
-          naiveOverflow: naiveTop != null ? naiveTop + (tr?.height ?? tooltipH) - window.innerHeight : null,
-          actualTop: tr?.top ?? null,
-          actualBottom: tr?.bottom ?? null,
-          tooltipH: tr?.height ?? tooltipH,
-          bottomInset: bottomChromeInset(),
-          buttonsVisible: tr ? tr.bottom <= window.innerHeight - 8 : null,
-        },
-        timestamp: Date.now(),
-        runId: "post-fix",
-      }),
-    }).catch(() => {});
-  }, [open, step, stepIndex, spot, guideId, tooltipH]);
-  // #endregion
-
   if (!mounted || !open || !step) return null;
 
   const tooltipStyle = computeTooltipStyle(spot, step, tooltipH);

@@ -41,7 +41,11 @@ export async function getSwipeAllowance(uid: string): Promise<SwipeAllowance> {
 
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const used = await prisma.rating.count({
-    where: { userId: uid, decidedAt: { gte: cutoff } },
+    where: {
+      userId: uid,
+      decidedAt: { gte: cutoff },
+      decision: { in: ["like", "dislike", "seen"] },
+    },
   });
   const remaining = Math.max(0, FREE_DAILY_SWIPE_LIMIT - used);
 

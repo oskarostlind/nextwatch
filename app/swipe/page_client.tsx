@@ -11,6 +11,9 @@ import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { notify } from "@/app/components/lib/notify";
+import { bestWatchUrl } from "@/lib/watchLinks";
+import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
 
 /* ---------- types ---------- */
@@ -158,6 +161,42 @@ function parseDetails(d: unknown) {
       : null;
   return { overview, rating, poster, title, year: y };
 }
+/* ---------- "Kolla nu"-länk (direkt till streamingtjänsten, som i watchlist) ---------- */
+
+type ProvidersResp = {
+  ok: boolean;
+  providers: {
+    link?: string;
+    flatrate?: { provider_name: string }[];
+    rent?: { provider_name: string }[];
+    buy?: { provider_name: string }[];
+  } | null;
+};
+
+/** Hämtar bästa direktlänk till en streamingtjänst för titeln, eller null. */
+export async function fetchWatchUrl(
+  type: MediaType,
+  id: number,
+  title: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/tmdb/watch-providers?id=${id}&type=${type}`, {
+      cache: "force-cache",
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as ProvidersResp;
+    if (!j.ok || !j.providers) return null;
+    const names = [
+      ...(j.providers.flatrate ?? []),
+      ...(j.providers.rent ?? []),
+      ...(j.providers.buy ?? []),
+    ].map((p) => p.provider_name);
+    return bestWatchUrl(names, title, j.providers.link) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDetailsWithFallback(type: MediaType, id: number) {
   const p1 = fetch(`/api/tmdb/details?type=${type}&id=${id}`, {
     cache: "force-cache",
@@ -235,6 +274,15 @@ export default function SwipePageClient() {
                 }
               : c
           )
+        );
+      });
+    });
+    // "Kolla nu"-länk hämtas parallellt med details (separat endpoint).
+    toFetch.forEach((t) => {
+      const title = cards.find((c) => c.id === t.id)?.title ?? "";
+      void fetchWatchUrl(t.mediaType, t.tmdbId, title).then((url) => {
+        updateSoloCards((prev) =>
+          prev.map((c) => (c.id === t.id && c.watchUrl === undefined ? { ...c, watchUrl: url } : c))
         );
       });
     });
@@ -360,9 +408,13 @@ export default function SwipePageClient() {
         year: c.year,
         poster: c.poster,
       }),
-    }).catch(() => {
-      /* best-effort */
-    });
+    })
+      .then((res) => {
+        notify(res.ok ? "Sparad i watchlist" : "Kunde inte spara");
+      })
+      .catch(() => {
+        notify("Kunde inte spara");
+      });
   }
 
   /* ---------- render ---------- */
@@ -698,9 +750,15 @@ function Back({ card }: { card: Card }) {
       {typeof card.rating === "number" ? (
         <div className="text-sm text-emerald-300">Betyg: ★ {card.rating.toFixed(1)} / 10</div>
       ) : null}
-      <div className="mt-2 max-h-[75%] overflow-auto text-sm leading-relaxed opacity-90">
+      <div className="mt-2 min-h-0 flex-1 overflow-auto text-sm leading-relaxed opacity-90">
         {card.overview || "Ingen beskrivning tillgänglig."}
       </div>
+      {card.watchUrl !== undefined ? (
+        // stopPropagation så tap på knappen inte flippar tillbaka kortet.
+        <div className="mt-auto pt-2" onClick={(e) => e.stopPropagation()}>
+          <WatchNowButton url={card.watchUrl ?? undefined} />
+        </div>
+      ) : null}
     </div>
   );
 }

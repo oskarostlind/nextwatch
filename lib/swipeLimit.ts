@@ -12,7 +12,11 @@
 import { prisma } from "@/lib/prisma";
 import { getEntitlement } from "@/lib/entitlements";
 
-export const FREE_DAILY_SWIPE_LIMIT = 100;
+// Konfigureras via env (lokalt + Vercel). 0 eller osatt = obegränsat.
+// Sätt t.ex. FREE_DAILY_SWIPE_LIMIT=100 för att återaktivera gränsen.
+const rawLimit = Number(process.env.FREE_DAILY_SWIPE_LIMIT ?? "0");
+export const FREE_DAILY_SWIPE_LIMIT =
+  Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 0;
 
 export type SwipeAllowance = {
   isPremium: boolean;
@@ -28,6 +32,11 @@ export async function getSwipeAllowance(uid: string): Promise<SwipeAllowance> {
   const ent = await getEntitlement(uid);
   if (ent.isPremium) {
     return { isPremium: true, limit: null, used: 0, remaining: null, allowed: true };
+  }
+
+  // Gräns 0/osatt = obegränsat även för gratisanvändare (samma form som premium).
+  if (FREE_DAILY_SWIPE_LIMIT <= 0) {
+    return { isPremium: false, limit: null, used: 0, remaining: null, allowed: true };
   }
 
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);

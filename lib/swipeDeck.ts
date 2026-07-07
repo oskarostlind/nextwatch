@@ -11,6 +11,11 @@ export type SwipeCard = {
   poster: string | null;
   overview?: string | null;
   rating?: number | null;
+  /**
+   * Direktlänk till streamingtjänst ("Kolla nu").
+   * undefined = inte hämtad än, null = hämtad men ingen tjänst tillgänglig.
+   */
+  watchUrl?: string | null;
 };
 
 const HIDE_KEY = "nw_disliked_until";

@@ -19,6 +19,7 @@
 import crypto from "node:crypto";
 import http2 from "node:http2";
 import { prisma } from "@/lib/prisma";
+import { groupMatchNeed } from "@/lib/groupSettings";
 
 export type PushPayload = {
   title: string;
@@ -252,10 +253,13 @@ export async function notifyGroupMatchIfNeeded(
   tmdbType: "movie" | "tv"
 ): Promise<void> {
   try {
-    const size = await prisma.groupMember.count({ where: { groupCode } });
+    const [size, groupRow] = await Promise.all([
+      prisma.groupMember.count({ where: { groupCode } }),
+      prisma.group.findUnique({ where: { code: groupCode }, select: { matchThreshold: true } }),
+    ]);
     if (size === 0) return;
 
-    const need = Math.max(2, Math.ceil(size * 0.6));
+    const need = groupMatchNeed(size, groupRow?.matchThreshold);
     const likeCount = await prisma.groupVote.count({
       where: { groupCode, tmdbId, tmdbType, vote: "LIKE" },
     });

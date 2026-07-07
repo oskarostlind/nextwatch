@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
+import { groupMatchNeed } from "@/lib/groupSettings";
 
 type TmdbType = "movie" | "tv";
 
@@ -115,8 +116,11 @@ export async function GET(req: NextRequest) {
     }
     const locale = jar.get("nw_locale")?.value ?? "sv-SE";
 
-    const size = await prisma.groupMember.count({ where: { groupCode: code } });
-    const need = Math.max(2, Math.ceil(size * 0.6));
+    const [size, groupRow] = await Promise.all([
+      prisma.groupMember.count({ where: { groupCode: code } }),
+      prisma.group.findUnique({ where: { code }, select: { matchThreshold: true } }),
+    ]);
+    const need = groupMatchNeed(size, groupRow?.matchThreshold);
 
     // Ranka kandidater på antal LIKE
     const [top, seenRows] = await Promise.all([

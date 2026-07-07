@@ -1,24 +1,14 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useSocial } from "./client/SocialProvider";
 
-const POLL_MS = 5000;
 const TOAST_DURATION_MS = 5000;
 
 type Toast = {
   id: string;
   message: string;
   type: "friend" | "group";
-};
-
-type FriendsListPayload = {
-  ok?: boolean;
-  pendingIn?: { requestId: string; from: { id: string; username: string | null; displayName: string | null } }[];
-};
-
-type GroupInvitePayload = {
-  ok?: boolean;
-  incoming?: { id: string; groupCode: string; from?: { displayName: string | null; username: string | null } }[];
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
@@ -49,61 +39,41 @@ export default function InviteToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
 
+  // Läser den delade social-store:n (poller i SocialPreloader) — inga egna
+  // fetch-anrop här; komponenten diffar bara fram nya förfrågningar/inbjudningar.
+  const social = useSocial();
+
   useEffect(() => {
-    let stop = false;
+    const next: Toast[] = [];
 
-    const poll = async () => {
-      try {
-        const [friendsRes, groupRes] = await Promise.all([
-          fetch("/api/friends/list", { cache: "no-store" }),
-          fetch("/api/group/invite/list", { cache: "no-store" }),
-        ]);
-
-        if (stop) return;
-
-        const friendsData = (await friendsRes.json()) as FriendsListPayload;
-        const groupData = (await groupRes.json()) as GroupInvitePayload;
-
-        const next: Toast[] = [];
-
-        if (friendsData?.ok && Array.isArray(friendsData.pendingIn)) {
-          for (const p of friendsData.pendingIn) {
-            const id = `friend-${p.requestId}`;
-            if (seenRef.current.has(id)) continue;
-            seenRef.current.add(id);
-            const name = p.from?.displayName ?? p.from?.username ?? "Någon";
-            next.push({ id, message: `${name} vill bli vän med dig`, type: "friend" });
-          }
-        }
-
-        if (groupData?.ok && Array.isArray(groupData.incoming)) {
-          for (const inv of groupData.incoming) {
-            const id = `group-${inv.id}`;
-            if (seenRef.current.has(id)) continue;
-            seenRef.current.add(id);
-            const name = inv.from?.displayName ?? inv.from?.username ?? "Någon";
-            next.push({
-              id,
-              message: `${name} bjöd in dig till grupp ${inv.groupCode}`,
-              type: "group",
-            });
-          }
-        }
-
-        if (next.length > 0) {
-          setToasts((prev) => [...prev, ...next]);
-        }
-      } catch {
-        /* ignore */
+    if (social.friendsReady) {
+      for (const p of social.pendingIn) {
+        const id = `friend-${p.requestId}`;
+        if (seenRef.current.has(id)) continue;
+        seenRef.current.add(id);
+        const name = p.from?.displayName ?? p.from?.username ?? "Någon";
+        next.push({ id, message: `${name} vill bli vän med dig`, type: "friend" });
       }
-      if (!stop) setTimeout(poll, POLL_MS);
-    };
+    }
 
-    poll();
-    return () => {
-      stop = true;
-    };
-  }, []);
+    if (social.invitesReady) {
+      for (const inv of social.invitesIncoming) {
+        const id = `group-${inv.id}`;
+        if (seenRef.current.has(id)) continue;
+        seenRef.current.add(id);
+        const name = inv.from?.displayName ?? inv.from?.username ?? "Någon";
+        next.push({
+          id,
+          message: `${name} bjöd in dig till grupp ${inv.groupCode}`,
+          type: "group",
+        });
+      }
+    }
+
+    if (next.length > 0) {
+      setToasts((prev) => [...prev, ...next]);
+    }
+  }, [social]);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

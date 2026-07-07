@@ -1,34 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Search, Plus, Users, UserPlus, Check } from "lucide-react";
+import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
+import { useSocial } from "@/app/components/client/SocialProvider";
 import type { FriendsInitial } from "../page";
-
-type FriendsListUser = {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-};
-
-type FriendRowData = {
-  id?: string;
-  userId?: string;
-  username?: string | null;
-  displayName?: string | null;
-  other?: {
-    id?: string;
-    userId?: string;
-    username?: string | null;
-    displayName?: string | null;
-  };
-};
-
-type FriendsListApiResponse = {
-  ok?: boolean;
-  friends?: FriendRowData[];
-  pendingIn?: { requestId: string; from: FriendsListUser }[];
-  pendingOut?: { requestId: string; to: FriendsListUser }[];
-};
 
 type SearchRow = {
   id: string;
@@ -60,39 +36,24 @@ function displayName(u: { displayName?: string | null; username?: string | null;
 }
 
 export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
-  const [friends, setFriends] = useState<FriendsListUser[]>(initial.friends);
-  const [pendingIn, setPendingIn] = useState(initial.pendingIn);
-  const [pendingOut, setPendingOut] = useState(initial.pendingOut);
+  // Delad social-store: förladdad vid appstart + hålls färsk av den globala
+  // pollern (SocialPreloader i AppShell) — ingen egen fetch/interval här.
+  const social = useSocial();
+  const { friends, pendingIn, pendingOut } = social;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchRow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
 
-  const loadFriends = useCallback(async () => {
-    const res = await fetch("/api/friends/list", { cache: "no-store" });
-    if (!res.ok) return;
-    const data = (await res.json()) as FriendsListApiResponse;
-
-    if (data && data.ok) {
-      setFriends(
-        (data.friends || []).map((row) => {
-          const u = row.other || row;
-          return {
-            id: String(u.id ?? u.userId ?? ""),
-            username: u.username ?? null,
-            displayName: u.displayName ?? null,
-          };
-        })
-      );
-      setPendingIn(data.pendingIn || []);
-      setPendingOut(data.pendingOut || []);
-    }
-  }, []);
-
   useEffect(() => {
-    void loadFriends();
-  }, [loadFriends]);
+    // SSR-datan blir första snapshot (ingen flash) om store:n inte hunnit ladda.
+    hydrateSocialInitial({
+      friends: initial.friends,
+      pendingIn: initial.pendingIn,
+      pendingOut: initial.pendingOut,
+    });
+  }, [initial]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -119,21 +80,21 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
     const res = await apiCall<{ requestId: string }>("/api/friends/request", { toUserId: userId });
     if (!("error" in res)) {
       setSentToIds((prev) => new Set(prev).add(userId));
-      void loadFriends();
+      void refreshSocial();
     }
   };
 
   const acceptRequest = async (requestId: string) => {
     const res = await apiCall<{ ok: boolean }>("/api/friends/accept", { requestId });
     if (!("error" in res)) {
-      void loadFriends();
+      void refreshSocial();
     }
   };
 
   const declineRequest = async (requestId: string) => {
     const res = await apiCall<{ ok: boolean }>("/api/friends/decline", { requestId });
     if (!("error" in res)) {
-      void loadFriends();
+      void refreshSocial();
     }
   };
 

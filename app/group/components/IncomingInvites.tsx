@@ -6,7 +6,7 @@ import { useGroupInvites } from "@/lib/useGroupInvites";
 
 export default function IncomingInvites() {
   const router = useRouter();
-  const { data } = useGroupInvites(5000);
+  const { data, refresh } = useGroupInvites();
   const [busy, setBusy] = useState<string | null>(null);
 
   if (!data || !data.incoming?.length) return null;
@@ -42,6 +42,7 @@ export default function IncomingInvites() {
                   body: JSON.stringify({ id: inv.id, action: "accept" }),
                 });
                 setBusy(null);
+                void refresh();
                 if (res.ok) router.refresh();
               }}
             >
@@ -59,6 +60,7 @@ export default function IncomingInvites() {
                   body: JSON.stringify({ id: inv.id, action: "decline" }),
                 });
                 setBusy(null);
+                void refresh();
               }}
             >
               Avvisa

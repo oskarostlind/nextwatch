@@ -187,6 +187,15 @@ model Group {
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
 
+  // Gruppinställningar (kugghjulet, endast skaparen). Tomma/null = automatik:
+  // genrer/providers unionas från medlemmarnas profiler, åldersgräns från
+  // yngsta medlemmen och matchtröskeln är 60 %. Se lib/groupSettings.ts.
+  favoriteGenres String[] @default([]) @map("favorite_genres")
+  dislikedGenres String[] @default([]) @map("disliked_genres")
+  providers      Json     @default("[]")
+  maxCert        String?  @map("max_cert")
+  matchThreshold Int?     @map("match_threshold")
+
   members     GroupMember[]
   votes       GroupVote[]      @relation("GroupVotes")
   invites     GroupInvite[]

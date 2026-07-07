@@ -1,20 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+// Store-backad hook för gruppinbjudningar. Datan ägs av lib/socialStore.ts
+// (en gemensam poller startad av SocialPreloader i AppShell) — den här hooken
+// finns kvar som tunt API för befintliga konsumenter (IncomingInvites).
 
-export interface InviteUser {
-  id: string;
-  username: string | null;
-  displayName?: string | null;
-}
+import { useSocial } from '@/app/components/client/SocialProvider';
+import { refreshSocial, type GroupInviteItem, type SocialUser } from '@/lib/socialStore';
 
-export interface Invite {
-  id: string;
-  groupCode: string;
-  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
-  createdAt: string;
-  from: InviteUser; // den som skickade
-}
+export type InviteUser = SocialUser;
+export type Invite = GroupInviteItem;
 
 export interface InviteList {
   ok: boolean;
@@ -22,38 +16,18 @@ export interface InviteList {
   outgoing: Invite[];
 }
 
-export function useGroupInvites(pollMs = 5000) {
-  const [data, setData] = useState<InviteList | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useGroupInvites() {
+  const social = useSocial();
 
-  useEffect(() => {
-    let stop = false;
+  const data: InviteList | null = social.invitesReady
+    ? { ok: true, incoming: social.invitesIncoming, outgoing: social.invitesOutgoing }
+    : null;
 
-    const tick = async () => {
-      try {
-        const r = await fetch('/api/group/invite/list', { cache: 'no-store' });
-        const j: InviteList = await r.json();
-        if (!stop) {
-          setData(j);
-          setError(null);
-          setLoading(false);
-        }
-      } catch {
-        if (!stop) {
-          setError('fetch_failed');
-          setLoading(false);
-        }
-      } finally {
-        if (!stop) setTimeout(tick, pollMs);
-      }
-    };
-
-    tick();
-    return () => {
-      stop = true;
-    };
-  }, [pollMs]);
-
-  return { data, loading, error };
+  return {
+    data,
+    loading: !social.invitesReady,
+    error: null as string | null,
+    /** Hämta om direkt (t.ex. efter accept/decline). */
+    refresh: refreshSocial,
+  };
 }

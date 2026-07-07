@@ -11,12 +11,14 @@ import { motion, useAnimation, useMotionValue, useTransform } from "framer-motio
 import {
   StaticCard,
   fetchDetailsWithFallback,
+  fetchWatchUrl,
   SwipeStampOverlays,
   type Card,
 } from "../../swipe/page_client";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { notify } from "@/app/components/lib/notify";
 
 type MediaType = "movie" | "tv";
 
@@ -69,6 +71,14 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 }
               : c
           )
+        );
+      });
+    });
+    // "Kolla nu"-länk hämtas parallellt med details (samma mönster som solo).
+    toFetch.forEach((t) => {
+      void fetchWatchUrl(t.mediaType, t.tmdbId, t.title).then((url) => {
+        updateCards((prev) =>
+          prev.map((c) => (c.id === t.id && c.watchUrl === undefined ? { ...c, watchUrl: url } : c))
         );
       });
     });
@@ -346,7 +356,13 @@ export default function GroupSwipePage({ code }: { code: string }) {
               year: c.year,
               poster: c.poster,
             }),
-          }).catch(() => {});
+          })
+            .then((res) => {
+              notify(res.ok ? "Sparad i watchlist" : "Kunde inte spara");
+            })
+            .catch(() => {
+              notify("Kunde inte spara");
+            });
         }}
         onLike={() => void swipeOut("right")}
       />

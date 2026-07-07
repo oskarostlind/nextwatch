@@ -6,6 +6,7 @@
 // exakt samma scoring/MMR-pipeline utan att duplicera logik.
 
 import { prisma } from "@/lib/prisma";
+import { parseProvidersJson } from "@/lib/groupSettings";
 
 export type MediaType = "movie" | "tv";
 
@@ -287,13 +288,24 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
-    const [profile, ratings, watchlist, groupMembers] = await Promise.all([
+    const [profile, ratings, watchlist, groupMembers, groupRow] = await Promise.all([
       prisma.profile.findUnique({ where: { userId: uid } }),
       prisma.rating.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
       prisma.watchlist.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
       groupCode
         ? prisma.groupMember.findMany({ where: { groupCode }, include: { user: { include: { profile: true } } } })
         : Promise.resolve([]),
+      groupCode
+        ? prisma.group.findUnique({
+            where: { code: groupCode },
+            select: {
+              favoriteGenres: true,
+              dislikedGenres: true,
+              providers: true,
+              maxCert: true,
+            },
+          })
+        : Promise.resolve(null),
     ]);
 
     if (!profile) return fail("Ingen profil hittades.");
@@ -315,9 +327,18 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         })
       : [];
 
+    // Gruppinställningar (kugghjulet): satta värden åsidosätter automatiken,
+    // tomma/null faller tillbaka på medlemsaggregeringen nedan.
+    const groupProviderOverride = isGroup ? parseProvidersJson(groupRow?.providers) : [];
+    const groupLikedOverride = isGroup ? groupRow?.favoriteGenres ?? [] : [];
+    const groupDislikedOverride = isGroup ? groupRow?.dislikedGenres ?? [] : [];
+    const groupCertOverride = isGroup && groupRow?.maxCert ? groupRow.maxCert : null;
+
     // 2. Extrahera och slå ihop providers (för solo eller grupp)
     const providerStrings = new Set<string>();
-    if (isGroup) {
+    if (isGroup && groupProviderOverride.length > 0) {
+      groupProviderOverride.forEach((s) => providerStrings.add(s));
+    } else if (isGroup) {
       // Om grupp: Samla ALLA tjänster som någon i gruppen har (OR-logik via TMDB)
       for (const p of memberProfiles) {
         const pProviders = p.providers as string[] | undefined;
@@ -331,9 +352,11 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const usedProviderIds = getProviderIds(Array.from(providerStrings));
     const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join('|') : undefined;
 
-    // Åldersgräns i grupp: utgå från yngsta medlemmen (SE-certifiering).
+    // Åldersgräns i grupp: gruppinställning om satt, annars yngsta medlemmen (SE-certifiering).
     let certMax: string | undefined;
-    if (isGroup && memberProfiles.length > 0) {
+    if (groupCertOverride) {
+      certMax = groupCertOverride;
+    } else if (isGroup && memberProfiles.length > 0) {
       const ages = memberProfiles.map((p) => ageFromDob(new Date(p.dob)));
       certMax = seMaxCert(Math.min(...ages));
     }
@@ -354,7 +377,12 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // om INGEN i gruppen gillar dem (annars skulle en persons favorit straffas bort).
     let likedGenres: Set<string>;
     let dislikedGenres: Set<string>;
-    if (isGroup) {
+    if (isGroup && (groupLikedOverride.length > 0 || groupDislikedOverride.length > 0)) {
+      // Kugghjulet: satta genrer ersätter medlemsaggregeringen helt.
+      likedGenres = new Set(groupLikedOverride);
+      dislikedGenres = new Set(groupDislikedOverride);
+      for (const g of likedGenres) dislikedGenres.delete(g);
+    } else if (isGroup) {
       likedGenres = new Set<string>();
       dislikedGenres = new Set<string>();
       for (const p of memberProfiles) {
@@ -381,6 +409,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         sort_by: "popularity.desc",
         page: pageNum
       }, "force-cache"),
+      // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
+      // så åldersgränsen (certMax) kan bara appliceras på filmer.
       tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
         language: locale,
         region,

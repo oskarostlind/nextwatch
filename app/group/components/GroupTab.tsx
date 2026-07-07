@@ -185,6 +185,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <button
           type="button"
+          data-guide="group-start-swipe"
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
         >
@@ -280,7 +281,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-guide="group-create-join">
       {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">

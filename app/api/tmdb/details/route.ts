@@ -10,23 +10,29 @@ const TMDB = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p";
 const H = { Authorization: `Bearer ${process.env.TMDB_V4_TOKEN!}` };
 
+type Genre = { id: number; name: string };
+
 type MovieDetails = {
   id: number;
   title: string;
   overview: string;
   poster_path: string | null;
+  backdrop_path?: string | null;
   release_date?: string | null;
   vote_average?: number;
   vote_count?: number;
+  genres?: Genre[];
 };
 type TvDetails = {
   id: number;
   name: string;
   overview: string;
   poster_path: string | null;
+  backdrop_path?: string | null;
   first_air_date?: string | null;
   vote_average?: number;
   vote_count?: number;
+  genres?: Genre[];
 };
 type NormalizedDetails = {
   ok: true;
@@ -36,14 +42,24 @@ type NormalizedDetails = {
   overview: string;
   posterUrl: string | null;
   posterPath: string | null;
+  backdropUrl: string | null;
+  backdropPath: string | null;
   year: string | null;
   voteAverage: number | null;
   voteCount: number | null;
+  genres: string[];
   blurDataURL: string | null;
 };
 
 function posterUrl(path: string | null | undefined): string | null {
   return path ? `${IMG}/w500${path}` : null;
+}
+function backdropUrl(path: string | null | undefined): string | null {
+  return path ? `${IMG}/w780${path}` : null;
+}
+function genreNames(genres?: Genre[]): string[] {
+  if (!Array.isArray(genres)) return [];
+  return genres.map((g) => g.name).filter(Boolean);
 }
 function yearFromDate(d?: string | null): string | null {
   if (!d) return null;
@@ -107,9 +123,12 @@ export async function GET(req: Request) {
         overview: d.overview || "",
         posterUrl: posterUrl(d.poster_path),
         posterPath: d.poster_path ?? null,
+        backdropUrl: backdropUrl(d.backdrop_path),
+        backdropPath: d.backdrop_path ?? null,
         year: yearFromDate(d.release_date ?? null),
         voteAverage: typeof d.vote_average === "number" ? d.vote_average : null,
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
+        genres: genreNames(d.genres),
         blurDataURL,
       };
       return NextResponse.json(res);
@@ -124,9 +143,12 @@ export async function GET(req: Request) {
         overview: d.overview || "",
         posterUrl: posterUrl(d.poster_path),
         posterPath: d.poster_path ?? null,
+        backdropUrl: backdropUrl(d.backdrop_path),
+        backdropPath: d.backdrop_path ?? null,
         year: yearFromDate(d.first_air_date ?? null),
         voteAverage: typeof d.vote_average === "number" ? d.vote_average : null,
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
+        genres: genreNames(d.genres),
         blurDataURL,
       };
       return NextResponse.json(res);

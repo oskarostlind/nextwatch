@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import BottomTabs from "../navigation/BottomTabs";
@@ -9,6 +10,9 @@ import Toast from "../ui/Toast";
 import PushRegistration from "../client/PushRegistration";
 import SplashScreenHide from "../client/SplashScreenHide";
 import PremiumBadge from "../client/PremiumBadge";
+import GuideOverlay from "../client/GuideOverlay";
+import { NAV_GUIDE_STEPS } from "@/lib/guideSteps";
+import { hasAuthCookie, hasSeenGuide } from "@/lib/userGuide";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 import { SocialPreloader } from "../client/SocialProvider";
 
@@ -28,6 +32,16 @@ const MAIN_BOTTOM_PADDING =
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const hideChrome = PUBLIC_ROUTES.some((rx) => rx.test(pathname));
+  const [navGuideOpen, setNavGuideOpen] = useState(false);
+
+  useEffect(() => {
+    if (hideChrome) return;
+    if (!hasAuthCookie()) return;
+    if (!hasSeenGuide("swipe")) return;
+    if (hasSeenGuide("nav")) return;
+    const t = window.setTimeout(() => setNavGuideOpen(true), 600);
+    return () => window.clearTimeout(t);
+  }, [hideChrome, pathname]);
 
   if (hideChrome) {
     return (
@@ -59,6 +73,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <InviteToasts />
         <Toast />
       </div>
+
+      <GuideOverlay
+        guideId="nav"
+        steps={NAV_GUIDE_STEPS}
+        open={navGuideOpen}
+        onClose={() => setNavGuideOpen(false)}
+      />
     </div>
   );
 }

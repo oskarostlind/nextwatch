@@ -102,7 +102,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={cardClass}>
+      <div className={cardClass} data-guide="friends-search">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
           <input

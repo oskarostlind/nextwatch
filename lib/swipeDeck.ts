@@ -1,5 +1,16 @@
 export type SwipeMediaType = "movie" | "tv";
 
+export type SwipeProvider = {
+  provider_name: string;
+  logo_path: string | null;
+};
+
+export type SwipeProviders = {
+  flatrate?: SwipeProvider[];
+  rent?: SwipeProvider[];
+  buy?: SwipeProvider[];
+};
+
 export type SwipeCard = {
   id: string;
   /** "title" (default) = riktig film/serie, "ad" = annonskort (gratisanvändare). */
@@ -9,6 +20,8 @@ export type SwipeCard = {
   title: string;
   year: string | null;
   poster: string | null;
+  backdrop?: string | null;
+  genres?: string[];
   overview?: string | null;
   rating?: number | null;
   /**
@@ -16,6 +29,11 @@ export type SwipeCard = {
    * undefined = inte hämtad än, null = hämtad men ingen tjänst tillgänglig.
    */
   watchUrl?: string | null;
+  /**
+   * Streamingproviders för regionen.
+   * undefined = inte hämtad än, null = hämtad men ingen data.
+   */
+  providers?: SwipeProviders | null;
 };
 
 const HIDE_KEY = "nw_disliked_until";

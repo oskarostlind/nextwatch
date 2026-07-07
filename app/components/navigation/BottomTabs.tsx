@@ -29,6 +29,7 @@ export default function BottomTabs() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
+              data-guide={item.guideTarget}
               className="relative flex h-12 w-12 items-center justify-center"
             >
               {/* Animering för den aktiva bakgrunden ("pillen") – ikon-only, ingen text */}

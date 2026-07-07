@@ -11,7 +11,7 @@ import { motion, useAnimation, useMotionValue, useTransform } from "framer-motio
 import {
   StaticCard,
   fetchDetailsWithFallback,
-  fetchWatchUrl,
+  fetchWatchProviders,
   SwipeStampOverlays,
   type Card,
 } from "../../swipe/page_client";
@@ -52,7 +52,9 @@ export default function GroupSwipePage({ code }: { code: string }) {
   const rotate = useTransform(x, [-260, 260], [-16, 16]);
   const likeOpacity = useTransform(x, [48, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
-  const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
+  const seenOpacity = useTransform(y, [-120, -36], [1, 0]);
+  const seenScale = useTransform(y, [-120, -36], [0.88, 1.06]);
+  const seenRotate = useTransform(y, [-120, -36], [-6, 0]);
 
   // Hydrera details (poster/år/betyg/beskrivning) för topp-3 i stacken, som solo.
   const fetched = useRef<Set<string>>(new Set());
@@ -80,6 +82,8 @@ export default function GroupSwipePage({ code }: { code: string }) {
                   poster: c.poster ?? det.poster,
                   title: c.title || det.title,
                   year: c.year ?? det.year,
+                  genres: c.genres?.length ? c.genres : det.genres,
+                  backdrop: c.backdrop ?? det.backdrop,
                 }
               : c
           )
@@ -88,9 +92,13 @@ export default function GroupSwipePage({ code }: { code: string }) {
     });
     // "Kolla nu"-länk hämtas parallellt med details (samma mönster som solo).
     toFetch.forEach((t) => {
-      void fetchWatchUrl(t.mediaType, t.tmdbId, t.title).then((url) => {
+      void fetchWatchProviders(t.mediaType, t.tmdbId, t.title).then(({ watchUrl, providers }) => {
         updateCards((prev) =>
-          prev.map((c) => (c.id === t.id && c.watchUrl === undefined ? { ...c, watchUrl: url } : c))
+          prev.map((c) =>
+            c.id === t.id && c.watchUrl === undefined
+              ? { ...c, watchUrl, providers: providers ?? null }
+              : c
+          )
         );
       });
     });
@@ -309,6 +317,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 return (
                   <motion.div
                     key={card.id}
+                    data-guide="swipe-card"
                     className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                     style={{ x, y, rotate }}
                     animate={controls}
@@ -350,6 +359,8 @@ export default function GroupSwipePage({ code }: { code: string }) {
                       likeOpacity={likeOpacity}
                       nopeOpacity={nopeOpacity}
                       seenOpacity={seenOpacity}
+                      seenScale={seenScale}
+                      seenRotate={seenRotate}
                     />
                   </motion.div>
                 );
@@ -386,16 +397,18 @@ export default function GroupSwipePage({ code }: { code: string }) {
         )}
       </div>
 
-      <ActionDock
-        disabled={!cards[0] || showLoading}
-        onNope={() => void swipeOut("left")}
-        onInfo={() => {
-          const c = cards[0];
-          if (c) setFlippedId((p) => (p === c.id ? null : c.id));
-        }}
-        onUndo={handleUndo}
-        onLike={() => void swipeOut("right")}
-      />
+      <div data-guide="action-dock">
+        <ActionDock
+          disabled={!cards[0] || showLoading}
+          onNope={() => void swipeOut("left")}
+          onInfo={() => {
+            const c = cards[0];
+            if (c) setFlippedId((p) => (p === c.id ? null : c.id));
+          }}
+          onUndo={handleUndo}
+          onLike={() => void swipeOut("right")}
+        />
+      </div>
     </div>
   );
 }

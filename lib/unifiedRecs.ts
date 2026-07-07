@@ -11,7 +11,7 @@ import { parseProvidersJson } from "@/lib/groupSettings";
 export type MediaType = "movie" | "tv";
 
 /* ---------- TMDB shared types ---------- */
-type TMDBPaged<T> = { page: number; results: T[] };
+type TMDBPaged<T> = { page: number; results: T[]; total_pages?: number };
 type TMDBListItem = {
   id: number;
   name?: string;
@@ -398,35 +398,64 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const pageNum = Math.max(1, page);
 
     // 3. TMDB Discover med inbyggd provider-filtrering! (Detta löser N+1)
-    const [popMovie, popTv] = await Promise.all([
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
-        language: locale,
-        region,
-        watch_region: region,
-        with_watch_providers: tmdbProviderString,
-        certification_country: certMax ? "SE" : undefined,
-        "certification.lte": certMax,
-        sort_by: "popularity.desc",
-        page: pageNum
-      }, "force-cache"),
-      // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
-      // så åldersgränsen (certMax) kan bara appliceras på filmer.
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
-        language: locale,
-        region,
-        watch_region: region,
-        with_watch_providers: tmdbProviderString,
-        sort_by: "popularity.desc",
-        page: pageNum
-      }, "force-cache"),
-    ]);
+    // "popularity.desc" ger alltid samma topptitlar på sida 1. En användare som
+    // redan betygsatt/sparat de populäraste titlarna filtreras då bort helt
+    // (baseRaw = 0 → "Slut på förslag"). Vi skannar därför flera TMDB-sidor per
+    // API-sida tills vi har tillräckligt med OSEDDA kandidater.
+    const CANDIDATE_TARGET = 40;
+    const PAGES_PER_REQUEST = 6;
+    const startTmdbPage = (pageNum - 1) * PAGES_PER_REQUEST + 1;
 
     const baseRaw: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
-    for (const r of popMovie.results) {
-      if (!watchKeys.has(`movie_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
-    }
-    for (const r of popTv.results) {
-      if (!watchKeys.has(`tv_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+    const seenCandidate = new Set<string>();
+    let maxTmdbPages = 1;
+
+    for (let offset = 0; offset < PAGES_PER_REQUEST; offset++) {
+      const tmdbPage = startTmdbPage + offset;
+      if (tmdbPage > 500) break; // TMDB tillåter max 500 sidor.
+
+      const [popMovie, popTv] = await Promise.all([
+        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
+          language: locale,
+          region,
+          watch_region: region,
+          with_watch_providers: tmdbProviderString,
+          certification_country: certMax ? "SE" : undefined,
+          "certification.lte": certMax,
+          sort_by: "popularity.desc",
+          page: tmdbPage
+        }, "force-cache"),
+        // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
+        // så åldersgränsen (certMax) kan bara appliceras på filmer.
+        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
+          language: locale,
+          region,
+          watch_region: region,
+          with_watch_providers: tmdbProviderString,
+          sort_by: "popularity.desc",
+          page: tmdbPage
+        }, "force-cache"),
+      ]);
+
+      maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
+
+      for (const r of popMovie.results) {
+        const key = `movie_${r.id}`;
+        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+          seenCandidate.add(key);
+          baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
+        }
+      }
+      for (const r of popTv.results) {
+        const key = `tv_${r.id}`;
+        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+          seenCandidate.add(key);
+          baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+        }
+      }
+
+      if (baseRaw.length >= CANDIDATE_TARGET) break;
+      if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
     // Seeds (favoriter + watchlist – för taste). I grupp tar vi favoriter från ALLA

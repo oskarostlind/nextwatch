@@ -198,6 +198,11 @@ export function popSoloCard() {
   if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
 }
 
+export function unshiftSoloCard(card: SwipeCard) {
+  soloState = { ...soloState, cards: [card, ...soloState.cards] };
+  emit();
+}
+
 export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
   soloState = { ...soloState, cards: fn(soloState.cards) };
   emit();
@@ -253,6 +258,12 @@ export function popGroupCard(code: string) {
   const key = code.toUpperCase();
   const cur = groupDecks[key] ?? emptyGroup();
   setGroupDeck(key, { cards: cur.cards.slice(1) });
+}
+
+export function unshiftGroupCard(code: string, card: SwipeCard) {
+  const key = code.toUpperCase();
+  const cur = groupDecks[key] ?? emptyGroup();
+  setGroupDeck(key, { cards: [card, ...cur.cards] });
 }
 
 export function updateGroupCards(code: string, fn: (cards: SwipeCard[]) => SwipeCard[]) {

@@ -19,6 +19,8 @@ import {
   updateSoloCards,
   type GroupDeckState,
   type SoloDeckState,
+  unshiftGroupCard,
+  unshiftSoloCard,
 } from "@/lib/swipeDeckStore";
 import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsFeatureEnabled } from "@/lib/ads";
@@ -93,6 +95,7 @@ export function useSoloSwipeDeck() {
     updateSoloCards,
     retrySoloDeck,
     ensureSoloDeck,
+    unshiftSoloCard,
   };
 }
 
@@ -116,5 +119,6 @@ export function useGroupSwipeDeck(code: string) {
     updateCards: (fn: (cards: SwipeCard[]) => SwipeCard[]) =>
       updateGroupCards(normalized, fn),
     retry: () => ensureGroupDeck(normalized, { force: true }),
+    unshiftCard: (card: SwipeCard) => unshiftGroupCard(normalized, card),
   };
 }

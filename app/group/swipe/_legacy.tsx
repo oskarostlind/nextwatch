@@ -19,17 +19,29 @@ import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 import { notify } from "@/app/components/lib/notify";
+import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 
 type MediaType = "movie" | "tv";
+
+type SwipeAction = "like" | "dislike" | "seen";
+
+type UndoEntry = {
+  card: Card;
+  action: SwipeAction;
+};
+
+const UNDO_MAX = 5;
 
 type MatchResp =
   | { ok: true; match: { tmdbId: number; tmdbType: MediaType } | null }
   | { ok: false };
 
 export default function GroupSwipePage({ code }: { code: string }) {
-  const { deck, popCard, updateCards } = useGroupSwipeDeck(code);
+  const { deck, popCard, updateCards, unshiftCard } = useGroupSwipeDeck(code);
   const { cards, loading, error, ready } = deck;
   const showLoading = cards.length === 0 && (loading || !ready);
+
+  const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
@@ -168,12 +180,21 @@ export default function GroupSwipePage({ code }: { code: string }) {
     });
   }
 
+  function recordUndo(c: Card, action: SwipeAction) {
+    undoStackRef.current = [{ card: c, action }, ...undoStackRef.current].slice(0, UNDO_MAX);
+  }
+
   function handleDislike(c: Card): void {
+    recordUndo(c, "dislike");
+    markSeen(c.id);
+    hideFor7Days(c.tmdbId);
     popTop();
     sendVote(c, "DISLIKE");
   }
 
   function handleLike(c: Card): void {
+    recordUndo(c, "like");
+    markSeen(c.id);
     popTop();
     void fetch("/api/watchlist/like", {
       method: "POST",
@@ -193,9 +214,39 @@ export default function GroupSwipePage({ code }: { code: string }) {
   }
 
   function handleSeen(c: Card): void {
+    recordUndo(c, "seen");
+    markSeen(c.id);
+    hideFor7Days(c.tmdbId);
     popTop();
     saveSeenRating(c);
     sendVote(c, "DISLIKE");
+  }
+
+  function handleUndo(): void {
+    const entry = undoStackRef.current[0];
+    if (!entry) {
+      notify("Inget att ångra");
+      return;
+    }
+    undoStackRef.current = undoStackRef.current.slice(1);
+    unmarkSeen(entry.card.id);
+    if (entry.action === "dislike" || entry.action === "seen") {
+      unhide(entry.card.tmdbId);
+    }
+    unshiftCard(entry.card);
+    void fetch("/api/swipe/undo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: entry.card.tmdbId,
+        mediaType: entry.card.mediaType,
+        action: entry.action,
+        groupCode: code,
+      }),
+    }).catch(() => {
+      notify("Kunde inte ångra på servern");
+    });
   }
 
   /* ---------- render (identisk med solo-swipen) ---------- */
@@ -342,28 +393,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
           const c = cards[0];
           if (c) setFlippedId((p) => (p === c.id ? null : c.id));
         }}
-        onWatchlist={() => {
-          const c = cards[0];
-          if (!c) return;
-          void fetch("/api/watchlist/like", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store",
-            body: JSON.stringify({
-              tmdbId: c.tmdbId,
-              mediaType: c.mediaType,
-              title: c.title,
-              year: c.year,
-              poster: c.poster,
-            }),
-          })
-            .then((res) => {
-              notify(res.ok ? "Sparad i watchlist" : "Kunde inte spara");
-            })
-            .catch(() => {
-              notify("Kunde inte spara");
-            });
-        }}
+        onUndo={handleUndo}
         onLike={() => void swipeOut("right")}
       />
     </div>

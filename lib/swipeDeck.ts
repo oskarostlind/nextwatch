@@ -45,6 +45,39 @@ function readHideMap(): Record<string, number> {
   }
 }
 
+function writeHideMap(map: Record<string, number>) {
+  localStorage.setItem(HIDE_KEY, JSON.stringify(map));
+}
+
+export function markSeen(id: string) {
+  const s = readSeen();
+  s.add(id);
+  writeSeen(s);
+}
+
+export function unmarkSeen(id: string) {
+  const s = readSeen();
+  s.delete(id);
+  writeSeen(s);
+}
+
+export function hideFor7Days(tmdbId: number) {
+  const map = readHideMap();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  map[String(tmdbId)] = Date.now() + sevenDays;
+  writeHideMap(map);
+}
+
+export function unhide(tmdbId: number) {
+  const map = readHideMap();
+  delete map[String(tmdbId)];
+  writeHideMap(map);
+}
+
+function writeSeen(seen: Set<string>) {
+  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
+}
+
 function isHidden(tmdbId: number): boolean {
   const map = readHideMap();
   const until = map[String(tmdbId)];

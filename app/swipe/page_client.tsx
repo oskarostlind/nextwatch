@@ -8,6 +8,7 @@ import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard } from "@/lib/swipeDeck";
+import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
@@ -34,50 +35,18 @@ type MatchResp =
     }
   | { ok: false; message?: string };
 
-/* ---------- Local hide/seen helpers ---------- */
+type SwipeAction = "like" | "dislike" | "seen";
 
-const HIDE_KEY = "nw_disliked_until";
-const SEEN_KEY = "nw_seen_ids";
+type UndoEntry = {
+  card: Card;
+  action: SwipeAction;
+  groupCode?: string;
+};
 
-function readHideMap(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(HIDE_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw) as unknown;
-    return obj && typeof obj === "object" ? (obj as Record<string, number>) : {};
-  } catch {
-    return {};
-  }
-}
-function writeHideMap(map: Record<string, number>) {
-  localStorage.setItem(HIDE_KEY, JSON.stringify(map));
-}
-function hideFor7Days(tmdbId: number) {
-  const map = readHideMap();
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
-  map[String(tmdbId)] = Date.now() + sevenDays;
-  writeHideMap(map);
-}
+const UNDO_MAX = 5;
 
-/** Kort som redan swipats lokalt — används vid markSeen/hide. */
-function readSeen(): Set<string> {
-  try {
-    const raw = localStorage.getItem(SEEN_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return new Set();
-    return new Set(arr.filter((x): x is string => typeof x === "string"));
-  } catch {
-    return new Set();
-  }
-}
-function writeSeen(seen: Set<string>) {
-  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
-}
-function markSeen(id: string) {
-  const s = readSeen();
-  s.add(id);
-  writeSeen(s);
+function pushUndo(stack: UndoEntry[], entry: UndoEntry): UndoEntry[] {
+  return [entry, ...stack].slice(0, UNDO_MAX);
 }
 
 function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
@@ -225,10 +194,12 @@ let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { solo, popSoloCard, updateSoloCards, retrySoloDeck } = useSoloSwipeDeck();
+  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } = useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
   const feedLoading = cards.length === 0 && (loading || !ready);
   const feedError = cards.length === 0 ? error : null;
+
+  const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
@@ -361,8 +332,15 @@ export default function SwipePageClient() {
 
   /* ---------- actions (optimistic: popTop direkt; API i bakgrunden) ---------- */
 
+  function recordUndo(c: Card, action: SwipeAction) {
+    if (c.kind === "ad") return;
+    const groupCode = mode === "group" && group?.code ? group.code : undefined;
+    undoStackRef.current = pushUndo(undoStackRef.current, { card: c, action, groupCode });
+  }
+
   function handleDislike(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "dislike");
@@ -372,6 +350,7 @@ export default function SwipePageClient() {
 
   function handleLike(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "like");
     markSeen(c.id);
     saveRating(c, "like");
     popTop();
@@ -394,6 +373,7 @@ export default function SwipePageClient() {
 
   function handleSeen(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "seen");
@@ -424,26 +404,32 @@ export default function SwipePageClient() {
       });
   }
 
-  function handleWatchlistOnly(c: Card): void {
-    if (c.kind === "ad") return;
-    void fetch("/api/watchlist/like", {
+  function handleUndo(): void {
+    const entry = undoStackRef.current[0];
+    if (!entry) {
+      notify("Inget att ångra");
+      return;
+    }
+    undoStackRef.current = undoStackRef.current.slice(1);
+    setRatePrompt(null);
+    unmarkSeen(entry.card.id);
+    if (entry.action === "dislike" || entry.action === "seen") {
+      unhide(entry.card.tmdbId);
+    }
+    unshiftSoloCard(entry.card);
+    void fetch("/api/swipe/undo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
       body: JSON.stringify({
-        tmdbId: c.tmdbId,
-        mediaType: c.mediaType,
-        title: c.title,
-        year: c.year,
-        poster: c.poster,
+        tmdbId: entry.card.tmdbId,
+        mediaType: entry.card.mediaType,
+        action: entry.action,
+        groupCode: entry.groupCode,
       }),
-    })
-      .then((res) => {
-        notify(res.ok ? "Sparad i watchlist" : "Kunde inte spara");
-      })
-      .catch(() => {
-        notify("Kunde inte spara");
-      });
+    }).catch(() => {
+      notify("Kunde inte ångra på servern");
+    });
   }
 
   /* ---------- render ---------- */
@@ -608,10 +594,7 @@ export default function SwipePageClient() {
           const c = cards[0];
           if (c) setFlippedId((p) => (p === c.id ? null : c.id));
         }}
-        onWatchlist={() => {
-          const c = cards[0];
-          if (c) handleWatchlistOnly(c);
-        }}
+        onUndo={handleUndo}
         onLike={() => void swipeOut("right")}
       />
     </div>

@@ -7,6 +7,7 @@ import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, Chip, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
+import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 
 export type FavoriteItem = {
   id: number;
@@ -757,10 +758,17 @@ function SettingsTab() {
             </p>
             {billing.plan !== "lifetime" &&
               (billing.source === "apple" || ios ? (
-                <p className="text-xs text-white/50">
-                  Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn →
-                  Prenumerationer.
-                </p>
+                <div className="grid gap-2">
+                  {ios && (
+                    <Button variant="secondary" onClick={() => void openSubscriptionManagement()}>
+                      Hantera i App Store
+                    </Button>
+                  )}
+                  <p className="text-xs text-white/50">
+                    Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn →
+                    Prenumerationer.
+                  </p>
+                </div>
               ) : (
                 <Button variant="secondary" onClick={openStripePortal} disabled={portalBusy}>
                   {portalBusy ? "Öppnar…" : "Hantera prenumeration"}

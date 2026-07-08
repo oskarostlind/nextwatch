@@ -19,6 +19,10 @@ type NormalizedItem = {
   year?: string;
   rating?: number;
   posterUrl: string;
+  addedAt?: string;
+  voteAverage?: number | null;
+  popularity?: number | null;
+  genreIds?: number[];
 };
 
 const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w500';
@@ -89,6 +93,12 @@ function pickRating(o: UnknownRecord): number | undefined {
   return getNumber(o, 'rating') ?? getNumber(o, 'vote_average') ?? getNumber(o, 'score');
 }
 
+function pickGenreIds(o: UnknownRecord): number[] {
+  const v = o.genreIds;
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+}
+
 function normalize(raw: UnknownRecord): NormalizedItem | null {
   const id =
     getNumber(raw, 'tmdbId') ??
@@ -102,8 +112,23 @@ function normalize(raw: UnknownRecord): NormalizedItem | null {
   const year = pickYear(raw);
   const rating = pickRating(raw);
   const posterUrl = pickPosterUrl(raw);
+  const addedAt = getString(raw, 'addedAt');
+  const voteAverage = getNumber(raw, 'voteAverage') ?? getNumber(raw, 'vote_average') ?? null;
+  const popularity = getNumber(raw, 'popularity') ?? null;
+  const genreIds = pickGenreIds(raw);
 
-  return { id, tmdbType, title, year, rating, posterUrl };
+  return {
+    id,
+    tmdbType,
+    title,
+    year,
+    rating,
+    posterUrl,
+    addedAt,
+    voteAverage,
+    popularity,
+    genreIds,
+  };
 }
 
 async function getWatchlistServer(): Promise<NormalizedItem[]> {
@@ -137,7 +162,7 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du gillat och vill se." />
+      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du vill se — och betyg på dem du redan sett." />
       <WatchlistClient items={items} />
     </main>
   );

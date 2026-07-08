@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../lib/prisma";
+import { getSwipeAllowance, swipeLimitPayload } from "../../../lib/swipeLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,9 +21,15 @@ export async function POST(req: Request) {
     const { tmdbId, mediaType, decision } = body as { tmdbId:number; mediaType:"movie"|"tv"; decision:Decision };
     if (!tmdbId || (mediaType!=="movie" && mediaType!=="tv")) throw new Error("bad input");
 
+    // Daglig swipegräns för gratisanvändare (premium = obegränsat).
+    const allowance = await getSwipeAllowance(uid);
+    if (!allowance.allowed) {
+      return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
+    }
+
     await prisma.rating.upsert({
       where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
-      update: { decision, decidedAt: new Date() },
+      update: { decision, decidedAt: new Date(), rating: null },
       create: { id: newId(), userId: uid, tmdbId, mediaType, decision },
     });
     return NextResponse.json({ ok: true });

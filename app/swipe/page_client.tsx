@@ -3,12 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { ChevronUp, Eye, Heart, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
-import type { SwipeCard } from "@/lib/swipeDeck";
+import type { SwipeCard, SwipeProviders } from "@/lib/swipeDeck";
+import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
+import { goPremium } from "@/lib/premiumPurchase";
+import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { notify } from "@/app/components/lib/notify";
+import { bestWatchUrl, providerWatchUrl } from "@/lib/watchLinks";
+import WatchNowButton from "@/app/components/watch/WatchNowButton";
+import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
+import RatingModal from "@/app/components/client/RatingModal";
+import GuideOverlay from "@/app/components/client/GuideOverlay";
+import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
+import { hasSeenGuide } from "@/lib/userGuide";
 
 /* ---------- types ---------- */
 
@@ -27,50 +39,18 @@ type MatchResp =
     }
   | { ok: false; message?: string };
 
-/* ---------- Local hide/seen helpers ---------- */
+type SwipeAction = "like" | "dislike" | "seen";
 
-const HIDE_KEY = "nw_disliked_until";
-const SEEN_KEY = "nw_seen_ids";
+type UndoEntry = {
+  card: Card;
+  action: SwipeAction;
+  groupCode?: string;
+};
 
-function readHideMap(): Record<string, number> {
-  try {
-    const raw = localStorage.getItem(HIDE_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw) as unknown;
-    return obj && typeof obj === "object" ? (obj as Record<string, number>) : {};
-  } catch {
-    return {};
-  }
-}
-function writeHideMap(map: Record<string, number>) {
-  localStorage.setItem(HIDE_KEY, JSON.stringify(map));
-}
-function hideFor7Days(tmdbId: number) {
-  const map = readHideMap();
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
-  map[String(tmdbId)] = Date.now() + sevenDays;
-  writeHideMap(map);
-}
+const UNDO_MAX = 5;
 
-/** Kort som redan swipats lokalt — används vid markSeen/hide. */
-function readSeen(): Set<string> {
-  try {
-    const raw = localStorage.getItem(SEEN_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return new Set();
-    return new Set(arr.filter((x): x is string => typeof x === "string"));
-  } catch {
-    return new Set();
-  }
-}
-function writeSeen(seen: Set<string>) {
-  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
-}
-function markSeen(id: string) {
-  const s = readSeen();
-  s.add(id);
-  writeSeen(s);
+function pushUndo(stack: UndoEntry[], entry: UndoEntry): UndoEntry[] {
+  return [entry, ...stack].slice(0, UNDO_MAX);
 }
 
 function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
@@ -83,9 +63,14 @@ function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
       mediaType: c.mediaType,
       decision,
     }),
-  }).catch(() => {
-    /* best-effort */
-  });
+  })
+    .then((res) => {
+      // 429 = daglig swipegräns nådd — visa väggen (SwipeLimitWall lyssnar).
+      reportSwipeLimitFrom(res);
+    })
+    .catch(() => {
+      /* best-effort */
+    });
 }
 
 /* ---------- Details helpers (fallback sv → en) ---------- */
@@ -105,6 +90,9 @@ type DetailsDTO = {
   voteAverage?: number | null;
   rating?: number | null;
   name?: string;
+  genres?: string[];
+  backdropUrl?: string | null;
+  backdropPath?: string | null;
 };
 function parseDetails(d: unknown) {
   if (typeof d !== "object" || !d) return null;
@@ -148,8 +136,78 @@ function parseDetails(d: unknown) {
       : typeof o.releaseYear === "number"
       ? String(o.releaseYear)
       : null;
-  return { overview, rating, poster, title, year: y };
+  const genres = Array.isArray(o.genres)
+    ? o.genres.filter((g): g is string => typeof g === "string" && g.length > 0)
+    : [];
+  const backdropRaw =
+    typeof o.backdropUrl === "string"
+      ? o.backdropUrl
+      : typeof o.backdropPath === "string"
+      ? o.backdropPath.startsWith("http")
+        ? o.backdropPath
+        : `https://image.tmdb.org/t/p/w780${o.backdropPath}`
+      : null;
+  const backdrop = backdropRaw && backdropRaw.length > 0 ? backdropRaw : null;
+  return { overview, rating, poster, title, year: y, genres, backdrop };
 }
+/* ---------- "Kolla nu"-länk (direkt till streamingtjänsten, som i watchlist) ---------- */
+
+type ProvidersResp = {
+  ok: boolean;
+  providers: {
+    link?: string;
+    flatrate?: { provider_name: string; logo_path: string | null }[];
+    rent?: { provider_name: string; logo_path: string | null }[];
+    buy?: { provider_name: string; logo_path: string | null }[];
+  } | null;
+};
+
+export type WatchProviderResult = {
+  watchUrl: string | null;
+  providers: SwipeProviders | null;
+};
+
+/** Hämtar providers + bästa direktlänk för titeln. */
+export async function fetchWatchProviders(
+  type: MediaType,
+  id: number,
+  title: string
+): Promise<WatchProviderResult> {
+  try {
+    const res = await fetch(`/api/tmdb/watch-providers?id=${id}&type=${type}`, {
+      cache: "force-cache",
+    });
+    if (!res.ok) return { watchUrl: null, providers: null };
+    const j = (await res.json()) as ProvidersResp;
+    if (!j.ok || !j.providers) return { watchUrl: null, providers: null };
+    const names = [
+      ...(j.providers.flatrate ?? []),
+      ...(j.providers.rent ?? []),
+      ...(j.providers.buy ?? []),
+    ].map((p) => p.provider_name);
+    return {
+      watchUrl: bestWatchUrl(names, title, j.providers.link) ?? null,
+      providers: {
+        flatrate: j.providers.flatrate,
+        rent: j.providers.rent,
+        buy: j.providers.buy,
+      },
+    };
+  } catch {
+    return { watchUrl: null, providers: null };
+  }
+}
+
+/** Hämtar bästa direktlänk till en streamingtjänst för titeln, eller null. */
+export async function fetchWatchUrl(
+  type: MediaType,
+  id: number,
+  title: string
+): Promise<string | null> {
+  const r = await fetchWatchProviders(type, id, title);
+  return r.watchUrl;
+}
+
 export async function fetchDetailsWithFallback(type: MediaType, id: number) {
   const p1 = fetch(`/api/tmdb/details?type=${type}&id=${id}`, {
     cache: "force-cache",
@@ -177,12 +235,20 @@ let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { solo, popSoloCard, updateSoloCards, retrySoloDeck } = useSoloSwipeDeck();
+  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } = useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
   const feedLoading = cards.length === 0 && (loading || !ready);
   const feedError = cards.length === 0 ? error : null;
 
+  const undoStackRef = useRef<UndoEntry[]>([]);
+
   const [flippedId, setFlippedId] = useState<string | null>(null);
+
+  // Betygs-popup efter swipe upp ("Sett"). Kortet är redan sparat som "seen"
+  // — popupen är valfri och lägger bara till ett 1–10-betyg ovanpå.
+  const [ratePrompt, setRatePrompt] = useState<Card | null>(null);
+  const [ratingSaving, setRatingSaving] = useState(false);
+  const [swipeGuideOpen, setSwipeGuideOpen] = useState(false);
 
   const controls = useAnimation();
 
@@ -192,7 +258,9 @@ export default function SwipePageClient() {
   const rotate = useTransform(x, [-260, 260], [-16, 16]);
   const likeOpacity = useTransform(x, [48, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
-  const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
+  const seenOpacity = useTransform(y, [-120, -36], [1, 0]);
+  const seenScale = useTransform(y, [-120, -36], [0.88, 1.06]);
+  const seenRotate = useTransform(y, [-120, -36], [-6, 0]);
 
   // lazy hydrering av details på topp- och nästa korten i stacken (parallellt)
   const fetched = useRef<Set<string>>(new Set());
@@ -224,7 +292,22 @@ export default function SwipePageClient() {
                   poster: c.poster ?? det.poster,
                   title: c.title || det.title,
                   year: c.year ?? det.year,
+                  genres: c.genres?.length ? c.genres : det.genres,
+                  backdrop: c.backdrop ?? det.backdrop,
                 }
+              : c
+          )
+        );
+      });
+    });
+    // "Kolla nu"-länk hämtas parallellt med details (separat endpoint).
+    toFetch.forEach((t) => {
+      const title = cards.find((c) => c.id === t.id)?.title ?? "";
+      void fetchWatchProviders(t.mediaType, t.tmdbId, title).then(({ watchUrl, providers }) => {
+        updateSoloCards((prev) =>
+          prev.map((c) =>
+            c.id === t.id && c.watchUrl === undefined
+              ? { ...c, watchUrl, providers: providers ?? null }
               : c
           )
         );
@@ -233,11 +316,30 @@ export default function SwipePageClient() {
   }, [cards, updateSoloCards]);
 
   useEffect(() => {
+    if (feedLoading || ratePrompt) return;
+    const top = cards[0];
+    if (!top || top.kind === "ad") return;
+    if (hasSeenGuide("swipe")) return;
+    const t = window.setTimeout(() => setSwipeGuideOpen(true), 700);
+    return () => window.clearTimeout(t);
+  }, [feedLoading, cards, ratePrompt]);
+
+  useEffect(() => {
     if (mode === "group" && group?.code && !groupRefreshAttempted) {
       groupRefreshAttempted = true;
       router.refresh();
     }
   }, [mode, group?.code, router]);
+
+  // Upsell-popup: räkna annonsvisningar (när ett annonskort blir överst) och
+  // trigga popupen var 3:e annons — en gång per session (se PremiumUpsellModal).
+  const countedAds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const top = cards[0];
+    if (!top || top.kind !== "ad" || countedAds.current.has(top.id)) return;
+    countedAds.current.add(top.id);
+    maybeTriggerAdUpsell();
+  }, [cards]);
 
   function popTop() {
     setFlippedId(null);
@@ -289,8 +391,15 @@ export default function SwipePageClient() {
 
   /* ---------- actions (optimistic: popTop direkt; API i bakgrunden) ---------- */
 
+  function recordUndo(c: Card, action: SwipeAction) {
+    if (c.kind === "ad") return;
+    const groupCode = mode === "group" && group?.code ? group.code : undefined;
+    undoStackRef.current = pushUndo(undoStackRef.current, { card: c, action, groupCode });
+  }
+
   function handleDislike(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "dislike");
@@ -300,6 +409,7 @@ export default function SwipePageClient() {
 
   function handleLike(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "like");
     markSeen(c.id);
     saveRating(c, "like");
     popTop();
@@ -322,28 +432,62 @@ export default function SwipePageClient() {
 
   function handleSeen(c: Card): void {
     if (c.kind === "ad") { popTop(); return; }
+    recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
     saveRating(c, "seen");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
+    setRatePrompt(c);
   }
 
-  function handleWatchlistOnly(c: Card): void {
-    if (c.kind === "ad") return;
-    void fetch("/api/watchlist/like", {
+  function submitSeenRating(rating: number): void {
+    const c = ratePrompt;
+    if (!c) return;
+    setRatingSaving(true);
+    void fetch("/api/ratings/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, rating }),
+    })
+      .then((res) => {
+        if (!res.ok) notify("Kunde inte spara betyget");
+      })
+      .catch(() => {
+        notify("Kunde inte spara betyget");
+      })
+      .finally(() => {
+        setRatingSaving(false);
+        setRatePrompt(null);
+      });
+  }
+
+  function handleUndo(): void {
+    const entry = undoStackRef.current[0];
+    if (!entry) {
+      notify("Inget att ångra");
+      return;
+    }
+    undoStackRef.current = undoStackRef.current.slice(1);
+    setRatePrompt(null);
+    unmarkSeen(entry.card.id);
+    if (entry.action === "dislike" || entry.action === "seen") {
+      unhide(entry.card.tmdbId);
+    }
+    unshiftSoloCard(entry.card);
+    void fetch("/api/swipe/undo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
       body: JSON.stringify({
-        tmdbId: c.tmdbId,
-        mediaType: c.mediaType,
-        title: c.title,
-        year: c.year,
-        poster: c.poster,
+        tmdbId: entry.card.tmdbId,
+        mediaType: entry.card.mediaType,
+        action: entry.action,
+        groupCode: entry.groupCode,
       }),
     }).catch(() => {
-      /* best-effort */
+      notify("Kunde inte ångra på servern");
     });
   }
 
@@ -378,6 +522,26 @@ export default function SwipePageClient() {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <SwipeLimitWall />
+      <PremiumUpsellModal />
+      <RatingModal
+        open={ratePrompt !== null}
+        item={
+          ratePrompt
+            ? {
+                tmdbId: ratePrompt.tmdbId,
+                mediaType: ratePrompt.mediaType,
+                title: ratePrompt.title,
+                year: ratePrompt.year,
+                poster: ratePrompt.poster,
+              }
+            : null
+        }
+        heading="Vad tyckte du?"
+        saving={ratingSaving}
+        onRate={submitSeenRating}
+        onSkip={() => setRatePrompt(null)}
+      />
       {mode === "group" && group?.code && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
           Grupp: <span className="font-mono tracking-wider">{group.code}</span>
@@ -411,6 +575,7 @@ export default function SwipePageClient() {
               return (
                 <motion.div
                   key={card.id}
+                  data-guide="swipe-card"
                   className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                   style={{ x, y, rotate }}
                   animate={controls}
@@ -452,6 +617,8 @@ export default function SwipePageClient() {
                     likeOpacity={likeOpacity}
                     nopeOpacity={nopeOpacity}
                     seenOpacity={seenOpacity}
+                    seenScale={seenScale}
+                    seenRotate={seenRotate}
                   />
                 </motion.div>
               );
@@ -482,18 +649,24 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      <ActionDock
-        disabled={!cards[0] || feedLoading}
-        onNope={() => void swipeOut("left")}
-        onInfo={() => {
-          const c = cards[0];
-          if (c) setFlippedId((p) => (p === c.id ? null : c.id));
-        }}
-        onWatchlist={() => {
-          const c = cards[0];
-          if (c) handleWatchlistOnly(c);
-        }}
-        onLike={() => void swipeOut("right")}
+      <div data-guide="action-dock">
+        <ActionDock
+          disabled={!cards[0] || feedLoading}
+          onNope={() => void swipeOut("left")}
+          onInfo={() => {
+            const c = cards[0];
+            if (c) setFlippedId((p) => (p === c.id ? null : c.id));
+          }}
+          onUndo={handleUndo}
+          onLike={() => void swipeOut("right")}
+        />
+      </div>
+
+      <GuideOverlay
+        guideId="swipe"
+        steps={SWIPE_GUIDE_STEPS}
+        open={swipeGuideOpen}
+        onClose={() => setSwipeGuideOpen(false)}
       />
     </div>
   );
@@ -505,30 +678,42 @@ export function SwipeStampOverlays({
   likeOpacity,
   nopeOpacity,
   seenOpacity,
+  seenScale,
+  seenRotate,
 }: {
   likeOpacity: MotionValue<number>;
   nopeOpacity: MotionValue<number>;
   seenOpacity: MotionValue<number>;
+  seenScale: MotionValue<number>;
+  seenRotate: MotionValue<number>;
 }) {
   return (
     <>
       <motion.div
         style={{ opacity: likeOpacity }}
-        className="pointer-events-none absolute left-5 top-8 z-20 -rotate-12 rounded-lg border-4 border-emerald-400 px-3 py-1 text-2xl font-black uppercase tracking-widest text-emerald-400"
+        className="pointer-events-none absolute left-5 top-8 z-20 flex -rotate-12 items-center gap-2 rounded-lg border-4 border-emerald-400 px-3 py-1.5 text-2xl font-black uppercase tracking-widest text-emerald-400"
       >
+        <Heart className="h-7 w-7 fill-current" strokeWidth={2.5} />
         Gilla
       </motion.div>
       <motion.div
         style={{ opacity: nopeOpacity }}
-        className="pointer-events-none absolute right-5 top-8 z-20 rotate-12 rounded-lg border-4 border-rose-400 px-3 py-1 text-2xl font-black uppercase tracking-widest text-rose-400"
+        className="pointer-events-none absolute right-5 top-8 z-20 flex rotate-12 items-center gap-2 rounded-lg border-4 border-rose-400 px-3 py-1.5 text-2xl font-black uppercase tracking-widest text-rose-400"
       >
+        <X className="h-7 w-7" strokeWidth={3} />
         Nope
       </motion.div>
       <motion.div
-        style={{ opacity: seenOpacity }}
-        className="pointer-events-none absolute left-1/2 top-8 z-20 -translate-x-1/2 rounded-lg border-4 border-sky-400 px-3 py-1 text-xl font-black uppercase tracking-widest text-sky-400"
+        style={{ opacity: seenOpacity, scale: seenScale, rotate: seenRotate }}
+        className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
       >
-        Sett
+        <motion.div style={{ opacity: seenOpacity }}>
+          <ChevronUp className="h-8 w-8 text-sky-400" strokeWidth={3} />
+        </motion.div>
+        <div className="flex items-center gap-2 rounded-lg border-4 border-sky-400 px-4 py-2 text-xl font-black uppercase tracking-widest text-sky-400">
+          <Eye className="h-7 w-7" strokeWidth={2.5} />
+          Sett
+        </div>
       </motion.div>
     </>
   );
@@ -607,12 +792,24 @@ function AdCard({ adId }: { adId: string }) {
           data-full-width-responsive="true"
         />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        // Platshållaren är en premium-CTA: tap -> köpflöde (iOS) / /premium (webb).
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => void goPremium()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") void goPremium();
+          }}
+          className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center"
+        >
           <div className="text-2xl">🎬</div>
           <div className="text-sm text-white/70">Reklamplats</div>
           <p className="max-w-[16rem] text-xs leading-relaxed text-white/40">
-            Swipa vidare som vanligt. Uppgradera till Premium för en helt annonsfri upplevelse.
+            Swipa vidare som vanligt — eller slipp annonserna helt.
           </p>
+          <span className="mt-1 rounded-full bg-amber-400/15 px-4 py-1.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-400/40">
+            Uppgradera till Premium
+          </span>
         </div>
       )}
     </div>
@@ -658,17 +855,120 @@ function Front({ card }: { card: Card }) {
 }
 
 function Back({ card }: { card: Card }) {
+  const heroSrc = card.backdrop ?? card.poster;
+  const providerGroups: { label: string; list: NonNullable<SwipeProviders["flatrate"]> }[] = [];
+  if (card.providers?.flatrate?.length) {
+    providerGroups.push({ label: "Streama", list: card.providers.flatrate });
+  }
+  if (card.providers?.rent?.length) {
+    providerGroups.push({ label: "Hyra", list: card.providers.rent });
+  }
+  if (card.providers?.buy?.length) {
+    providerGroups.push({ label: "Köp", list: card.providers.buy });
+  }
+
   return (
-    <div className="flex h-full w-full flex-col gap-2 rounded-2xl bg-neutral-950 p-4">
-      <div className="text-base font-semibold">
-        {card.title} {card.year ? <span className="opacity-70">({card.year})</span> : null}
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950">
+      <div className="relative h-32 shrink-0 overflow-hidden">
+        {heroSrc ? (
+          <Image
+            src={heroSrc}
+            alt=""
+            fill
+            sizes="420px"
+            className="object-cover object-top"
+            draggable={false}
+          />
+        ) : (
+          <div className="h-full w-full bg-neutral-900" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/60 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <div className="text-base font-semibold leading-tight text-white">
+            {card.title}
+            {card.year ? <span className="ml-1.5 font-normal opacity-70">({card.year})</span> : null}
+          </div>
+          {typeof card.rating === "number" ? (
+            <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40">
+              ★ {card.rating.toFixed(1)} / 10
+            </div>
+          ) : null}
+        </div>
       </div>
-      {typeof card.rating === "number" ? (
-        <div className="text-sm text-emerald-300">Betyg: ★ {card.rating.toFixed(1)} / 10</div>
+
+      {card.genres && card.genres.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap gap-1.5 px-3 pt-2">
+          {card.genres.slice(0, 5).map((g) => (
+            <span
+              key={g}
+              className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] text-neutral-300"
+            >
+              {g}
+            </span>
+          ))}
+        </div>
       ) : null}
-      <div className="mt-2 max-h-[75%] overflow-auto text-sm leading-relaxed opacity-90">
+
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
         {card.overview || "Ingen beskrivning tillgänglig."}
       </div>
+
+      {card.providers !== undefined && providerGroups.length > 0 ? (
+        <div className="shrink-0 space-y-2 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          {providerGroups.map(({ label, list }) => (
+            <div key={label}>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/70">
+                {label}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {list.map((p) => {
+                  const href = providerWatchUrl(p.provider_name, card.title);
+                  const inner = (
+                    <>
+                      {p.logo_path ? (
+                        <span className="relative inline-block h-4 w-4 overflow-hidden rounded">
+                          <Image
+                            src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
+                            alt=""
+                            fill
+                            sizes="16px"
+                            className="object-contain"
+                          />
+                        </span>
+                      ) : null}
+                      <span className="text-[11px]">{p.provider_name}</span>
+                    </>
+                  );
+                  const cls =
+                    "inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-neutral-200";
+                  return href ? (
+                    <a
+                      key={p.provider_name}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {inner}
+                    </a>
+                  ) : (
+                    <span key={p.provider_name} className={cls}>
+                      {inner}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {card.watchUrl !== undefined ? (
+        <div className="shrink-0 px-3 pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
+          <WatchNowButton url={card.watchUrl ?? undefined} />
+        </div>
+      ) : null}
     </div>
   );
 }

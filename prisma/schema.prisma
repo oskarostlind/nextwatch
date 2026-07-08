@@ -38,6 +38,8 @@ model User {
   watchlist watchlist[]
   purchases Purchase[]
 
+  appleIapTransactions AppleIapTransaction[]
+
   // Groups
   groupMembers  GroupMember[] @relation("UserGroupMembers")
   groupsCreated Group[]       @relation("UserGroupsCreated")
@@ -162,10 +164,37 @@ model Purchase {
   @@map("purchases")
 }
 
+// Apple In-App Purchase-transaktioner (iOS). Idempotens: samma transactionId
+// får aldrig ge premium två gånger. Motsvarar Stripe-webhookens roll för
+// App Store-köp — se lib/appleIap.ts.
+model AppleIapTransaction {
+  transactionId String    @id @map("transaction_id")
+  userId        String    @map("user_id")
+  productId     String    @map("product_id")
+  environment   String?
+  purchasedAt   DateTime  @map("purchased_at")
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_apple_iap_user")
+  @@map("apple_iap_transactions")
+}
+
 model Group {
   code      String   @id
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
+
+  // Gruppinställningar (kugghjulet, endast skaparen). Tomma/null = automatik:
+  // genrer/providers unionas från medlemmarnas profiler, åldersgräns från
+  // yngsta medlemmen och matchtröskeln är 60 %. Se lib/groupSettings.ts.
+  favoriteGenres String[] @default([]) @map("favorite_genres")
+  dislikedGenres String[] @default([]) @map("disliked_genres")
+  providers      Json     @default("[]")
+  maxCert        String?  @map("max_cert")
+  matchThreshold Int?     @map("match_threshold")
 
   members     GroupMember[]
   votes       GroupVote[]      @relation("GroupVotes")

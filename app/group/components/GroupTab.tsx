@@ -1,47 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, LogOut, UserPlus, Users, Plus, Check, Play } from "lucide-react";
+import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
+import GroupSettingsModal from "./GroupSettingsModal";
+import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
+import { useSocial } from "@/app/components/client/SocialProvider";
 import type { PublicMember } from "../GroupClient";
 
 type GroupResponse = {
   code?: string;
   group?: { code: string };
-};
-
-type RawMember = {
-  userId?: string | number;
-  user_id?: string | number;
-  id?: string | number;
-  username?: string | null;
-  displayName?: string | null;
-  providers?: unknown;
-};
-
-type GroupMembersResponse = {
-  code?: string;
-  region?: string;
-  members?: RawMember[];
-};
-
-type FriendRowData = {
-  id?: string;
-  userId?: string;
-  username?: string | null;
-  displayName?: string | null;
-  other?: {
-    id?: string;
-    userId?: string;
-    username?: string | null;
-    displayName?: string | null;
-  };
-};
-
-type FriendsListApiResponse = {
-  friends?: FriendRowData[];
-  error?: string;
 };
 
 async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: string }> {
@@ -69,16 +39,66 @@ type Props = {
 export default function GroupTab({ initialCode, initialRegion, initialMembers, initialMeUserId }: Props) {
   const router = useRouter();
   const [code, setCode] = useState<string | null>(initialCode);
-  const [region, setRegion] = useState<string | undefined>(initialRegion);
-  const [members, setMembers] = useState<PublicMember[]>(initialMembers || []);
+  const [region] = useState<string | undefined>(initialRegion);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
 
+  // Medlemmar + vänner kommer från den delade social-store:n (en gemensam
+  // poller i AppShell) istället för egna fetch/setInterval här.
+  const social = useSocial();
+
+  useEffect(() => {
+    hydrateSocialInitial({
+      members: (initialMembers || []).map((m) => ({
+        id: m.userId,
+        username: m.username,
+        displayName: m.displayName,
+      })),
+      groupCode: initialCode,
+    });
+  }, [initialMembers, initialCode]);
+
+  const members: PublicMember[] =
+    social.membersReady && social.groupCode === code
+      ? social.members.map((m) => ({
+          userId: m.id,
+          username: m.username,
+          displayName: m.displayName,
+        }))
+      : initialMembers || [];
+
+  const friends = social.friends.map((f) => ({
+    id: f.id,
+    name: f.displayName ?? f.username ?? "Okänd",
+  }));
+
   const [meUserId, setMeUserId] = useState<string | null>(initialMeUserId || null);
+
+  // Kugghjulet visas bara för gruppens skapare (servern verifierar också vid PATCH).
+  const [isCreator, setIsCreator] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!code) {
+      setIsCreator(false);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/group/settings?code=${encodeURIComponent(code)}`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ ok?: boolean; isCreator?: boolean }>)
+      .then((j) => {
+        if (!cancelled) setIsCreator(Boolean(j?.ok && j.isCreator));
+      })
+      .catch(() => {
+        if (!cancelled) setIsCreator(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   useEffect(() => {
     if (!meUserId) {
@@ -89,34 +109,6 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       });
     }
   }, [meUserId]);
-
-  const refreshMembers = useCallback(async (overrideCode?: string) => {
-    const targetCode = overrideCode || code;
-    if (!targetCode) return;
-    
-    const res = await apiCall<GroupMembersResponse>(
-      `/api/group/members?code=${encodeURIComponent(targetCode)}`
-    );
-    
-    if (res && !("error" in res) && Array.isArray(res.members)) {
-      const safeMembers: PublicMember[] = res.members.map((m) => ({
-        userId: String(m.userId ?? m.user_id ?? m.id ?? ""),
-        username: typeof m.username === "string" ? m.username : null,
-        displayName: typeof m.displayName === "string" ? m.displayName : null,
-        providers: Array.isArray(m.providers) 
-          ? m.providers.filter((p): p is string => typeof p === "string") 
-          : [],
-      }));
-      setMembers(safeMembers);
-      if (res.region) setRegion(res.region);
-    }
-  }, [code]);
-
-  useEffect(() => {
-    if (!code) return;
-    const timer = setInterval(() => void refreshMembers(), 5000);
-    return () => clearInterval(timer);
-  }, [code, refreshMembers]);
 
   const handleAction = async <T,>(action: () => Promise<T | { error: string }>, onSuccess: (data: T) => void) => {
     setBusy(true);
@@ -137,7 +129,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         const newCode = data.code || data.group?.code;
         if (newCode) {
           setCode(newCode);
-          void refreshMembers(newCode);
+          // nw_group-cookien sattes av servern — store:n plockar upp nya gruppen.
+          void refreshSocial();
           // Bust:a router-cachen så /swipe renderas om med nw_group-cookien.
           router.refresh();
         }
@@ -151,7 +144,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         const newCode = data.code || data.group?.code;
         if (newCode) {
           setCode(newCode);
-          void refreshMembers(newCode);
+          void refreshSocial();
           router.refresh();
         }
       }
@@ -160,7 +153,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   const handleLeave = () => 
     void handleAction(
       () => apiCall<{ success: boolean }>("/api/group/leave", {}),
-      () => { setCode(null); setMembers([]); router.refresh(); }
+      () => { setCode(null); void refreshSocial(); router.refresh(); }
     );
 
   const startGroupSwipe = () => {
@@ -168,19 +161,10 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     router.push("/swipe");
   };
 
-  const openInviteModal = async () => {
+  const openInviteModal = () => {
     setInviteOpen(true);
-    const res = await apiCall<FriendsListApiResponse>("/api/friends/list");
-    
-    if (res && !("error" in res) && Array.isArray(res.friends)) {
-      setFriends(res.friends.map((row) => {
-        const u = row.other || row;
-        return { 
-          id: String(u.id ?? u.userId ?? ""), 
-          name: u.displayName ?? u.username ?? "Okänd" 
-        };
-      }));
-    }
+    // Vännerna kommer redan från social-store:n — hämta bara om ifall listan är färsk.
+    void refreshSocial();
   };
 
   const inviteUser = async (userId: string) => {
@@ -191,6 +175,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       return;
     }
     setInvitedIds((prev) => new Set(prev).add(userId));
+    void refreshSocial();
   };
 
   if (code) {
@@ -200,6 +185,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <button
           type="button"
+          data-guide="group-start-swipe"
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
         >
@@ -207,7 +193,20 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         </button>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-white/40">Gruppkod</p>
+          <div className="flex items-start justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-white/40">Gruppkod</p>
+            {isCreator && (
+              <button
+                type="button"
+                aria-label="Gruppinställningar"
+                title="Gruppinställningar"
+                onClick={() => setSettingsOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition hover:bg-white/10 hover:text-white"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <div className="mt-1 flex items-baseline gap-2">
             <h2 className="font-mono text-3xl font-bold tracking-wider text-white">{code}</h2>
             {region && <span className="text-xs text-white/40">{region}</span>}
@@ -222,7 +221,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             </button>
             <button
               type="button"
-              onClick={() => void openInviteModal()}
+              onClick={openInviteModal}
               className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
             >
               <UserPlus className="h-4 w-4" /> Bjud in
@@ -273,12 +272,16 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             </ul>
           </div>
         </Modal>
+
+        {isCreator && (
+          <GroupSettingsModal code={code} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-guide="group-create-join">
       {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Info, Bookmark, Heart } from "lucide-react";
+import { X, Info, Undo2, Heart } from "lucide-react";
 
 type VibratingNavigator = Navigator & {
   vibrate?: (pattern: number | number[]) => boolean;
@@ -9,7 +9,7 @@ type VibratingNavigator = Navigator & {
 type Props = {
   onNope: () => void;
   onInfo: () => void;
-  onWatchlist: () => void;
+  onUndo: () => void;
   onLike: () => void;
   disabled?: boolean;
 };
@@ -28,7 +28,7 @@ function RoundBtn({
   children,
 }: {
   title: string;
-  intent: "danger" | "info" | "save" | "like";
+  intent: "danger" | "info" | "undo" | "like";
   onClick: () => void;
   disabled?: boolean;
   children: React.ReactNode;
@@ -38,8 +38,8 @@ function RoundBtn({
       ? "border-red-500/40 bg-red-600/20 hover:bg-red-600/30"
       : intent === "info"
       ? "border-blue-500/40 bg-blue-600/20 hover:bg-blue-600/30"
-      : intent === "save"
-      ? "border-cyan-500/40 bg-cyan-600/20 hover:bg-cyan-600/30"
+      : intent === "undo"
+      ? "border-amber-500/40 bg-amber-600/20 hover:bg-amber-600/30"
       : "border-green-500/40 bg-green-600/20 hover:bg-green-600/30";
 
   return (
@@ -60,7 +60,7 @@ function RoundBtn({
 export default function ActionDock({
   onNope,
   onInfo,
-  onWatchlist,
+  onUndo,
   onLike,
   disabled,
 }: Props) {
@@ -83,15 +83,15 @@ export default function ActionDock({
       </RoundBtn>
 
       <RoundBtn
-        title="Spara"
-        intent="save"
+        title="Ångra"
+        intent="undo"
         disabled={disabled}
         onClick={() => {
           vib(22);
-          onWatchlist();
+          onUndo();
         }}
       >
-        <Bookmark className="h-6 w-6" />
+        <Undo2 className="h-6 w-6" />
       </RoundBtn>
 
       <RoundBtn

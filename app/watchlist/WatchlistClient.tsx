@@ -2,8 +2,13 @@
 
 import Image from 'next/image';
 import { useCallback, useMemo, useState } from 'react';
+import { Star } from 'lucide-react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
+import RatingModal from '@/app/components/client/RatingModal';
+import ImdbImportModal from '@/app/components/client/ImdbImportModal';
+import MediaFilters, { type MediaTypeFilter } from '@/app/components/discover/MediaFilters';
+import { Button, SegmentedTabs } from '@/app/components/ui/kit';
 import { bestWatchUrl, providerWatchUrl } from '@/lib/watchLinks';
 
 type WatchItem = {
@@ -13,7 +18,25 @@ type WatchItem = {
   year?: string;
   rating?: number;
   posterUrl: string;
+  addedAt?: string;
+  voteAverage?: number | null;
+  popularity?: number | null;
+  genreIds?: number[];
 };
+
+// Titlar med eget betyg (Betyg-fliken) — från POST /api/ratings/list.
+type RatedItem = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  year: string | null;
+  poster: string | null;
+  userRating: number;
+};
+
+type RatedListResp = { ok: boolean; items: RatedItem[] };
+
+type Tab = 'watchlist' | 'ratings';
 
 type Providers = {
   link?: string;
@@ -24,6 +47,37 @@ type Providers = {
 type ProvidersResp = { ok: boolean; region?: string; providers: Providers | null };
 
 type Detail = { overview?: string };
+
+type WatchlistApiItem = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  year: string | null;
+  poster: string | null;
+  rating?: number | null;
+  addedAt?: string;
+  voteAverage?: number | null;
+  popularity?: number | null;
+  genreIds?: number[];
+};
+
+const PLACEHOLDER_POSTER =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+function mapWatchlistItem(raw: WatchlistApiItem): WatchItem {
+  return {
+    id: raw.tmdbId,
+    tmdbType: raw.mediaType,
+    title: raw.title,
+    year: raw.year ?? undefined,
+    rating: typeof raw.rating === 'number' ? raw.rating : undefined,
+    posterUrl: raw.poster ?? PLACEHOLDER_POSTER,
+    addedAt: raw.addedAt,
+    voteAverage: raw.voteAverage ?? null,
+    popularity: raw.popularity ?? null,
+    genreIds: raw.genreIds ?? [],
+  };
+}
 
 async function fetchProviders(id: number, tmdbType: 'movie' | 'tv'): Promise<ProvidersResp> {
   const res = await fetch(`/api/tmdb/watch-providers?id=${id}&type=${tmdbType}`, { cache: 'no-store' });
@@ -44,11 +98,184 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
 
+  // Betyg-fliken: lazy-hämtas första gången fliken öppnas.
+  const [tab, setTab] = useState<Tab>('watchlist');
+  const [rated, setRated] = useState<RatedItem[] | null>(null); // null = inte hämtad än
+  const [ratedLoading, setRatedLoading] = useState(false);
+  const [editing, setEditing] = useState<RatedItem | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [wlType, setWlType] = useState<MediaTypeFilter>('movie');
+  const [wlSort, setWlSort] = useState('addedAt');
+  const [wlGenres, setWlGenres] = useState<string[]>([]);
+  const [ratedType, setRatedType] = useState<MediaTypeFilter>('movie');
+
+  const [imdbOpen, setImdbOpen] = useState(false);
+  const [rateFromWl, setRateFromWl] = useState<WatchItem | null>(null);
+  const [rateWlSaving, setRateWlSaving] = useState(false);
+
+  const refetchWatchlist = useCallback(() => {
+    void fetch('/api/watchlist/list', { method: 'POST', cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { ok?: boolean; items?: WatchlistApiItem[] } | null) => {
+        if (data?.ok && Array.isArray(data.items)) {
+          setItems(data.items.map(mapWatchlistItem));
+        }
+      })
+      .catch(() => {
+        /* best-effort */
+      });
+  }, []);
+
+  const refetchRated = useCallback(() => {
+    setRatedLoading(true);
+    void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
+      .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
+      .then((data) => {
+        setRated(data && data.ok ? data.items : []);
+      })
+      .catch(() => setRated([]))
+      .finally(() => setRatedLoading(false));
+  }, []);
+
+  const openTab = useCallback(
+    (next: Tab) => {
+      setTab(next);
+      if (next === 'ratings' && rated === null && !ratedLoading) {
+        setRatedLoading(true);
+        void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
+          .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
+          .then((data) => {
+            setRated(data && data.ok ? data.items : []);
+          })
+          .catch(() => setRated([]))
+          .finally(() => setRatedLoading(false));
+      }
+    },
+    [rated, ratedLoading]
+  );
+
+  const saveEditedRating = useCallback(
+    (rating: number) => {
+      const it = editing;
+      if (!it) return;
+      setEditSaving(true);
+      void fetch('/api/ratings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ tmdbId: it.tmdbId, mediaType: it.mediaType, rating }),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setRated((cur) =>
+              (cur ?? []).map((x) =>
+                x.tmdbId === it.tmdbId && x.mediaType === it.mediaType ? { ...x, userRating: rating } : x
+              )
+            );
+          }
+        })
+        .catch(() => {
+          /* best-effort */
+        })
+        .finally(() => {
+          setEditSaving(false);
+          setEditing(null);
+        });
+    },
+    [editing]
+  );
+
+  const removeRating = useCallback(() => {
+    const it = editing;
+    if (!it) return;
+    // Optimistisk borttagning
+    setRated((cur) => (cur ?? []).filter((x) => !(x.tmdbId === it.tmdbId && x.mediaType === it.mediaType)));
+    setEditing(null);
+    void fetch('/api/ratings/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ tmdbId: it.tmdbId, mediaType: it.mediaType }),
+    }).catch(() => {
+      // Rollback om API faller
+      setRated((cur) => [it, ...(cur ?? [])]);
+    });
+  }, [editing]);
+
   const filtered = useMemo(() => {
+    let list = items.filter((it) => it.tmdbType === wlType);
+    if (wlGenres.length > 0) {
+      list = list.filter((it) =>
+        (it.genreIds ?? []).some((gid) => wlGenres.includes(String(gid)))
+      );
+    }
     const needle = q.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((it) => it.title.toLowerCase().includes(needle));
-  }, [q, items]);
+    if (needle) list = list.filter((it) => it.title.toLowerCase().includes(needle));
+
+    const sorted = [...list];
+    if (wlSort === 'popularity') {
+      sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+    } else if (wlSort === 'voteAverage') {
+      sorted.sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
+    } else if (wlSort === 'year') {
+      sorted.sort((a, b) => Number(b.year ?? 0) - Number(a.year ?? 0));
+    } else {
+      sorted.sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''));
+    }
+    return sorted;
+  }, [q, items, wlType, wlSort, wlGenres]);
+
+  const filteredRated = useMemo(() => {
+    const list = (rated ?? []).filter((it) => it.mediaType === ratedType);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((it) => it.title.toLowerCase().includes(needle));
+  }, [q, rated, ratedType]);
+
+  const userRatingFor = useCallback(
+    (tmdbId: number, mediaType: 'movie' | 'tv') =>
+      rated?.find((r) => r.tmdbId === tmdbId && r.mediaType === mediaType)?.userRating,
+    [rated]
+  );
+
+  function saveWatchlistRating(rating: number) {
+    const it = rateFromWl;
+    if (!it) return;
+    setRateWlSaving(true);
+    void fetch('/api/ratings/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ tmdbId: it.id, mediaType: it.tmdbType, rating }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          setRated((cur) => {
+            const prev = cur ?? [];
+            const idx = prev.findIndex((x) => x.tmdbId === it.id && x.mediaType === it.tmdbType);
+            const next = {
+              tmdbId: it.id,
+              mediaType: it.tmdbType,
+              title: it.title,
+              year: it.year ?? null,
+              poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
+              userRating: rating,
+            };
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], userRating: rating };
+              return copy;
+            }
+            return [next, ...prev];
+          });
+        }
+      })
+      .finally(() => {
+        setRateWlSaving(false);
+        setRateFromWl(null);
+      });
+  }
 
   const open = useCallback(async (item: WatchItem) => {
     setActive(item);
@@ -105,6 +332,65 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
 
   return (
     <>
+      <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1">
+        {(
+          [
+            { key: 'watchlist' as Tab, label: 'Watchlist' },
+            { key: 'ratings' as Tab, label: 'Betyg' },
+          ]
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => openTab(t.key)}
+            aria-pressed={tab === t.key}
+            className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+              tab === t.key ? 'bg-white text-neutral-900' : 'text-neutral-400 hover:text-neutral-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {(tab === 'watchlist' || tab === 'ratings') && (
+        <div className="mb-3 flex justify-end">
+          <Button variant="secondary" onClick={() => setImdbOpen(true)}>
+            Importera från IMDb
+          </Button>
+        </div>
+      )}
+
+      {tab === 'watchlist' ? (
+        <MediaFilters
+          type={wlType}
+          onTypeChange={(t) => {
+            setWlType(t);
+            setWlGenres([]);
+          }}
+          sort={wlSort}
+          onSortChange={setWlSort}
+          genres={wlGenres}
+          onToggleGenre={(id) =>
+            setWlGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+          }
+          mode="watchlist"
+          layoutId="watchlist-type"
+        />
+      ) : (
+        <div className="mb-4">
+          <SegmentedTabs
+            layoutId="ratings-type"
+            tabs={[
+              { id: 'movie' as MediaTypeFilter, label: 'Film' },
+              { id: 'tv' as MediaTypeFilter, label: 'Serier' },
+            ]}
+            value={ratedType}
+            onChange={setRatedType}
+          />
+        </div>
+      )}
+
       <div className="mb-4">
         <input
           value={q}
@@ -114,7 +400,50 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {tab === 'ratings' ? (
+        ratedLoading ? (
+          <p className="text-neutral-400">Laddar dina betyg…</p>
+        ) : filteredRated.length === 0 ? (
+          <p className="text-neutral-400">
+            {rated && rated.length > 0 ? 'Inga träffar.' : 'Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.'}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {filteredRated.map((it) => (
+              <button
+                key={`${it.mediaType}-${it.tmdbId}`}
+                type="button"
+                onClick={() => setEditing(it)}
+                className="group relative block overflow-hidden rounded-xl border border-white/10 text-left transition hover:ring-2 hover:ring-cyan-500/60"
+              >
+                {it.poster ? (
+                  <Image
+                    src={it.poster}
+                    alt={it.title}
+                    width={342}
+                    height={513}
+                    className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-neutral-800 p-2 text-center text-xs text-neutral-400">
+                    {it.title}
+                  </div>
+                )}
+                <div className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-emerald-300 backdrop-blur">
+                  {it.userRating}/10
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2 text-[12px]">
+                  <div className="truncate font-medium text-white">{it.title}</div>
+                  <div className="flex items-center justify-between opacity-90">
+                    <span>{it.year ?? '—'}</span>
+                    <span>Ditt betyg: {it.userRating}</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <p className="text-neutral-400">Inga träffar.</p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -225,13 +554,82 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                 ))}
               </div>
 
-              <div className="mt-5">
+              <div className="mt-5 flex flex-wrap gap-2">
                 <WatchNowButton url={watchUrl} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    setRateFromWl(active);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
+                >
+                  <Star className="h-4 w-4" />
+                  Betygsätt
+                  {typeof userRatingFor(active.id, active.tmdbType) === 'number'
+                    ? ` (${userRatingFor(active.id, active.tmdbType)}/10)`
+                    : ''}
+                </button>
               </div>
             </div>
           </div>
         )}
       </Modal>
+
+      <RatingModal
+        open={editing !== null}
+        item={
+          editing
+            ? {
+                tmdbId: editing.tmdbId,
+                mediaType: editing.mediaType,
+                title: editing.title,
+                year: editing.year,
+                poster: editing.poster,
+              }
+            : null
+        }
+        heading="Ändra ditt betyg"
+        skipLabel="Avbryt"
+        saving={editSaving}
+        initialRating={editing?.userRating}
+        onRate={saveEditedRating}
+        onSkip={() => setEditing(null)}
+        onRemove={removeRating}
+      />
+
+      <RatingModal
+        open={rateFromWl !== null}
+        item={
+          rateFromWl
+            ? {
+                tmdbId: rateFromWl.id,
+                mediaType: rateFromWl.tmdbType,
+                title: rateFromWl.title,
+                year: rateFromWl.year,
+                poster: rateFromWl.posterUrl.startsWith('data:') ? null : rateFromWl.posterUrl,
+              }
+            : null
+        }
+        heading="Vad tyckte du?"
+        skipLabel="Avbryt"
+        saving={rateWlSaving}
+        initialRating={
+          rateFromWl ? userRatingFor(rateFromWl.id, rateFromWl.tmdbType) : undefined
+        }
+        onRate={saveWatchlistRating}
+        onSkip={() => setRateFromWl(null)}
+      />
+
+      <ImdbImportModal
+        open={imdbOpen}
+        onClose={() => setImdbOpen(false)}
+        onDone={() => {
+          refetchWatchlist();
+          setRated(null);
+          if (tab === 'ratings') refetchRated();
+        }}
+      />
     </>
   );
 }

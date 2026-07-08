@@ -1,5 +1,16 @@
 export type SwipeMediaType = "movie" | "tv";
 
+export type SwipeProvider = {
+  provider_name: string;
+  logo_path: string | null;
+};
+
+export type SwipeProviders = {
+  flatrate?: SwipeProvider[];
+  rent?: SwipeProvider[];
+  buy?: SwipeProvider[];
+};
+
 export type SwipeCard = {
   id: string;
   /** "title" (default) = riktig film/serie, "ad" = annonskort (gratisanvändare). */
@@ -9,8 +20,20 @@ export type SwipeCard = {
   title: string;
   year: string | null;
   poster: string | null;
+  backdrop?: string | null;
+  genres?: string[];
   overview?: string | null;
   rating?: number | null;
+  /**
+   * Direktlänk till streamingtjänst ("Kolla nu").
+   * undefined = inte hämtad än, null = hämtad men ingen tjänst tillgänglig.
+   */
+  watchUrl?: string | null;
+  /**
+   * Streamingproviders för regionen.
+   * undefined = inte hämtad än, null = hämtad men ingen data.
+   */
+  providers?: SwipeProviders | null;
 };
 
 const HIDE_KEY = "nw_disliked_until";
@@ -38,6 +61,39 @@ function readHideMap(): Record<string, number> {
   } catch {
     return {};
   }
+}
+
+function writeHideMap(map: Record<string, number>) {
+  localStorage.setItem(HIDE_KEY, JSON.stringify(map));
+}
+
+export function markSeen(id: string) {
+  const s = readSeen();
+  s.add(id);
+  writeSeen(s);
+}
+
+export function unmarkSeen(id: string) {
+  const s = readSeen();
+  s.delete(id);
+  writeSeen(s);
+}
+
+export function hideFor7Days(tmdbId: number) {
+  const map = readHideMap();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  map[String(tmdbId)] = Date.now() + sevenDays;
+  writeHideMap(map);
+}
+
+export function unhide(tmdbId: number) {
+  const map = readHideMap();
+  delete map[String(tmdbId)];
+  writeHideMap(map);
+}
+
+function writeSeen(seen: Set<string>) {
+  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
 }
 
 function isHidden(tmdbId: number): boolean {

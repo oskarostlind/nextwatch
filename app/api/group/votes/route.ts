@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { notifyGroupMatchIfNeeded } from "@/lib/push";
+import { getSwipeAllowance, swipeLimitPayload } from "@/lib/swipeLimit";
 
 type Body = {
   tmdbId: number;
@@ -37,6 +38,14 @@ export async function POST(req: NextRequest) {
   }
   if (!["LIKE", "DISLIKE", "SKIP"].includes(body.vote)) {
     return NextResponse.json({ ok: false, message: "Ogiltig röst." } as Err, { status: 400 });
+  }
+
+  // Daglig swipegräns för gratisanvändare (premium = obegränsat). Gruppswipar
+  // skriver ratings via /api/rate parallellt, men gatas här också så att
+  // röster inte kan fortsätta efter att gränsen nåtts.
+  const allowance = await getSwipeAllowance(uid);
+  if (!allowance.allowed) {
+    return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
   }
 
   await prisma.$executeRaw`

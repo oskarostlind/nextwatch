@@ -11,22 +11,37 @@ import { motion, useAnimation, useMotionValue, useTransform } from "framer-motio
 import {
   StaticCard,
   fetchDetailsWithFallback,
+  fetchWatchProviders,
   SwipeStampOverlays,
   type Card,
 } from "../../swipe/page_client";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
+import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { notify } from "@/app/components/lib/notify";
+import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 
 type MediaType = "movie" | "tv";
+
+type SwipeAction = "like" | "dislike" | "seen";
+
+type UndoEntry = {
+  card: Card;
+  action: SwipeAction;
+};
+
+const UNDO_MAX = 5;
 
 type MatchResp =
   | { ok: true; match: { tmdbId: number; tmdbType: MediaType } | null }
   | { ok: false };
 
 export default function GroupSwipePage({ code }: { code: string }) {
-  const { deck, popCard, updateCards } = useGroupSwipeDeck(code);
+  const { deck, popCard, updateCards, unshiftCard } = useGroupSwipeDeck(code);
   const { cards, loading, error, ready } = deck;
   const showLoading = cards.length === 0 && (loading || !ready);
+
+  const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
@@ -37,7 +52,9 @@ export default function GroupSwipePage({ code }: { code: string }) {
   const rotate = useTransform(x, [-260, 260], [-16, 16]);
   const likeOpacity = useTransform(x, [48, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-150, -48], [1, 0]);
-  const seenOpacity = useTransform(y, [-150, -48], [1, 0]);
+  const seenOpacity = useTransform(y, [-120, -36], [1, 0]);
+  const seenScale = useTransform(y, [-120, -36], [0.88, 1.06]);
+  const seenRotate = useTransform(y, [-120, -36], [-6, 0]);
 
   // Hydrera details (poster/år/betyg/beskrivning) för topp-3 i stacken, som solo.
   const fetched = useRef<Set<string>>(new Set());
@@ -65,7 +82,21 @@ export default function GroupSwipePage({ code }: { code: string }) {
                   poster: c.poster ?? det.poster,
                   title: c.title || det.title,
                   year: c.year ?? det.year,
+                  genres: c.genres?.length ? c.genres : det.genres,
+                  backdrop: c.backdrop ?? det.backdrop,
                 }
+              : c
+          )
+        );
+      });
+    });
+    // "Kolla nu"-länk hämtas parallellt med details (samma mönster som solo).
+    toFetch.forEach((t) => {
+      void fetchWatchProviders(t.mediaType, t.tmdbId, t.title).then(({ watchUrl, providers }) => {
+        updateCards((prev) =>
+          prev.map((c) =>
+            c.id === t.id && c.watchUrl === undefined
+              ? { ...c, watchUrl, providers: providers ?? null }
               : c
           )
         );
@@ -94,7 +125,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
         }),
       })
         .then((res) => {
-          if (!res.ok) return null;
+          if (!res.ok) {
+            // 429 = daglig swipegräns nådd — visa väggen (SwipeLimitWall lyssnar).
+            reportSwipeLimitFrom(res);
+            return null;
+          }
           return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
             cache: "no-store",
           });
@@ -153,12 +188,21 @@ export default function GroupSwipePage({ code }: { code: string }) {
     });
   }
 
+  function recordUndo(c: Card, action: SwipeAction) {
+    undoStackRef.current = [{ card: c, action }, ...undoStackRef.current].slice(0, UNDO_MAX);
+  }
+
   function handleDislike(c: Card): void {
+    recordUndo(c, "dislike");
+    markSeen(c.id);
+    hideFor7Days(c.tmdbId);
     popTop();
     sendVote(c, "DISLIKE");
   }
 
   function handleLike(c: Card): void {
+    recordUndo(c, "like");
+    markSeen(c.id);
     popTop();
     void fetch("/api/watchlist/like", {
       method: "POST",
@@ -178,9 +222,39 @@ export default function GroupSwipePage({ code }: { code: string }) {
   }
 
   function handleSeen(c: Card): void {
+    recordUndo(c, "seen");
+    markSeen(c.id);
+    hideFor7Days(c.tmdbId);
     popTop();
     saveSeenRating(c);
     sendVote(c, "DISLIKE");
+  }
+
+  function handleUndo(): void {
+    const entry = undoStackRef.current[0];
+    if (!entry) {
+      notify("Inget att ångra");
+      return;
+    }
+    undoStackRef.current = undoStackRef.current.slice(1);
+    unmarkSeen(entry.card.id);
+    if (entry.action === "dislike" || entry.action === "seen") {
+      unhide(entry.card.tmdbId);
+    }
+    unshiftCard(entry.card);
+    void fetch("/api/swipe/undo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        tmdbId: entry.card.tmdbId,
+        mediaType: entry.card.mediaType,
+        action: entry.action,
+        groupCode: code,
+      }),
+    }).catch(() => {
+      notify("Kunde inte ångra på servern");
+    });
   }
 
   /* ---------- render (identisk med solo-swipen) ---------- */
@@ -231,6 +305,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
+      <SwipeLimitWall />
       <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
         {cards[0] ? (
           <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">
@@ -242,6 +317,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 return (
                   <motion.div
                     key={card.id}
+                    data-guide="swipe-card"
                     className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                     style={{ x, y, rotate }}
                     animate={controls}
@@ -283,6 +359,8 @@ export default function GroupSwipePage({ code }: { code: string }) {
                       likeOpacity={likeOpacity}
                       nopeOpacity={nopeOpacity}
                       seenOpacity={seenOpacity}
+                      seenScale={seenScale}
+                      seenRotate={seenRotate}
                     />
                   </motion.div>
                 );
@@ -319,31 +397,18 @@ export default function GroupSwipePage({ code }: { code: string }) {
         )}
       </div>
 
-      <ActionDock
-        disabled={!cards[0] || showLoading}
-        onNope={() => void swipeOut("left")}
-        onInfo={() => {
-          const c = cards[0];
-          if (c) setFlippedId((p) => (p === c.id ? null : c.id));
-        }}
-        onWatchlist={() => {
-          const c = cards[0];
-          if (!c) return;
-          void fetch("/api/watchlist/like", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store",
-            body: JSON.stringify({
-              tmdbId: c.tmdbId,
-              mediaType: c.mediaType,
-              title: c.title,
-              year: c.year,
-              poster: c.poster,
-            }),
-          }).catch(() => {});
-        }}
-        onLike={() => void swipeOut("right")}
-      />
+      <div data-guide="action-dock">
+        <ActionDock
+          disabled={!cards[0] || showLoading}
+          onNope={() => void swipeOut("left")}
+          onInfo={() => {
+            const c = cards[0];
+            if (c) setFlippedId((p) => (p === c.id ? null : c.id));
+          }}
+          onUndo={handleUndo}
+          onLike={() => void swipeOut("right")}
+        />
+      </div>
     </div>
   );
 }

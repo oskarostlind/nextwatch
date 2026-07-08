@@ -6,11 +6,12 @@
 // exakt samma scoring/MMR-pipeline utan att duplicera logik.
 
 import { prisma } from "@/lib/prisma";
+import { parseProvidersJson } from "@/lib/groupSettings";
 
 export type MediaType = "movie" | "tv";
 
 /* ---------- TMDB shared types ---------- */
-type TMDBPaged<T> = { page: number; results: T[] };
+type TMDBPaged<T> = { page: number; results: T[]; total_pages?: number };
 type TMDBListItem = {
   id: number;
   name?: string;
@@ -111,7 +112,8 @@ async function tmdbGet<T>(
   params: Record<string, string | number | undefined>,
   cacheMode: RequestCache = "no-store",
 ): Promise<T> {
-  const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN;
+  const v4 =
+    process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN ?? process.env.TMDB_READ_TOKEN;
   const v3 = process.env.TMDB_API_KEY;
 
   const usp = new URLSearchParams();
@@ -193,9 +195,13 @@ function increment(map: Map<number, number>, key: number, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+// Vikter kan vara negativa (lågt betygsatta seeds), så topp-K väljs på
+// absolutbelopp och normaliseras mot max |w| med bibehållet tecken.
 function normalizeTopK(map: Map<number, number>, k: number) {
-  const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, k);
-  const max = entries[0]?.[1] ?? 1;
+  const entries = Array.from(map.entries())
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, k);
+  const max = Math.abs(entries[0]?.[1] ?? 1) || 1;
   const out = new Map<number, number>();
   for (const [id, w] of entries) out.set(id, w / max);
   return out;
@@ -239,12 +245,16 @@ async function fetchFeatures(type: MediaType, id: number, locale: string) {
   return { keywords: extractKeywordIds(fallback), people: extractPeopleIds(fallback, type) };
 }
 
-async function buildTaste(seeds: { id: number; type: MediaType }[], locale: string): Promise<Taste> {
+type Seed = { id: number; type: MediaType; weight: number };
+
+async function buildTaste(seeds: Seed[], locale: string): Promise<Taste> {
   const keywordW = new Map<number, number>(), peopleW = new Map<number, number>();
   const feats = await Promise.all(seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({ keywords: [], people: [] }))));
-  for (const f of feats) {
-    for (const kw of f.keywords) increment(keywordW, kw, 1);
-    for (const p of f.people) increment(peopleW, p, 1);
+  for (let i = 0; i < seeds.length; i++) {
+    const w = seeds[i].weight;
+    const f = feats[i];
+    for (const kw of f.keywords) increment(keywordW, kw, w);
+    for (const p of f.people) increment(peopleW, p, w);
   }
   return { keywordW: normalizeTopK(keywordW, 60), peopleW: normalizeTopK(peopleW, 60) };
 }
@@ -280,6 +290,55 @@ function jaccard(a: Set<number>, b: Set<number>): number {
   return union === 0 ? 0 : inter / union;
 }
 
+type RatingSeedRow = {
+  tmdbId: number;
+  mediaType: string;
+  rating: number | null;
+  decision: string;
+};
+
+/** Numeriskt betyg + svag signal för 5–6. */
+function numericSeedWeight(rating: number): number | null {
+  if (rating >= 7) return (rating - 6) / 4; // 0.25–1.0
+  if (rating <= 4) return -(5 - rating) / 4; // -0.25 till -1.0
+  if (rating === 5) return -0.12;
+  if (rating === 6) return -0.06;
+  return null;
+}
+
+/** Swipe-beslut utan numeriskt betyg. */
+function decisionSeedWeight(decision: string): number | null {
+  if (decision === "dislike") return -0.5;
+  if (decision === "like") return 0.85; // backup om watchlist-synk misslyckades
+  if (decision === "seen") return -0.15;
+  return null;
+}
+
+function seedFromRatingRow(r: RatingSeedRow): number | null {
+  if (typeof r.rating === "number") {
+    const w = numericSeedWeight(r.rating);
+    if (w !== null) return w;
+  }
+  return decisionSeedWeight(r.decision);
+}
+
+/**
+ * Negativ signal ska inte skrivas över av watchlist/favorit (+1.0).
+ * Vid samma tecken vinner störst absolutbelopp.
+ */
+function mergeSeedWeight(prev: number | undefined, next: number): number {
+  if (prev === undefined) return next;
+  if (next < 0 && prev > 0) return next;
+  if (next > 0 && prev < 0) return prev;
+  return Math.abs(next) > Math.abs(prev) ? next : prev;
+}
+
+function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
+  if (!Number.isFinite(recycleDays) || recycleDays <= 0) return true;
+  const ms = recycleDays * 24 * 60 * 60 * 1000;
+  return Date.now() - at.getTime() < ms;
+}
+
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
@@ -287,13 +346,30 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
-    const [profile, ratings, watchlist, groupMembers] = await Promise.all([
+    const [profile, ratings, watchlist, groupMembers, groupRow] = await Promise.all([
       prisma.profile.findUnique({ where: { userId: uid } }),
-      prisma.rating.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
-      prisma.watchlist.findMany({ where: { userId: uid }, select: { tmdbId: true, mediaType: true } }),
+      prisma.rating.findMany({
+        where: { userId: uid },
+        select: { tmdbId: true, mediaType: true, rating: true, decision: true, decidedAt: true, userId: true },
+      }),
+      prisma.watchlist.findMany({
+        where: { userId: uid },
+        select: { tmdbId: true, mediaType: true, addedAt: true },
+      }),
       groupCode
         ? prisma.groupMember.findMany({ where: { groupCode }, include: { user: { include: { profile: true } } } })
         : Promise.resolve([]),
+      groupCode
+        ? prisma.group.findUnique({
+            where: { code: groupCode },
+            select: {
+              favoriteGenres: true,
+              dislikedGenres: true,
+              providers: true,
+              maxCert: true,
+            },
+          })
+        : Promise.resolve(null),
     ]);
 
     if (!profile) return fail("Ingen profil hittades.");
@@ -307,17 +383,40 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
           .filter((p): p is NonNullable<typeof p> => Boolean(p))
       : [];
 
-    // Grupp: hämta ALLA medlemmars watchlists så smakmodellen får seeds från hela sällskapet.
-    const groupWatchlist = isGroup
-      ? await prisma.watchlist.findMany({
-          where: { userId: { in: groupMembers.map((m) => m.userId) } },
-          select: { tmdbId: true, mediaType: true },
-        })
-      : [];
+    // Grupp: hämta ALLA medlemmars watchlists + ratings (exkludering + smak).
+    const groupMemberIds = isGroup ? groupMembers.map((m) => m.userId) : [];
+    const [groupWatchlist, groupRatings] = isGroup
+      ? await Promise.all([
+          prisma.watchlist.findMany({
+            where: { userId: { in: groupMemberIds } },
+            select: { tmdbId: true, mediaType: true, addedAt: true, userId: true },
+          }),
+          prisma.rating.findMany({
+            where: { userId: { in: groupMemberIds } },
+            select: {
+              tmdbId: true,
+              mediaType: true,
+              rating: true,
+              decision: true,
+              decidedAt: true,
+              userId: true,
+            },
+          }),
+        ])
+      : [[], []];
+
+    // Gruppinställningar (kugghjulet): satta värden åsidosätter automatiken,
+    // tomma/null faller tillbaka på medlemsaggregeringen nedan.
+    const groupProviderOverride = isGroup ? parseProvidersJson(groupRow?.providers) : [];
+    const groupLikedOverride = isGroup ? groupRow?.favoriteGenres ?? [] : [];
+    const groupDislikedOverride = isGroup ? groupRow?.dislikedGenres ?? [] : [];
+    const groupCertOverride = isGroup && groupRow?.maxCert ? groupRow.maxCert : null;
 
     // 2. Extrahera och slå ihop providers (för solo eller grupp)
     const providerStrings = new Set<string>();
-    if (isGroup) {
+    if (isGroup && groupProviderOverride.length > 0) {
+      groupProviderOverride.forEach((s) => providerStrings.add(s));
+    } else if (isGroup) {
       // Om grupp: Samla ALLA tjänster som någon i gruppen har (OR-logik via TMDB)
       for (const p of memberProfiles) {
         const pProviders = p.providers as string[] | undefined;
@@ -329,19 +428,40 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     }
 
     const usedProviderIds = getProviderIds(Array.from(providerStrings));
-    const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join('|') : undefined;
+    const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join("|") : undefined;
+    const strictProviders = isGroup && groupProviderOverride.length > 0;
 
-    // Åldersgräns i grupp: utgå från yngsta medlemmen (SE-certifiering).
+    // Åldersgräns: grupp (override/yngsta medlem) eller solo (egen profil).
     let certMax: string | undefined;
-    if (isGroup && memberProfiles.length > 0) {
+    if (groupCertOverride) {
+      certMax = groupCertOverride;
+    } else if (isGroup && memberProfiles.length > 0) {
       const ages = memberProfiles.map((p) => ageFromDob(new Date(p.dob)));
       certMax = seMaxCert(Math.min(...ages));
+    } else {
+      certMax = seMaxCert(ageFromDob(new Date(profile.dob)));
     }
 
-    // Bygg WatchKeys (för att filtrera bort sedda)
+    const recycleByUser = new Map<string, number>();
+    recycleByUser.set(uid, profile.recycleAfterDays ?? 14);
+    for (const p of memberProfiles) {
+      recycleByUser.set(p.userId, p.recycleAfterDays ?? 14);
+    }
+
+    const exclusionRatings = isGroup ? groupRatings : ratings;
+    const exclusionWatchlist = isGroup ? groupWatchlist : watchlist;
+
     const watchKeys = new Set<string>();
-    for (const r of ratings) watchKeys.add(`${r.mediaType}_${r.tmdbId}`);
-    for (const w of watchlist) watchKeys.add(`${w.mediaType}_${w.tmdbId}`);
+    for (const r of exclusionRatings) {
+      const recycle = recycleByUser.get(r.userId) ?? 14;
+      if (isExcludedByRecycle(r.decidedAt, recycle)) {
+        watchKeys.add(`${r.mediaType}_${r.tmdbId}`);
+      }
+    }
+    // Watchlist: alltid exkludera medan titeln ligger kvar (avsiktlig sparning).
+    for (const w of exclusionWatchlist) {
+      watchKeys.add(`${w.mediaType}_${w.tmdbId}`);
+    }
 
     // Genres
     const [movieGenres, tvGenres] = await Promise.all([
@@ -354,7 +474,12 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // om INGEN i gruppen gillar dem (annars skulle en persons favorit straffas bort).
     let likedGenres: Set<string>;
     let dislikedGenres: Set<string>;
-    if (isGroup) {
+    if (isGroup && (groupLikedOverride.length > 0 || groupDislikedOverride.length > 0)) {
+      // Kugghjulet: satta genrer ersätter medlemsaggregeringen helt.
+      likedGenres = new Set(groupLikedOverride);
+      dislikedGenres = new Set(groupDislikedOverride);
+      for (const g of likedGenres) dislikedGenres.delete(g);
+    } else if (isGroup) {
       likedGenres = new Set<string>();
       dislikedGenres = new Set<string>();
       for (const p of memberProfiles) {
@@ -370,69 +495,107 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const pageNum = Math.max(1, page);
 
     // 3. TMDB Discover med inbyggd provider-filtrering! (Detta löser N+1)
-    const [popMovie, popTv] = await Promise.all([
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
-        language: locale,
-        region,
-        watch_region: region,
-        with_watch_providers: tmdbProviderString,
-        certification_country: certMax ? "SE" : undefined,
-        "certification.lte": certMax,
-        sort_by: "popularity.desc",
-        page: pageNum
-      }, "force-cache"),
-      tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
-        language: locale,
-        region,
-        watch_region: region,
-        with_watch_providers: tmdbProviderString,
-        sort_by: "popularity.desc",
-        page: pageNum
-      }, "force-cache"),
-    ]);
+    // "popularity.desc" ger alltid samma topptitlar på sida 1. En användare som
+    // redan betygsatt/sparat de populäraste titlarna filtreras då bort helt
+    // (baseRaw = 0 → "Slut på förslag"). Vi skannar därför flera TMDB-sidor per
+    // API-sida tills vi har tillräckligt med OSEDDA kandidater.
+    const CANDIDATE_TARGET = 60;
+    const PAGES_PER_REQUEST = 8;
+    const startTmdbPage = (pageNum - 1) * PAGES_PER_REQUEST + 1;
 
     const baseRaw: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
-    for (const r of popMovie.results) {
-      if (!watchKeys.has(`movie_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
-    }
-    for (const r of popTv.results) {
-      if (!watchKeys.has(`tv_${r.id}`)) baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+    const seenCandidate = new Set<string>();
+    let maxTmdbPages = 1;
+
+    for (let offset = 0; offset < PAGES_PER_REQUEST; offset++) {
+      const tmdbPage = startTmdbPage + offset;
+      if (tmdbPage > 500) break; // TMDB tillåter max 500 sidor.
+
+      const [popMovie, popTv] = await Promise.all([
+        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
+          language: locale,
+          region,
+          watch_region: region,
+          with_watch_providers: tmdbProviderString,
+          certification_country: "SE",
+          "certification.lte": certMax,
+          sort_by: "popularity.desc",
+          page: tmdbPage
+        }, "force-cache"),
+        // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
+        // så åldersgränsen (certMax) kan bara appliceras på filmer.
+        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
+          language: locale,
+          region,
+          watch_region: region,
+          with_watch_providers: tmdbProviderString,
+          sort_by: "popularity.desc",
+          page: tmdbPage
+        }, "force-cache"),
+      ]);
+
+      maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
+
+      for (const r of popMovie.results) {
+        const key = `movie_${r.id}`;
+        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+          seenCandidate.add(key);
+          baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
+        }
+      }
+      for (const r of popTv.results) {
+        const key = `tv_${r.id}`;
+        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+          seenCandidate.add(key);
+          baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+        }
+      }
+
+      if (baseRaw.length >= CANDIDATE_TARGET) break;
+      if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
-    // Seeds (favoriter + watchlist – för taste). I grupp tar vi favoriter från ALLA
-    // medlemmar först (starkast signal), sedan hela gruppens watchlists.
-    const seedsSet: { id: number; type: MediaType }[] = [];
+    // Seeds (favoriter + watchlist + betyg/swipe-beslut för taste).
+    const seedWeights = new Map<string, Seed>();
+    function addSeed(id: number, type: MediaType, weight: number) {
+      const k = `${type}_${id}`;
+      const prev = seedWeights.get(k);
+      const merged = mergeSeedWeight(prev?.weight, weight);
+      seedWeights.set(k, { id, type, weight: merged });
+    }
+
     if (isGroup) {
       for (const p of memberProfiles) {
         const fm = p.favoriteMovie as FavoriteItem | null;
         const fs = p.favoriteShow as FavoriteItem | null;
-        if (fm?.id) seedsSet.push({ id: fm.id, type: "movie" });
-        if (fs?.id) seedsSet.push({ id: fs.id, type: "tv" });
+        if (fm?.id) addSeed(fm.id, "movie", 1.0);
+        if (fs?.id) addSeed(fs.id, "tv", 1.0);
       }
       for (const w of groupWatchlist) {
-        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
       }
     } else {
       const favMovie = profile.favoriteMovie as FavoriteItem | null;
       const favShow = profile.favoriteShow as FavoriteItem | null;
-      if (favMovie?.id) seedsSet.push({ id: favMovie.id, type: "movie" });
-      if (favShow?.id) seedsSet.push({ id: favShow.id, type: "tv" });
+      if (favMovie?.id) addSeed(favMovie.id, "movie", 1.0);
+      if (favShow?.id) addSeed(favShow.id, "tv", 1.0);
       for (const w of watchlist) {
-        seedsSet.push({ id: w.tmdbId, type: w.mediaType as MediaType });
+        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
       }
     }
 
-    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
-    const seedCap = isGroup ? 12 : 6;
-    const seenSeed = new Set<string>();
-    const seeds: { id: number; type: MediaType }[] = [];
-    for (const s of seedsSet) {
-      const k = `${s.type}_${s.id}`;
-      if (seenSeed.has(k)) continue;
-      seenSeed.add(k);
-      seeds.push(s);
-      if (seeds.length >= seedCap) break;
+    const seedRatings = isGroup ? groupRatings : ratings;
+    for (const r of seedRatings) {
+      const w = seedFromRatingRow(r);
+      if (w !== null) addSeed(r.tmdbId, r.mediaType as MediaType, w);
     }
+
+    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
+    // Prioritera på |vikt| så både starka positiva och negativa signaler ryms.
+    const seedCap = isGroup ? 20 : 14;
+    const seeds = Array.from(seedWeights.values())
+      .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+      .slice(0, seedCap);
 
     // Dedupe + index
     const uniq = dedupe(baseRaw);
@@ -456,7 +619,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     // V2 taste
     const taste = await buildTaste(seeds, locale);
-    const N = Math.min(30, scoredV1.length);
+    const N = Math.min(50, scoredV1.length);
     const topItems = scoredV1.slice(0, N);
 
     const featureCache = new Map<string, { keywords: number[]; people: number[] }>();
@@ -547,7 +710,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     return {
       ok: true,
       mode: isGroup ? "group" : "individual",
-      group: isGroup ? { code: groupCode as string, strictProviders: false } : null,
+      group: isGroup ? { code: groupCode as string, strictProviders } : null,
       language: locale,
       region,
       usedProviderIds,

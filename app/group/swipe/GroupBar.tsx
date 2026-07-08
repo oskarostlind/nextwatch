@@ -1,16 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import type { GroupMemberItem } from "@/lib/socialStore";
+import { useSocial } from "@/app/components/client/SocialProvider";
 
 type Member = { userId: string; displayName: string; initials: string };
 
-type ApiMember = {
-  id: string;
-  displayName: string | null;
-  username: string | null;
-};
-
-function toMember(m: ApiMember): Member {
+function toMember(m: GroupMemberItem): Member {
   const displayName = m.displayName ?? m.username ?? "Okänd";
   const initials = displayName
     .split(/\s+/)
@@ -26,21 +21,11 @@ type ShareCapableNavigator = Navigator & {
 };
 
 export default function GroupBar({ code }: { code: string }) {
-  const [members, setMembers] = useState<Member[]>([]);
-
-  useEffect(() => {
-    let t: NodeJS.Timeout | null = null;
-    const load = async () => {
-      const res = await fetch(`/api/group/members?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-      const data = await res.json().catch(() => null);
-      if (data?.ok && Array.isArray(data.members)) {
-        setMembers((data.members as ApiMember[]).map(toMember));
-      }
-    };
-    load();
-    t = setInterval(load, 15_000);
-    return () => { if (t) clearInterval(t); };
-  }, [code]);
+  // Medlemmar från den delade social-store:n (global poller i AppShell)
+  // istället för ett eget 15s-intervall.
+  const social = useSocial();
+  const members: Member[] =
+    social.groupCode === code ? social.members.map(toMember) : [];
 
   const invite = async () => {
     const url = `${location.origin}/group/swipe?code=${encodeURIComponent(code)}`;

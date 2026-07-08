@@ -69,9 +69,10 @@ export async function POST(req: NextRequest) {
       return jsonRes(429, "För många förfrågningar. Försök igen senare.");
     }
 
-    const body = (await req.json()) as { email?: string; password?: string };
+    const body = (await req.json()) as { email?: string; password?: string; from?: string };
     const email = (body.email ?? "").trim().toLowerCase();
     const password = (body.password ?? "").trim();
+    const fromApp = body.from === "app";
     if (!email || !password) return jsonRes(400, "E-post och lösenord krävs.");
 
     // Preflight: kontrollera att nödvändiga kolumner finns
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const origin = computeOrigin(req);
-    const link = `${origin}/auth/verify?token=${token}`;
+    const link = `${origin}/auth/verify?token=${token}${fromApp ? "&from=app" : ""}`;
 
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">

@@ -4,6 +4,7 @@ import React from "react";
 import Script from "next/script";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
+import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
 import { cookies } from "next/headers";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 
@@ -52,6 +53,8 @@ export default async function RootLayout({
         )}
 
         <AppShell>{children}</AppShell>
+
+        <AppDeepLinkHandler />
 
         {/* Global overlay – körs endast på klienten via OverlayMount */}
         <OverlayMount />

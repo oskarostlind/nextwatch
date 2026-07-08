@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Capacitor } from "@capacitor/core";
 import AppleSignInButton from "@/app/components/auth/AppleSignInButton";
 
 export default function RegisterClient() {
@@ -25,7 +26,11 @@ export default function RegisterClient() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password: pwd }),
+      body: JSON.stringify({
+        email,
+        password: pwd,
+        from: Capacitor.isNativePlatform() ? "app" : undefined,
+      }),
     });
     const data = (await res.json()) as { ok?: boolean; message?: string };
     if (!res.ok || !data?.ok) {

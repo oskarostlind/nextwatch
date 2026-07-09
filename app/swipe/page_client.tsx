@@ -745,24 +745,23 @@ export function StaticCard({
       className={`relative h-full max-h-full w-full min-h-0 [perspective:1000px] ${interactive ? "cursor-pointer" : "cursor-default"}`}
       onClick={interactive ? onFlip : undefined}
     >
+      {/* Framsida — roterar bort när kortet vänts */}
       <div
-        className="relative h-full max-h-full w-full min-h-0 overflow-hidden rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
-        style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
+        className={`absolute inset-0 h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [backface-visibility:hidden] [transform-style:preserve-3d] ${
+          flipped ? "[transform:rotateY(180deg)]" : "[transform:rotateY(0deg)]"
+        }`}
+        aria-hidden={flipped}
       >
-        <div
-          className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(0deg)]"
-          style={{ visibility: flipped ? "hidden" : "visible" }}
-          aria-hidden={flipped}
-        >
-          <Front card={card} />
-        </div>
-        <div
-          className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]"
-          style={{ visibility: flipped ? "visible" : "hidden" }}
-          aria-hidden={!flipped}
-        >
-          <Back card={card} />
-        </div>
+        <Front card={card} />
+      </div>
+      {/* Baksida — förroterad 180° och roteras fram vid flip */}
+      <div
+        className={`absolute inset-0 h-full w-full min-h-0 rounded-2xl border border-white/15 bg-neutral-950 shadow-xl transition-transform duration-300 [backface-visibility:hidden] [transform-style:preserve-3d] ${
+          flipped ? "[transform:rotateY(0deg)]" : "[transform:rotateY(180deg)]"
+        }`}
+        aria-hidden={!flipped}
+      >
+        <Back card={card} />
       </div>
     </div>
   );

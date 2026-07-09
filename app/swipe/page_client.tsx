@@ -746,13 +746,21 @@ export function StaticCard({
       onClick={interactive ? onFlip : undefined}
     >
       <div
-        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
+        className="relative h-full max-h-full w-full min-h-0 overflow-hidden rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
-        <div className="absolute inset-0 [backface-visibility:hidden]">
+        <div
+          className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(0deg)]"
+          style={{ visibility: flipped ? "hidden" : "visible" }}
+          aria-hidden={flipped}
+        >
           <Front card={card} />
         </div>
-        <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+        <div
+          className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]"
+          style={{ visibility: flipped ? "visible" : "hidden" }}
+          aria-hidden={!flipped}
+        >
           <Back card={card} />
         </div>
       </div>
@@ -874,16 +882,7 @@ function Front({ card }: { card: Card }) {
 
 function Back({ card }: { card: Card }) {
   const heroSrc = card.backdrop ?? card.poster;
-  const providerGroups: { label: string; list: NonNullable<SwipeProviders["flatrate"]> }[] = [];
-  if (card.providers?.flatrate?.length) {
-    providerGroups.push({ label: "Streama", list: card.providers.flatrate });
-  }
-  if (card.providers?.rent?.length) {
-    providerGroups.push({ label: "Hyra", list: card.providers.rent });
-  }
-  if (card.providers?.buy?.length) {
-    providerGroups.push({ label: "Köp", list: card.providers.buy });
-  }
+  const streamProviders = card.providers?.flatrate ?? [];
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950">
@@ -942,54 +941,50 @@ function Back({ card }: { card: Card }) {
         {card.overview || "Ingen beskrivning tillgänglig."}
       </div>
 
-      {card.providers !== undefined && providerGroups.length > 0 ? (
-        <div className="shrink-0 space-y-2 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
-          {providerGroups.map(({ label, list }) => (
-            <div key={label}>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/70">
-                {label}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {list.map((p) => {
-                  const href = providerWatchUrl(p.provider_name, card.title);
-                  const inner = (
-                    <>
-                      {p.logo_path ? (
-                        <span className="relative inline-block h-4 w-4 overflow-hidden rounded">
-                          <Image
-                            src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
-                            alt=""
-                            fill
-                            sizes="16px"
-                            className="object-contain"
-                          />
-                        </span>
-                      ) : null}
-                      <span className="text-[11px]">{p.provider_name}</span>
-                    </>
-                  );
-                  const cls =
-                    "inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-neutral-200";
-                  return href ? (
-                    <a
-                      key={p.provider_name}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {inner}
-                    </a>
-                  ) : (
-                    <span key={p.provider_name} className={cls}>
-                      {inner}
+      {card.providers !== undefined && streamProviders.length > 0 ? (
+        <div className="shrink-0 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/70">
+            Streama
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {streamProviders.map((p) => {
+              const href = providerWatchUrl(p.provider_name, card.title);
+              const inner = (
+                <>
+                  {p.logo_path ? (
+                    <span className="relative inline-block h-4 w-4 overflow-hidden rounded">
+                      <Image
+                        src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
+                        alt=""
+                        fill
+                        sizes="16px"
+                        className="object-contain"
+                      />
                     </span>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                  ) : null}
+                  <span className="text-[11px]">{p.provider_name}</span>
+                </>
+              );
+              const cls =
+                "inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-neutral-200";
+              return href ? (
+                <a
+                  key={p.provider_name}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {inner}
+                </a>
+              ) : (
+                <span key={p.provider_name} className={cls}>
+                  {inner}
+                </span>
+              );
+            })}
+          </div>
         </div>
       ) : null}
 

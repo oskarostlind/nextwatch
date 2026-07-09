@@ -55,8 +55,9 @@ export async function GET(req: NextRequest) {
     }
 
     const data = (await res.json()) as { results?: unknown[] };
+    const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit") || "8")));
     const results = (Array.isArray(data.results) ? data.results : [])
-      .slice(0, 8)
+      .slice(0, limit)
       .map((r) => {
         if (type === "movie") {
           const m = r as TMDBMovie;

@@ -835,6 +835,24 @@ function Front({ card }: { card: Card }) {
         <div className="flex h-full w-full items-center justify-center bg-neutral-800">{card.title}</div>
       )}
 
+      {card.reasons && card.reasons.length > 0 ? (
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-10">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/55 px-2 py-1 backdrop-blur-sm">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">
+              Matchar
+            </span>
+            {card.reasons.slice(0, 3).map((r) => (
+              <span
+                key={r}
+                className="rounded-md bg-cyan-500/15 px-1.5 py-0.5 text-[10px] text-cyan-100"
+              >
+                {r}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="h-28 bg-gradient-to-t from-black/90 to-transparent" />
         <div className="-mt-24 px-1">
@@ -906,6 +924,17 @@ function Back({ card }: { card: Card }) {
               {g}
             </span>
           ))}
+        </div>
+      ) : null}
+
+      {card.reasons && card.reasons.length > 0 ? (
+        <div className="mx-3 mt-2 shrink-0 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/80">
+            Varför det här?
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-white/65">
+            {card.reasons.join(" · ")}
+          </p>
         </div>
       ) : null}
 

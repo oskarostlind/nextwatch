@@ -7,8 +7,22 @@
 
 import { prisma } from "@/lib/prisma";
 import { parseProvidersJson } from "@/lib/groupSettings";
+import { SWIPE_REASONS_SHOW_RATE } from "@/lib/tasteFeature";
+import {
+  buildMatchReasons,
+  buildSeeds,
+  buildTasteMaps,
+  fetchFeatures,
+  genreScoreNames,
+  resolveGenreSets,
+  resolveMaxCert,
+  resolveProviderStrings,
+  shouldShowSwipeReasons,
+  tmdbGet,
+  type MediaType,
+} from "@/lib/tasteModel";
 
-export type MediaType = "movie" | "tv";
+export type { MediaType };
 
 /* ---------- TMDB shared types ---------- */
 type TMDBPaged<T> = { page: number; results: T[]; total_pages?: number };
@@ -25,20 +39,7 @@ type TMDBListItem = {
 };
 type TMDBGenreList = { genres: { id: number; name: string }[] };
 
-type TMDBKeywords = { id: number; keywords?: { id: number; name: string }[] };
-type TMDBKeywordsTV = { id: number; results?: { id: number; name: string }[] };
-type TMDBCredits = {
-  id: number;
-  cast?: { id: number; name: string; order?: number }[];
-  crew?: { id: number; name: string; job?: string; department?: string }[];
-};
-type TMDBDetailsWithAppends = TMDBListItem & {
-  keywords?: TMDBKeywords | TMDBKeywordsTV;
-  credits?: TMDBCredits;
-};
 /* -------------------------------------- */
-
-type FavoriteItem = { id: number; title: string; year?: string | number | null; poster?: string | null };
 
 export type UnifiedItem = {
   id: number;
@@ -47,6 +48,8 @@ export type UnifiedItem = {
   year?: string;
   poster_path?: string | null;
   vote_average?: number;
+  /** Kort förklaring varför titeln matchar (visas ibland i swipe). */
+  reasons?: string[];
 };
 
 export type UnifiedRecsOk = {
@@ -105,29 +108,6 @@ function fail(message: string, status = 200): UnifiedRecsErr {
   return { ok: false, message, status };
 }
 
-/* ---------------- TMDB helpers ---------------- */
-
-async function tmdbGet<T>(
-  path: string,
-  params: Record<string, string | number | undefined>,
-  cacheMode: RequestCache = "no-store",
-): Promise<T> {
-  const v4 =
-    process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN ?? process.env.TMDB_READ_TOKEN;
-  const v3 = process.env.TMDB_API_KEY;
-
-  const usp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null) usp.set(k, String(v));
-  }
-  if (!v4 && v3) usp.set("api_key", v3);
-
-  const url = `https://api.themoviedb.org/3${path}${usp.toString() ? `?${usp.toString()}` : ""}`;
-  const res = await fetch(url, { headers: v4 ? { Authorization: `Bearer ${v4}` } : undefined, cache: cacheMode });
-  if (!res.ok) throw new Error(`TMDB ${path} ${res.status}`);
-  return (await res.json()) as T;
-}
-
 function pickTitle(x: TMDBListItem): string {
   return (x.title || x.name || "Untitled").trim();
 }
@@ -157,24 +137,6 @@ function recencyBonus(year?: string): number {
   return 0.1;
 }
 
-/* ---------- Åldersgräns (grupp) ---------- */
-function ageFromDob(d: Date): number {
-  const n = new Date();
-  let a = n.getFullYear() - d.getFullYear();
-  const m = n.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && n.getDate() < d.getDate())) a--;
-  return a;
-}
-
-// SE-certifieringstak utifrån ålder. I grupp använder vi yngsta medlemmen
-// så att inget kort bryter mot åldersgränsen för någon i sällskapet.
-function seMaxCert(age: number): string {
-  if (age >= 15) return "15";
-  if (age >= 11) return "11";
-  if (age >= 7) return "7";
-  return "0";
-}
-
 function dedupe(items: { id: number; tmdbType: MediaType; item: TMDBListItem }[]) {
   const seen = new Set<string>();
   const out: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
@@ -185,78 +147,6 @@ function dedupe(items: { id: number; tmdbType: MediaType; item: TMDBListItem }[]
     out.push(it);
   }
   return out;
-}
-
-/* ---------------- V2 taste model ---------------- */
-
-type Taste = { keywordW: Map<number, number>; peopleW: Map<number, number> };
-
-function increment(map: Map<number, number>, key: number, amount: number) {
-  map.set(key, (map.get(key) ?? 0) + amount);
-}
-
-// Vikter kan vara negativa (lågt betygsatta seeds), så topp-K väljs på
-// absolutbelopp och normaliseras mot max |w| med bibehållet tecken.
-function normalizeTopK(map: Map<number, number>, k: number) {
-  const entries = Array.from(map.entries())
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-    .slice(0, k);
-  const max = Math.abs(entries[0]?.[1] ?? 1) || 1;
-  const out = new Map<number, number>();
-  for (const [id, w] of entries) out.set(id, w / max);
-  return out;
-}
-
-function extractKeywordIds(d: TMDBDetailsWithAppends): number[] {
-  const kw = d.keywords;
-  if (!kw) return [];
-  const arr =
-    "keywords" in kw && Array.isArray(kw.keywords)
-      ? kw.keywords
-      : "results" in kw && Array.isArray(kw.results)
-      ? kw.results
-      : [];
-  return arr.map((x) => x.id).filter((id) => Number.isFinite(id));
-}
-
-function extractPeopleIds(d: TMDBDetailsWithAppends, type: MediaType): number[] {
-  const c = d.credits;
-  if (!c) return [];
-  const ids: number[] = [];
-  const cast = (c.cast ?? []).sort((a, b) => (a.order ?? 99) - (b.order ?? 99)).slice(0, 5);
-  for (const m of cast) if (typeof m.id === "number") ids.push(m.id);
-  const crew = c.crew ?? [];
-  if (type === "movie") {
-    for (const m of crew) if (m.job === "Director" && typeof m.id === "number") ids.push(m.id);
-  } else {
-    for (const m of crew) if ((m.job === "Creator" || m.department === "Writing") && typeof m.id === "number") ids.push(m.id);
-  }
-  return ids;
-}
-
-async function fetchFeatures(type: MediaType, id: number, locale: string) {
-  const path = type === "movie" ? `/movie/${id}` : `/tv/${id}`;
-  const primary = await tmdbGet<TMDBDetailsWithAppends>(path, { language: locale, append_to_response: "keywords,credits" }, "force-cache").catch(() => null);
-  if (primary) {
-    const kw = extractKeywordIds(primary), ppl = extractPeopleIds(primary, type);
-    if (kw.length || ppl.length) return { keywords: kw, people: ppl };
-  }
-  const fallback = await tmdbGet<TMDBDetailsWithAppends>(path, { language: "en-US", append_to_response: "keywords,credits" }, "force-cache");
-  return { keywords: extractKeywordIds(fallback), people: extractPeopleIds(fallback, type) };
-}
-
-type Seed = { id: number; type: MediaType; weight: number };
-
-async function buildTaste(seeds: Seed[], locale: string): Promise<Taste> {
-  const keywordW = new Map<number, number>(), peopleW = new Map<number, number>();
-  const feats = await Promise.all(seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({ keywords: [], people: [] }))));
-  for (let i = 0; i < seeds.length; i++) {
-    const w = seeds[i].weight;
-    const f = feats[i];
-    for (const kw of f.keywords) increment(keywordW, kw, w);
-    for (const p of f.people) increment(peopleW, p, w);
-  }
-  return { keywordW: normalizeTopK(keywordW, 60), peopleW: normalizeTopK(peopleW, 60) };
 }
 
 /* ---------------- Genre scoring (V1) ---------------- */
@@ -288,49 +178,6 @@ function jaccard(a: Set<number>, b: Set<number>): number {
   for (const x of a) if (b.has(x)) inter++;
   const union = a.size + b.size - inter;
   return union === 0 ? 0 : inter / union;
-}
-
-type RatingSeedRow = {
-  tmdbId: number;
-  mediaType: string;
-  rating: number | null;
-  decision: string;
-};
-
-/** Numeriskt betyg + svag signal för 5–6. */
-function numericSeedWeight(rating: number): number | null {
-  if (rating >= 7) return (rating - 6) / 4; // 0.25–1.0
-  if (rating <= 4) return -(5 - rating) / 4; // -0.25 till -1.0
-  if (rating === 5) return -0.12;
-  if (rating === 6) return -0.06;
-  return null;
-}
-
-/** Swipe-beslut utan numeriskt betyg. */
-function decisionSeedWeight(decision: string): number | null {
-  if (decision === "dislike") return -0.5;
-  if (decision === "like") return 0.85; // backup om watchlist-synk misslyckades
-  if (decision === "seen") return -0.15;
-  return null;
-}
-
-function seedFromRatingRow(r: RatingSeedRow): number | null {
-  if (typeof r.rating === "number") {
-    const w = numericSeedWeight(r.rating);
-    if (w !== null) return w;
-  }
-  return decisionSeedWeight(r.decision);
-}
-
-/**
- * Negativ signal ska inte skrivas över av watchlist/favorit (+1.0).
- * Vid samma tecken vinner störst absolutbelopp.
- */
-function mergeSeedWeight(prev: number | undefined, next: number): number {
-  if (prev === undefined) return next;
-  if (next < 0 && prev > 0) return next;
-  if (next > 0 && prev < 0) return prev;
-  return Math.abs(next) > Math.abs(prev) ? next : prev;
 }
 
 function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
@@ -407,40 +254,26 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     // Gruppinställningar (kugghjulet): satta värden åsidosätter automatiken,
     // tomma/null faller tillbaka på medlemsaggregeringen nedan.
-    const groupProviderOverride = isGroup ? parseProvidersJson(groupRow?.providers) : [];
-    const groupLikedOverride = isGroup ? groupRow?.favoriteGenres ?? [] : [];
-    const groupDislikedOverride = isGroup ? groupRow?.dislikedGenres ?? [] : [];
-    const groupCertOverride = isGroup && groupRow?.maxCert ? groupRow.maxCert : null;
+    const strictProviders = isGroup && (groupRow?.providers != null) &&
+      parseProvidersJson(groupRow?.providers).length > 0;
 
-    // 2. Extrahera och slå ihop providers (för solo eller grupp)
-    const providerStrings = new Set<string>();
-    if (isGroup && groupProviderOverride.length > 0) {
-      groupProviderOverride.forEach((s) => providerStrings.add(s));
-    } else if (isGroup) {
-      // Om grupp: Samla ALLA tjänster som någon i gruppen har (OR-logik via TMDB)
-      for (const p of memberProfiles) {
-        const pProviders = p.providers as string[] | undefined;
-        if (Array.isArray(pProviders)) pProviders.forEach((s) => providerStrings.add(s));
-      }
-    } else {
-      const pProviders = profile.providers as string[] | undefined;
-      if (Array.isArray(pProviders)) pProviders.forEach((s) => providerStrings.add(s));
-    }
+    const tasteInput = {
+      isGroup,
+      groupCode: isGroup ? groupCode : null,
+      locale,
+      profile,
+      memberProfiles,
+      groupRow,
+      ratings,
+      watchlist,
+      groupRatings,
+      groupWatchlist,
+    };
 
-    const usedProviderIds = getProviderIds(Array.from(providerStrings));
+    const providerStringList = resolveProviderStrings(tasteInput);
+    const usedProviderIds = getProviderIds(providerStringList);
     const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join("|") : undefined;
-    const strictProviders = isGroup && groupProviderOverride.length > 0;
-
-    // Åldersgräns: grupp (override/yngsta medlem) eller solo (egen profil).
-    let certMax: string | undefined;
-    if (groupCertOverride) {
-      certMax = groupCertOverride;
-    } else if (isGroup && memberProfiles.length > 0) {
-      const ages = memberProfiles.map((p) => ageFromDob(new Date(p.dob)));
-      certMax = seMaxCert(Math.min(...ages));
-    } else {
-      certMax = seMaxCert(ageFromDob(new Date(profile.dob)));
-    }
+    const certMax = resolveMaxCert(tasteInput);
 
     const recycleByUser = new Map<string, number>();
     recycleByUser.set(uid, profile.recycleAfterDays ?? 14);
@@ -470,27 +303,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     ]);
     const movieIdToName = new Map(movieGenres.genres.map((g) => [g.id, g.name] as const));
     const tvIdToName = new Map(tvGenres.genres.map((g) => [g.id, g.name] as const));
-    // Genrer: i grupp unionerar vi allas gillade genrer. Ogillade genrer räknas bara
-    // om INGEN i gruppen gillar dem (annars skulle en persons favorit straffas bort).
-    let likedGenres: Set<string>;
-    let dislikedGenres: Set<string>;
-    if (isGroup && (groupLikedOverride.length > 0 || groupDislikedOverride.length > 0)) {
-      // Kugghjulet: satta genrer ersätter medlemsaggregeringen helt.
-      likedGenres = new Set(groupLikedOverride);
-      dislikedGenres = new Set(groupDislikedOverride);
-      for (const g of likedGenres) dislikedGenres.delete(g);
-    } else if (isGroup) {
-      likedGenres = new Set<string>();
-      dislikedGenres = new Set<string>();
-      for (const p of memberProfiles) {
-        for (const g of p.favoriteGenres ?? []) likedGenres.add(g);
-        for (const g of p.dislikedGenres ?? []) dislikedGenres.add(g);
-      }
-      for (const g of likedGenres) dislikedGenres.delete(g);
-    } else {
-      likedGenres = new Set(profile.favoriteGenres ?? []);
-      dislikedGenres = new Set(profile.dislikedGenres ?? []);
-    }
+    const { liked: likedGenres, disliked: dislikedGenres } = resolveGenreSets(tasteInput);
 
     const pageNum = Math.max(1, page);
 
@@ -555,47 +368,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
-    // Seeds (favoriter + watchlist + betyg/swipe-beslut för taste).
-    const seedWeights = new Map<string, Seed>();
-    function addSeed(id: number, type: MediaType, weight: number) {
-      const k = `${type}_${id}`;
-      const prev = seedWeights.get(k);
-      const merged = mergeSeedWeight(prev?.weight, weight);
-      seedWeights.set(k, { id, type, weight: merged });
-    }
-
-    if (isGroup) {
-      for (const p of memberProfiles) {
-        const fm = p.favoriteMovie as FavoriteItem | null;
-        const fs = p.favoriteShow as FavoriteItem | null;
-        if (fm?.id) addSeed(fm.id, "movie", 1.0);
-        if (fs?.id) addSeed(fs.id, "tv", 1.0);
-      }
-      for (const w of groupWatchlist) {
-        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
-      }
-    } else {
-      const favMovie = profile.favoriteMovie as FavoriteItem | null;
-      const favShow = profile.favoriteShow as FavoriteItem | null;
-      if (favMovie?.id) addSeed(favMovie.id, "movie", 1.0);
-      if (favShow?.id) addSeed(favShow.id, "tv", 1.0);
-      for (const w of watchlist) {
-        addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
-      }
-    }
-
-    const seedRatings = isGroup ? groupRatings : ratings;
-    for (const r of seedRatings) {
-      const w = seedFromRatingRow(r);
-      if (w !== null) addSeed(r.tmdbId, r.mediaType as MediaType, w);
-    }
-
-    // Fler seeds i grupp så hela sällskapet representeras i smakmodellen.
-    // Prioritera på |vikt| så både starka positiva och negativa signaler ryms.
-    const seedCap = isGroup ? 20 : 14;
-    const seeds = Array.from(seedWeights.values())
-      .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-      .slice(0, seedCap);
+    const seeds = buildSeeds(tasteInput);
 
     // Dedupe + index
     const uniq = dedupe(baseRaw);
@@ -618,29 +391,34 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     scoredV1.sort((a, b) => b.scoreV1 - a.scoreV1);
 
     // V2 taste
-    const taste = await buildTaste(seeds, locale);
+    const taste = await buildTasteMaps(seeds, locale);
     const N = Math.min(50, scoredV1.length);
     const topItems = scoredV1.slice(0, N);
 
-    const featureCache = new Map<string, { keywords: number[]; people: number[] }>();
+    type CachedFeatures = Awaited<ReturnType<typeof fetchFeatures>>;
+    const featureCache = new Map<string, CachedFeatures>();
     await Promise.all(
       topItems.map(async (t) => {
         const k = `${t.type}:${t.id}:${locale}`;
         if (!featureCache.has(k)) {
-          const f = await fetchFeatures(t.type, t.id, locale).catch(() => ({ keywords: [], people: [] }));
+          const f = await fetchFeatures(t.type, t.id, locale).catch(() => ({
+            keywords: [],
+            directors: [],
+            cast: [],
+          }));
           featureCache.set(k, f);
         }
-      })
+      }),
     );
 
-    function scoreTaste(f: { keywords: number[]; people: number[] }): number {
+    function scoreTaste(f: CachedFeatures): number {
       let s = 0;
       for (const kw of f.keywords) {
-        const w = taste.keywordW.get(kw);
+        const w = taste.keywordW.get(kw.id);
         if (w) s += 1.2 * w;
       }
-      for (const p of f.people) {
-        const w = taste.peopleW.get(p);
+      for (const p of [...f.directors, ...f.cast]) {
+        const w = taste.peopleW.get(p.id);
         if (w) s += 1.4 * w;
       }
       return s;
@@ -654,20 +432,26 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       scoreFinal: number;
       kwSet: Set<number>;
       genSet: Set<number>;
+      features: CachedFeatures;
     };
 
     const scoredFinal: ScoredFinal[] = [];
     for (const s of topItems) {
-      const f = featureCache.get(`${s.type}:${s.id}:${locale}`) ?? { keywords: [], people: [] };
-      const v = s.scoreV1 + scoreTaste(f); // Ingen provider-penalitet behövs
+      const f = featureCache.get(`${s.type}:${s.id}:${locale}`) ?? {
+        keywords: [],
+        directors: [],
+        cast: [],
+      };
+      const v = s.scoreV1 + scoreTaste(f);
 
       scoredFinal.push({
         id: s.id,
         type: s.type,
         base: s.base,
         scoreFinal: v,
-        kwSet: new Set((f.keywords ?? []) as number[]),
+        kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),
+        features: f,
       });
     }
 
@@ -698,14 +482,35 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       pool.splice(bestIdx, 1);
     }
 
-    const items: UnifiedItem[] = selected.map((s) => ({
-      id: s.id,
-      tmdbType: s.type,
-      title: pickTitle(s.base),
-      year: yearFrom(s.base),
-      poster_path: s.base.poster_path ?? null,
-      vote_average: s.base.vote_average,
-    }));
+    const genreMaps = { movieIdToName, tvIdToName };
+    const items: UnifiedItem[] = selected.map((s) => {
+      const genreHits = genreScoreNames(
+        s.base.genre_ids,
+        s.type,
+        genreMaps,
+        likedGenres,
+        dislikedGenres,
+      );
+      const reasons = shouldShowSwipeReasons(s.id, s.type, SWIPE_REASONS_SHOW_RATE)
+        ? buildMatchReasons({
+            taste,
+            features: s.features,
+            genreHits,
+            peopleNames: new Map(),
+            keywordNames: new Map(),
+          })
+        : undefined;
+
+      return {
+        id: s.id,
+        tmdbType: s.type,
+        title: pickTitle(s.base),
+        year: yearFrom(s.base),
+        poster_path: s.base.poster_path ?? null,
+        vote_average: s.base.vote_average,
+        ...(reasons && reasons.length > 0 ? { reasons } : {}),
+      };
+    });
 
     return {
       ok: true,

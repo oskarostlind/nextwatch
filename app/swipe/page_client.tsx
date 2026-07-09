@@ -747,21 +747,21 @@ export function StaticCard({
     >
       {/* Framsida — roterar bort när kortet vänts */}
       <div
-        className={`absolute inset-0 h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [backface-visibility:hidden] [transform-style:preserve-3d] ${
+        className={`absolute inset-0 h-full w-full min-h-0 overflow-hidden rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [backface-visibility:hidden] [-webkit-backface-visibility:hidden] [transform-style:preserve-3d] ${
           flipped ? "[transform:rotateY(180deg)]" : "[transform:rotateY(0deg)]"
         }`}
         aria-hidden={flipped}
       >
         <Front card={card} />
       </div>
-      {/* Baksida — förroterad 180° och roteras fram vid flip */}
+      {/* Baksida — innehåll monteras bara vid flip (WebKit visar annars text spegelvänt på framsidan) */}
       <div
-        className={`absolute inset-0 h-full w-full min-h-0 rounded-2xl border border-white/15 bg-neutral-950 shadow-xl transition-transform duration-300 [backface-visibility:hidden] [transform-style:preserve-3d] ${
+        className={`absolute inset-0 h-full w-full min-h-0 overflow-hidden rounded-2xl border border-white/15 bg-neutral-950 shadow-xl transition-transform duration-300 [backface-visibility:hidden] [-webkit-backface-visibility:hidden] [transform-style:preserve-3d] ${
           flipped ? "[transform:rotateY(0deg)]" : "[transform:rotateY(180deg)]"
         }`}
         aria-hidden={!flipped}
       >
-        <Back card={card} />
+        {flipped ? <Back card={card} /> : null}
       </div>
     </div>
   );
@@ -825,7 +825,7 @@ function AdCard({ adId }: { adId: string }) {
 
 function Front({ card }: { card: Card }) {
   return (
-    <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
+    <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl [backface-visibility:hidden] [-webkit-backface-visibility:hidden]">
       {card.poster ? (
         <div className="relative h-full w-full min-h-0">
           <Image
@@ -884,7 +884,7 @@ function Back({ card }: { card: Card }) {
   const streamProviders = card.providers?.flatrate ?? [];
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950 [backface-visibility:hidden] [-webkit-backface-visibility:hidden]">
       <div className="relative h-32 shrink-0 overflow-hidden">
         {heroSrc ? (
           <Image

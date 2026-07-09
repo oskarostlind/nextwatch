@@ -57,6 +57,7 @@ export const RECS_LIMIT = 30;   // per minute
 // Höjt till 120 för att ge pollningen marginal (TMDB-anropet sker bara vid faktisk match).
 export const MATCH_LIMIT = 120; // per minute
 export const TMDB_DETAILS_LIMIT = 60;
+export const TASTE_LIMIT = 12; // smakprofil per minute (TMDB-tung)
 export const AUTH_LIMIT = 10;   // login/register per minute
 
 /** Get key for rate limiting: prefer nw_uid from cookie, else IP from headers */

@@ -34,6 +34,8 @@ export type SwipeCard = {
    * undefined = inte hämtad än, null = hämtad men ingen data.
    */
   providers?: SwipeProviders | null;
+  /** Varför titeln matchar din smak (visas ibland på kortet). */
+  reasons?: string[];
 };
 
 const HIDE_KEY = "nw_disliked_until";
@@ -126,6 +128,7 @@ type UnifiedItem = {
   year?: string;
   poster_path?: string | null;
   vote_average?: number;
+  reasons?: string[];
 };
 
 export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
@@ -146,6 +149,7 @@ export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
           poster,
           overview: null,
           rating: typeof it.vote_average === "number" ? it.vote_average : null,
+          ...(it.reasons && it.reasons.length > 0 ? { reasons: it.reasons } : {}),
         };
       })
       .filter((v): v is SwipeCard => Boolean(v))

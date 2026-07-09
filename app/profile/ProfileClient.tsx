@@ -5,9 +5,12 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
-import { Button, Card, Chip, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
+import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
+import CompactGenrePicker from "./CompactGenrePicker";
+import TasteProfilePanel from "./TasteProfilePanel";
+import { toSvGenres } from "./profileGenres";
 
 export type FavoriteItem = {
   id: number;
@@ -83,30 +86,8 @@ function providerIdsToLabels(ids: ProviderId[]): string[] {
   return ids.map((id) => map.get(id)!).filter(Boolean);
 }
 
-// —————————————————————— Genrer ——————————————————————
-const ALL_GENRES_SV = [
-  "Action", "Äventyr", "Animerat", "Komedi", "Kriminal", "Dokumentär",
-  "Drama", "Fantasy", "Skräck", "Romantik", "Sci-Fi", "Thriller",
-  "Mysterium", "Familj", "Historia", "Musik", "Krig", "Western",
-] as const;
-const ENG_TO_SV: Record<string, string> = {
-  "Action": "Action", "Adventure": "Äventyr", "Animation": "Animerat",
-  "Comedy": "Komedi", "Crime": "Kriminal", "Documentary": "Dokumentär",
-  "Drama": "Drama", "Fantasy": "Fantasy", "Horror": "Skräck",
-  "Romance": "Romantik", "Science Fiction": "Sci-Fi", "Thriller": "Thriller",
-  "Mystery": "Mysterium", "Family": "Familj", "History": "Historia",
-  "Music": "Musik", "War": "Krig", "Western": "Western", "TV Movie": "TV-film",
-};
-function toSvGenres(arr: unknown): string[] {
-  if (!Array.isArray(arr)) return [];
-  const out: string[] = [];
-  for (const raw of arr) {
-    if (typeof raw !== "string") continue;
-    const v = ENG_TO_SV[raw] ?? raw;
-    if (ALL_GENRES_SV.includes(v as (typeof ALL_GENRES_SV)[number])) out.push(v);
-  }
-  return Array.from(new Set(out));
-}
+
+// Genrer importeras från profileGenres.ts
 
 function toInputDate(d: string | null): string {
   if (!d) return "";
@@ -522,29 +503,39 @@ export default function ProfileClient({ initial }: Props) {
         )}
 
         {tab === "smak" && (
-          <div className="grid gap-5">
-            <div className="grid grid-cols-1 gap-4">
-              <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
-              <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm text-white/70">Gillar</label>
-              <div className="flex flex-wrap gap-2">
-                {ALL_GENRES_SV.map((g) => (
-                  <Chip key={`like-${g}`} tone="like" selected={favoriteGenres.includes(g)} onClick={() => toggle("favoriteGenres", g)}>
-                    {g}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm text-white/70">Undvik</label>
-              <div className="flex flex-wrap gap-2">
-                {ALL_GENRES_SV.map((g) => (
-                  <Chip key={`dislike-${g}`} tone="dislike" selected={dislikedGenres.includes(g)} onClick={() => toggle("dislikedGenres", g)}>
-                    {g}
-                  </Chip>
-                ))}
+          <div className="grid gap-6">
+            <TasteProfilePanel />
+
+            <div className="border-t border-white/10 pt-5">
+              <h3 className="mb-1 text-sm font-semibold text-white/85">Redigera smak</h3>
+              <p className="mb-4 text-xs text-white/45">
+                Dina val här påverkar både rekommendationer och smakprofilen ovan.
+              </p>
+              <div className="grid gap-5">
+                <div className="grid grid-cols-1 gap-4">
+                  <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
+                  <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
+                </div>
+                <CompactGenrePicker
+                  label="Gillar"
+                  tone="like"
+                  selected={favoriteGenres}
+                  excluded={dislikedGenres}
+                  onChange={(next) => {
+                    setFavoriteGenres(next);
+                    setDislikedGenres((old) => old.filter((g) => !next.includes(g)));
+                  }}
+                />
+                <CompactGenrePicker
+                  label="Undviker"
+                  tone="dislike"
+                  selected={dislikedGenres}
+                  excluded={favoriteGenres}
+                  onChange={(next) => {
+                    setDislikedGenres(next);
+                    setFavoriteGenres((old) => old.filter((g) => !next.includes(g)));
+                  }}
+                />
               </div>
             </div>
           </div>

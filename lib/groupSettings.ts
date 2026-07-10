@@ -3,6 +3,10 @@
 // group/match + lib/push.ts (matchtröskel) och inställnings-UI:t.
 // Hålls fri från Prisma/next-imports så den kan importeras från klienten.
 
+import { type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
+
+export type { SwipeMediaFilter };
+
 /** Kanonisk genrelista (svenska namn, samma som profil/onboarding). */
 export const GROUP_GENRES = [
   "Action", "Äventyr", "Animerat", "Komedi", "Kriminal", "Dokumentär",
@@ -27,6 +31,8 @@ export type GroupSettings = {
   maxCert: GroupCert | null;
   /** Procent 1–100. null = default 60. */
   matchThreshold: number | null;
+  /** Vilken typ av titlar gruppen swipar (standard: båda). */
+  mediaFilter: SwipeMediaFilter;
 };
 
 export function isValidCert(v: unknown): v is GroupCert {

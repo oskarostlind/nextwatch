@@ -7,11 +7,13 @@ import {
   ensureSoloDeck,
   getGroupDeckSnapshot,
   getSoloDeckSnapshot,
+  getSoloSwipeMediaFilter,
   popGroupCard,
   popSoloCard,
   preloadGroupDeckIfJoined,
   preloadSwipeDecksIdle,
   retrySoloDeck,
+  setSoloSwipeMediaFilter,
   setSwipeBackgroundPrefetch,
   setSwipeAdsEnabled,
   subscribeSwipeDeck,
@@ -96,6 +98,9 @@ export function useSoloSwipeDeck() {
     retrySoloDeck,
     ensureSoloDeck,
     unshiftSoloCard,
+    mediaFilter: solo.mediaFilter,
+    setMediaFilter: setSoloSwipeMediaFilter,
+    getMediaFilter: getSoloSwipeMediaFilter,
   };
 }
 

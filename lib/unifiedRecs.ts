@@ -21,8 +21,9 @@ import {
   tmdbGet,
   type MediaType,
 } from "@/lib/tasteModel";
+import { normalizeSwipeMediaFilter, type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 
-export type { MediaType };
+export type { MediaType, SwipeMediaFilter };
 
 /* ---------- TMDB shared types ---------- */
 type TMDBPaged<T> = { page: number; results: T[]; total_pages?: number };
@@ -59,6 +60,7 @@ export type UnifiedRecsOk = {
   language: string;
   region: string;
   usedProviderIds: number[];
+  mediaFilter: SwipeMediaFilter;
   items: UnifiedItem[];
 };
 
@@ -72,6 +74,8 @@ export type UnifiedRecsParams = {
   locale: string;
   groupCode: string | null;
   page?: number;
+  /** Solo: från klient. Grupp: ignoreras — läses från Group.mediaFilter. */
+  mediaFilter?: SwipeMediaFilter;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -189,7 +193,7 @@ function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1 } = params;
+  const { uid, region, locale, groupCode, page = 1, mediaFilter: soloMediaFilter } = params;
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
@@ -214,6 +218,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               dislikedGenres: true,
               providers: true,
               maxCert: true,
+              mediaFilter: true,
             },
           })
         : Promise.resolve(null),
@@ -223,6 +228,11 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     // Gruppläge kräver minst en laddad medlem (utöver kod).
     const isGroup = !!groupCode && groupMembers.length > 0;
+    const mediaFilter: SwipeMediaFilter = isGroup
+      ? normalizeSwipeMediaFilter(groupRow?.mediaFilter)
+      : normalizeSwipeMediaFilter(soloMediaFilter);
+    const wantMovie = mediaFilter === "both" || mediaFilter === "movie";
+    const wantTv = mediaFilter === "both" || mediaFilter === "tv";
     // Alla medlemsprofiler (för providers, genrer, ålder och seeds).
     const memberProfiles = isGroup
       ? groupMembers
@@ -325,26 +335,30 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       if (tmdbPage > 500) break; // TMDB tillåter max 500 sidor.
 
       const [popMovie, popTv] = await Promise.all([
-        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
-          language: locale,
-          region,
-          watch_region: region,
-          with_watch_providers: tmdbProviderString,
-          certification_country: "SE",
-          "certification.lte": certMax,
-          sort_by: "popularity.desc",
-          page: tmdbPage
-        }, "force-cache"),
+        wantMovie
+          ? tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
+              language: locale,
+              region,
+              watch_region: region,
+              with_watch_providers: tmdbProviderString,
+              certification_country: "SE",
+              "certification.lte": certMax,
+              sort_by: "popularity.desc",
+              page: tmdbPage,
+            }, "force-cache")
+          : Promise.resolve({ page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 }),
         // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
         // så åldersgränsen (certMax) kan bara appliceras på filmer.
-        tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
-          language: locale,
-          region,
-          watch_region: region,
-          with_watch_providers: tmdbProviderString,
-          sort_by: "popularity.desc",
-          page: tmdbPage
-        }, "force-cache"),
+        wantTv
+          ? tmdbGet<TMDBPaged<TMDBListItem>>("/discover/tv", {
+              language: locale,
+              region,
+              watch_region: region,
+              with_watch_providers: tmdbProviderString,
+              sort_by: "popularity.desc",
+              page: tmdbPage,
+            }, "force-cache")
+          : Promise.resolve({ page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 }),
       ]);
 
       maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
@@ -368,7 +382,9 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
-    const seeds = buildSeeds(tasteInput);
+    const seeds = buildSeeds(tasteInput).filter(
+      (s) => mediaFilter === "both" || s.type === mediaFilter,
+    );
 
     // Dedupe + index
     const uniq = dedupe(baseRaw);
@@ -519,6 +535,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       language: locale,
       region,
       usedProviderIds,
+      mediaFilter,
       items,
     };
   } catch (err) {

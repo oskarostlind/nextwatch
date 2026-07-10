@@ -2,6 +2,8 @@
 
 import type { GroupMemberItem } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
+import { swipeMediaFilterShortLabel, type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
+import { useEffect, useState } from "react";
 
 type Member = { userId: string; displayName: string; initials: string };
 
@@ -26,6 +28,28 @@ export default function GroupBar({ code }: { code: string }) {
   const social = useSocial();
   const members: Member[] =
     social.groupCode === code ? social.members.map(toMember) : [];
+
+  const [mediaFilter, setMediaFilter] = useState<SwipeMediaFilter>("both");
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    void fetch(`/api/group/settings?code=${encodeURIComponent(code)}`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ ok?: boolean; settings?: { mediaFilter?: SwipeMediaFilter } }>)
+      .then((j) => {
+        if (!cancelled && j?.ok && j.settings?.mediaFilter) {
+          setMediaFilter(j.settings.mediaFilter);
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  const mediaLabel = swipeMediaFilterShortLabel(mediaFilter);
 
   const invite = async () => {
     const url = `${location.origin}/group/swipe?code=${encodeURIComponent(code)}`;
@@ -55,7 +79,16 @@ export default function GroupBar({ code }: { code: string }) {
   return (
     <div className="sticky top-0 z-20 border-b border-white/10 bg-neutral-950/80 backdrop-blur">
       <div className="mx-auto flex w-full items-center justify-between px-4 py-2.5">
-        <div className="text-sm font-semibold">Grupp: <span className="font-mono tracking-wider text-cyan-300">{code}</span></div>
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <span>
+            Grupp: <span className="font-mono tracking-wider text-cyan-300">{code}</span>
+          </span>
+          {mediaLabel && (
+            <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-200">
+              {mediaLabel}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {members.map((m) => (
             <div key={m.userId} className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-neutral-200 sm:flex">

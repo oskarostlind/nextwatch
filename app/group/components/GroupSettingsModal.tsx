@@ -15,7 +15,9 @@ import {
   GROUP_GENRES,
   type GroupCert,
   type GroupSettings,
+  type SwipeMediaFilter,
 } from "@/lib/groupSettings";
+import { SegmentedTabs } from "@/app/components/ui/kit";
 import { PROVIDERS } from "@/lib/providers";
 
 type SettingsResp = {
@@ -74,6 +76,7 @@ export default function GroupSettingsModal({
   const [maxCert, setMaxCert] = useState<GroupCert | null>(null);
   const [threshold, setThreshold] = useState<number>(DEFAULT_MATCH_THRESHOLD);
   const [thresholdCustom, setThresholdCustom] = useState(false);
+  const [mediaFilter, setMediaFilter] = useState<SwipeMediaFilter>("both");
 
   useEffect(() => {
     if (!open) return;
@@ -94,6 +97,7 @@ export default function GroupSettingsModal({
         setMaxCert(j.settings.maxCert);
         setThresholdCustom(j.settings.matchThreshold !== null);
         setThreshold(j.settings.matchThreshold ?? DEFAULT_MATCH_THRESHOLD);
+        setMediaFilter(j.settings.mediaFilter ?? "both");
       })
       .catch(() => {
         if (!cancelled) setError("Nätverksfel. Försök igen.");
@@ -134,6 +138,7 @@ export default function GroupSettingsModal({
           providers,
           maxCert,
           matchThreshold: thresholdCustom ? threshold : null,
+          mediaFilter,
         }),
       });
       const j = (await res.json()) as SettingsResp;
@@ -172,6 +177,23 @@ export default function GroupSettingsModal({
           <p className="py-8 text-center text-sm text-white/50">Laddar…</p>
         ) : (
           <>
+            <section>
+              <h4 className="mb-2 text-sm font-semibold text-white/80">Vi letar efter</h4>
+              <p className="mb-2 text-xs text-white/40">
+                Alla i gruppen ser samma typ av titlar när ni swipar.
+              </p>
+              <SegmentedTabs
+                layoutId="group-settings-media"
+                tabs={[
+                  { id: "both" as SwipeMediaFilter, label: "Båda" },
+                  { id: "movie" as SwipeMediaFilter, label: "Film" },
+                  { id: "tv" as SwipeMediaFilter, label: "Serier" },
+                ]}
+                value={mediaFilter}
+                onChange={setMediaFilter}
+              />
+            </section>
+
             <section>
               <h4 className="mb-2 text-sm font-semibold text-white/80">Gillade genrer</h4>
               <div className="flex flex-wrap gap-2">

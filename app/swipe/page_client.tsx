@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { ChevronUp, Eye, Heart, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
-import { Button } from "@/app/components/ui/kit";
+import { Button, SegmentedTabs } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard, SwipeProviders } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
+import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
@@ -235,7 +236,8 @@ let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } = useSoloSwipeDeck();
+  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard, mediaFilter, setMediaFilter } =
+    useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
   const feedLoading = cards.length === 0 && (loading || !ready);
   const feedError = cards.length === 0 ? error : null;
@@ -520,10 +522,28 @@ export default function SwipePageClient() {
     for (let i = Math.min(2, cards.length - 1); i >= 0; i--) stackIndices.push(i);
   }
 
+  const handleMediaFilterChange = (next: SwipeMediaFilter) => {
+    if (next === mediaFilter) return;
+    undoStackRef.current = [];
+    setMediaFilter(next);
+  };
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
+      <div className="shrink-0 px-3 pt-2">
+        <SegmentedTabs
+          layoutId="swipe-media-filter"
+          tabs={[
+            { id: "both" as SwipeMediaFilter, label: "Båda" },
+            { id: "movie" as SwipeMediaFilter, label: "Film" },
+            { id: "tv" as SwipeMediaFilter, label: "Serier" },
+          ]}
+          value={mediaFilter}
+          onChange={handleMediaFilterChange}
+        />
+      </div>
       <RatingModal
         open={ratePrompt !== null}
         item={

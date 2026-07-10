@@ -18,6 +18,7 @@ import {
   sanitizeGenres,
   type GroupSettings,
 } from "@/lib/groupSettings";
+import { isValidSwipeMediaFilter } from "@/lib/swipeMediaFilter";
 
 type Ok = {
   ok: true;
@@ -38,6 +39,7 @@ function toSettingsDto(g: {
   providers: unknown;
   maxCert: string | null;
   matchThreshold: number | null;
+  mediaFilter: string;
 }): GroupSettings {
   return {
     favoriteGenres: g.favoriteGenres,
@@ -45,6 +47,7 @@ function toSettingsDto(g: {
     providers: parseProvidersJson(g.providers),
     maxCert: isValidCert(g.maxCert) ? g.maxCert : null,
     matchThreshold: g.matchThreshold,
+    mediaFilter: isValidSwipeMediaFilter(g.mediaFilter) ? g.mediaFilter : "both",
   };
 }
 
@@ -66,6 +69,7 @@ export async function GET(req: NextRequest) {
       providers: true,
       maxCert: true,
       matchThreshold: true,
+      mediaFilter: true,
       members: { where: { userId: uid }, select: { userId: true } },
     },
   });
@@ -88,6 +92,7 @@ type PatchBody = {
   providers?: unknown;
   maxCert?: unknown;
   matchThreshold?: unknown;
+  mediaFilter?: unknown;
 };
 
 export async function PATCH(req: NextRequest) {
@@ -120,6 +125,7 @@ export async function PATCH(req: NextRequest) {
     providers?: string[];
     maxCert?: string | null;
     matchThreshold?: number | null;
+    mediaFilter?: string;
   } = {};
 
   if ("favoriteGenres" in body) {
@@ -148,6 +154,12 @@ export async function PATCH(req: NextRequest) {
     }
     data.matchThreshold = body.matchThreshold as number | null;
   }
+  if ("mediaFilter" in body) {
+    if (!isValidSwipeMediaFilter(body.mediaFilter)) {
+      return bad("Ogiltigt innehållsfilter (movie, tv eller both).");
+    }
+    data.mediaFilter = body.mediaFilter;
+  }
 
   if (Object.keys(data).length === 0) return bad("Inget att uppdatera.");
 
@@ -161,6 +173,7 @@ export async function PATCH(req: NextRequest) {
       providers: true,
       maxCert: true,
       matchThreshold: true,
+      mediaFilter: true,
     },
   });
 

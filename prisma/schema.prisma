@@ -195,6 +195,8 @@ model Group {
   providers      Json     @default("[]")
   maxCert        String?  @map("max_cert")
   matchThreshold Int?     @map("match_threshold")
+  /// movie | tv | both — vilken typ av titlar gruppen swipar (standard: both).
+  mediaFilter    String   @default("both") @map("media_filter")
 
   members     GroupMember[]
   votes       GroupVote[]      @relation("GroupVotes")

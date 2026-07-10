@@ -4,6 +4,11 @@ import {
   type SwipeCard,
 } from "@/lib/swipeDeck";
 import { injectAdCards } from "@/lib/ads";
+import {
+  readSoloSwipeMediaFilter,
+  writeSoloSwipeMediaFilter,
+  type SwipeMediaFilter,
+} from "@/lib/swipeMediaFilter";
 
 export const PREFETCH_MIN_CARDS = 10;
 
@@ -27,6 +32,7 @@ export type SoloDeckState = {
   error: string | null;
   mode: "group" | "individual";
   group: GroupInfo | null;
+  mediaFilter: SwipeMediaFilter;
   ready: boolean;
 };
 
@@ -34,6 +40,7 @@ export type GroupDeckState = {
   cards: SwipeCard[];
   loading: boolean;
   error: string | null;
+  mediaFilter: SwipeMediaFilter;
   ready: boolean;
 };
 
@@ -45,6 +52,7 @@ const emptySolo = (): SoloDeckState => ({
   error: null,
   mode: "individual",
   group: null,
+  mediaFilter: "both",
   ready: false,
 });
 
@@ -52,6 +60,7 @@ const emptyGroup = (): GroupDeckState => ({
   cards: [],
   loading: false,
   error: null,
+  mediaFilter: "both",
   ready: false,
 });
 
@@ -59,10 +68,13 @@ const EMPTY_GROUP: GroupDeckState = {
   cards: [],
   loading: false,
   error: null,
+  mediaFilter: "both",
   ready: false,
 };
 
 let soloState = emptySolo();
+let soloMediaFilter: SwipeMediaFilter = "both";
+let soloMediaFilterReady = false;
 let groupDecks: Record<string, GroupDeckState> = {};
 let soloLoadInFlight = false;
 const groupLoadInFlight = new Set<string>();
@@ -87,6 +99,33 @@ export function getGroupDeckSnapshot(code: string): GroupDeckState {
   return groupDecks[code.toUpperCase()] ?? EMPTY_GROUP;
 }
 
+export function getSoloSwipeMediaFilter(): SwipeMediaFilter {
+  ensureSoloMediaFilterLoaded();
+  return soloMediaFilter;
+}
+
+function ensureSoloMediaFilterLoaded() {
+  if (soloMediaFilterReady) return;
+  soloMediaFilter = readSoloSwipeMediaFilter();
+  soloMediaFilterReady = true;
+}
+
+export function setSoloSwipeMediaFilter(filter: SwipeMediaFilter) {
+  ensureSoloMediaFilterLoaded();
+  if (filter === soloMediaFilter) return;
+  soloMediaFilter = filter;
+  writeSoloSwipeMediaFilter(filter);
+  soloState = { ...emptySolo(), mediaFilter: filter };
+  emit();
+  void loadSoloPage(1, true);
+}
+
+function soloRecsUrl(page: number): string {
+  const params = new URLSearchParams({ page: String(page) });
+  if (soloMediaFilter !== "both") params.set("media", soloMediaFilter);
+  return `/api/recs/unified?${params.toString()}`;
+}
+
 export function setSwipeBackgroundPrefetch(enabled: boolean) {
   backgroundPrefetchEnabled = enabled;
   if (enabled) void maybePrefetchSoloPages();
@@ -108,6 +147,7 @@ function setGroupDeck(code: string, patch: Partial<GroupDeckState>) {
 
 async function loadSoloPage(targetPage: number, replace: boolean) {
   if (soloLoadInFlight) return;
+  ensureSoloMediaFilterLoaded();
   soloLoadInFlight = true;
   if (replace) {
     patchSolo({
@@ -116,7 +156,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     });
   }
   try {
-    const res = await fetch(`/api/recs/unified?page=${targetPage}`, { cache: "no-store" });
+    const res = await fetch(soloRecsUrl(targetPage), { cache: "no-store" });
     if (!res.ok) {
       if (replace) patchSolo({ error: "Kunde inte hämta förslag. Försök igen.", hasMore: false, loading: false });
       return;
@@ -126,6 +166,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
           ok: true;
           mode: "group" | "individual";
           group: GroupInfo | null;
+          mediaFilter?: SwipeMediaFilter;
           items: Parameters<typeof mapUnifiedItems>[0];
         }
       | { ok: false; message?: string };
@@ -151,6 +192,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       error: null,
       mode: data.mode,
       group: data.group,
+      mediaFilter: data.mediaFilter ?? soloMediaFilter,
       ready: true,
     };
     emit();
@@ -174,9 +216,10 @@ async function maybePrefetchSoloPages() {
 }
 
 export async function ensureSoloDeck(opts?: { force?: boolean }) {
+  ensureSoloMediaFilterLoaded();
   const force = opts?.force ?? false;
   const s = soloState;
-  if (!force && s.ready && s.cards.length > 0) {
+  if (!force && s.ready && s.cards.length > 0 && s.mediaFilter === soloMediaFilter) {
     if (backgroundPrefetchEnabled && s.cards.length < PREFETCH_MIN_CARDS && s.hasMore) {
       await maybePrefetchSoloPages();
     }
@@ -187,7 +230,8 @@ export async function ensureSoloDeck(opts?: { force?: boolean }) {
 }
 
 export async function retrySoloDeck() {
-  soloState = emptySolo();
+  ensureSoloMediaFilterLoaded();
+  soloState = { ...emptySolo(), mediaFilter: soloMediaFilter };
   emit();
   await loadSoloPage(1, true);
 }
@@ -225,7 +269,7 @@ export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) 
       cache: "no-store",
     });
     const data = (await res.json()) as
-      | { ok: true; items: Parameters<typeof mapUnifiedItems>[0] }
+      | { ok: true; mediaFilter?: SwipeMediaFilter; items: Parameters<typeof mapUnifiedItems>[0] }
       | { ok: false; message?: string };
 
     if (!("ok" in data) || !data.ok) {
@@ -241,6 +285,7 @@ export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) 
       cards: mapUnifiedItems(data.items),
       loading: false,
       error: null,
+      mediaFilter: data.mediaFilter ?? "both",
       ready: true,
     });
   } catch {
@@ -274,6 +319,7 @@ export function updateGroupCards(code: string, fn: (cards: SwipeCard[]) => Swipe
 
 /** Förladda första sidan när appen startar — körs in idle time, inte på kritisk väg. */
 export function preloadSwipeDecksIdle() {
+  ensureSoloMediaFilterLoaded();
   const run = () => {
     void ensureSoloDeck();
     const code = readGroupCodeFromCookie();

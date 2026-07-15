@@ -27,6 +27,12 @@ model User {
   passwordHash  String?   @map("password_hash")
   lastLoginAt   DateTime? @map("last_login_at")
 
+  /// Senaste försöket att skicka dagens tips (app/api/cron/daily-recs).
+  /// Kön sorteras på det här — den som väntat längst går först — så att inte
+  /// samma användare hamnar sist varje körning när tidsbudgeten tar slut.
+  /// null = har aldrig fått ett tips och går därför främst i kön.
+  lastDailyRecAt DateTime? @map("last_daily_rec_at")
+
   // Username för kompis-sök
   username String? @unique
 
@@ -139,8 +145,11 @@ model Rating {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Inget separat @@index på (userId, tmdbId, mediaType): @@unique ovan skapar
+  // redan exakt det indexet. Dubbletten idx_ratings_user_tmdb låg här och hade
+  // 0 scans i produktion medan unique-indexet stod för alla 2899 — den kostade
+  // bara skrivtid och disk. Se prisma/sql/2026-07-15_daily_recs_fairness.sql.
   @@unique([userId, tmdbId, mediaType])
-  @@index([userId, tmdbId, mediaType], map: "idx_ratings_user_tmdb")
   @@map("ratings")
 }
 

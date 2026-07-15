@@ -56,19 +56,13 @@ export async function POST(req: NextRequest) {
       select: { code: true },
     });
     if (!group) {
-      // Markera som obsolet/declined och svara
-      await prisma.groupInvite.update({
-        where: { id: invite.id },
-        data: { status: "declined", respondedAt: new Date() },
-      });
+      // Gruppen hann gallras bort — inbjudan är meningslös.
+      await prisma.groupInvite.delete({ where: { id: invite.id } });
       return bad("Group no longer exists.");
     }
 
     if (body.action === "decline") {
-      await prisma.groupInvite.update({
-        where: { id: invite.id },
-        data: { status: "declined", respondedAt: new Date() },
-      });
+      await prisma.groupInvite.delete({ where: { id: invite.id } });
       return NextResponse.json({ ok: true } as OkPlain, { status: 200 });
     }
 
@@ -80,11 +74,12 @@ export async function POST(req: NextRequest) {
       create: { groupCode: group.code, userId },
     });
 
-    // 2) Uppdatera invite-status
-    await prisma.groupInvite.update({
-      where: { id: invite.id },
-      data: { status: "accepted", respondedAt: new Date() },
-    });
+    // 2) Inbjudan har gjort sitt — medlemskapet är svaret, och det ligger i
+    //    GroupMember. Raden raderas i stället för att få status "accepted":
+    //    ingen läser besvarade inbjudningar (invite/list returnerar bara
+    //    pending), och en kvarliggande accepted-rad krockar med
+    //    uq_group_invites_pair_status nästa gång samma par bjuder in/accepterar.
+    await prisma.groupInvite.delete({ where: { id: invite.id } });
 
     // Notifiera den som bjöd in så att hen vet att gruppswipen kan börja.
     if (invite.fromUserId) {

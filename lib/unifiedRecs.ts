@@ -7,9 +7,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { parseProvidersJson } from "@/lib/groupSettings";
-import { SWIPE_REASONS_SHOW_RATE } from "@/lib/tasteFeature";
 import {
-  buildMatchReasons,
+  SWIPE_REASONS_SHOW_RATE,
+  TOPMATCH_MIN_EVIDENCE,
+  TOPMATCH_MIN_TASTE_SCORE,
+} from "@/lib/tasteFeature";
+import {
+  buildMatchEvidence,
   buildSeeds,
   buildTasteMaps,
   fetchFeatures,
@@ -19,11 +23,12 @@ import {
   resolveProviderStrings,
   shouldShowSwipeReasons,
   tmdbGet,
+  type MatchEvidence,
   type MediaType,
 } from "@/lib/tasteModel";
 import { normalizeSwipeMediaFilter, type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 
-export type { MediaType, SwipeMediaFilter };
+export type { MatchEvidence, MediaType, SwipeMediaFilter };
 
 /* ---------- TMDB shared types ---------- */
 type TMDBPaged<T> = { page: number; results: T[]; total_pages?: number };
@@ -51,6 +56,12 @@ export type UnifiedItem = {
   vote_average?: number;
   /** Kort förklaring varför titeln matchar (visas ibland i swipe). */
   reasons?: string[];
+  /**
+   * Satt bara när titeln passerar smaktröskeln i solo — då firar swipen liken
+   * med matchrutan. evidence är alltid icke-tom och härledd (person/tema), så
+   * det finns något konkret att motivera med.
+   */
+  topMatch?: { evidence: MatchEvidence[] };
 };
 
 export type UnifiedRecsOk = {
@@ -74,8 +85,6 @@ export type UnifiedRecsParams = {
   locale: string;
   groupCode: string | null;
   page?: number;
-  /** Solo: från klient. Grupp: ignoreras — läses från Group.mediaFilter. */
-  mediaFilter?: SwipeMediaFilter;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -193,7 +202,7 @@ function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1, mediaFilter: soloMediaFilter } = params;
+  const { uid, region, locale, groupCode, page = 1 } = params;
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
@@ -228,9 +237,10 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     // Gruppläge kräver minst en laddad medlem (utöver kod).
     const isGroup = !!groupCode && groupMembers.length > 0;
+    // Solo läser filtret från profilen (satt under /profile), grupp från Group.mediaFilter.
     const mediaFilter: SwipeMediaFilter = isGroup
       ? normalizeSwipeMediaFilter(groupRow?.mediaFilter)
-      : normalizeSwipeMediaFilter(soloMediaFilter);
+      : normalizeSwipeMediaFilter(profile.swipeMediaFilter);
     const wantMovie = mediaFilter === "both" || mediaFilter === "movie";
     const wantTv = mediaFilter === "both" || mediaFilter === "tv";
     // Alla medlemsprofiler (för providers, genrer, ålder och seeds).
@@ -421,6 +431,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
             keywords: [],
             directors: [],
             cast: [],
+            genres: [],
           }));
           featureCache.set(k, f);
         }
@@ -446,6 +457,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       type: MediaType;
       base: TMDBListItem;
       scoreFinal: number;
+      /** Enbart smakdelen — grinden för "Toppmatch", se lib/tasteFeature.ts. */
+      scoreTasteOnly: number;
       kwSet: Set<number>;
       genSet: Set<number>;
       features: CachedFeatures;
@@ -457,14 +470,16 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         keywords: [],
         directors: [],
         cast: [],
+        genres: [],
       };
-      const v = s.scoreV1 + scoreTaste(f);
+      const tasteOnly = scoreTaste(f);
 
       scoredFinal.push({
         id: s.id,
         type: s.type,
         base: s.base,
-        scoreFinal: v,
+        scoreFinal: s.scoreV1 + tasteOnly,
+        scoreTasteOnly: tasteOnly,
         kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),
         features: f,
@@ -507,15 +522,20 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         likedGenres,
         dislikedGenres,
       );
+      const evidence = buildMatchEvidence({ taste, features: s.features, genreHits });
+
       const reasons = shouldShowSwipeReasons(s.id, s.type, SWIPE_REASONS_SHOW_RATE)
-        ? buildMatchReasons({
-            taste,
-            features: s.features,
-            genreHits,
-            peopleNames: new Map(),
-            keywordNames: new Map(),
-          })
+        ? evidence.map((e) => e.label)
         : undefined;
+
+      // Toppmatch bara i solo: i grupp betyder "match" att flera gillat samma titel,
+      // och två sorters match i samma flöde vore förvirrande.
+      // Genreträffar räknas inte som bevis — de är valda i profilen, inte härledda.
+      const derivedEvidence = evidence.filter((e) => e.kind !== "genre");
+      const isTopMatch =
+        !isGroup &&
+        s.scoreTasteOnly >= TOPMATCH_MIN_TASTE_SCORE &&
+        derivedEvidence.length >= TOPMATCH_MIN_EVIDENCE;
 
       return {
         id: s.id,
@@ -525,6 +545,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         poster_path: s.base.poster_path ?? null,
         vote_average: s.base.vote_average,
         ...(reasons && reasons.length > 0 ? { reasons } : {}),
+        ...(isTopMatch ? { topMatch: { evidence: derivedEvidence.slice(0, 3) } } : {}),
       };
     });
 

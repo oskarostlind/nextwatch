@@ -7,6 +7,14 @@
 // OBS: behåller match-routens tokenkonvention (TMDB_TOKEN/TMDB_BEARER +
 // TMDB_API_KEY) — se CLAUDE.md om de inkonsekventa TMDB-konventionerna.
 
+import {
+  pickTrailer,
+  VIDEO_APPEND_PARAMS,
+  VIDEO_LANGUAGE_PARAM,
+  type TmdbVideo,
+  type Trailer,
+} from "@/lib/tmdbVideos";
+
 export type TmdbType = "movie" | "tv";
 
 export type TmdbLite = {
@@ -18,6 +26,8 @@ export type TmdbLite = {
   rating?: number;
   overview?: string;
   providers?: { name: string; url: string }[];
+  /** null när titeln saknar trailer. */
+  trailer?: Trailer | null;
 };
 
 function yearFromDate(date?: string | null): number | undefined {
@@ -35,9 +45,14 @@ export async function tmdbDetails(
   const apiKey = process.env.TMDB_API_KEY ?? "";
 
   const base = `https://api.themoviedb.org/3/${type}/${id}`;
-  const url = apiKey
-    ? `${base}?language=${encodeURIComponent(locale)}&append_to_response=watch/providers&api_key=${apiKey}`
-    : `${base}?language=${encodeURIComponent(locale)}&append_to_response=watch/providers`;
+  const append = `watch/providers,${VIDEO_APPEND_PARAMS}`;
+  // include_video_language: utan den filtreras videos på locale och svenska
+  // trailers är sällsynta — se lib/tmdbVideos.ts.
+  const common =
+    `?language=${encodeURIComponent(locale)}` +
+    `&append_to_response=${encodeURIComponent(append)}` +
+    `&include_video_language=${encodeURIComponent(VIDEO_LANGUAGE_PARAM)}`;
+  const url = apiKey ? `${base}${common}&api_key=${apiKey}` : `${base}${common}`;
 
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -75,6 +90,8 @@ export async function tmdbDetails(
     }
   }
 
+  const videos = (data.videos as { results?: TmdbVideo[] } | undefined)?.results;
+
   return {
     tmdbId: id,
     tmdbType: type,
@@ -84,5 +101,6 @@ export async function tmdbDetails(
     rating,
     overview,
     providers,
+    trailer: pickTrailer(videos),
   };
 }

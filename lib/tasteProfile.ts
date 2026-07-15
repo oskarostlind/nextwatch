@@ -35,6 +35,8 @@ export type TasteProfileOk = {
     directors: WeightedLabel[];
     cast: WeightedLabel[];
     keywords: WeightedLabel[];
+    /** Genrer härledda ur faktiska likes, inte ur profilens kryssrutor. */
+    genres: WeightedLabel[];
     topSeeds: TasteProfileSeed[];
   };
   stats: {
@@ -42,7 +44,23 @@ export type TasteProfileOk = {
     watchlistCount: number;
     seedCount: number;
     hasEnoughData: boolean;
+    /** Beteende: vad användaren faktiskt gjort, till skillnad från vad hen valt. */
+    behavior: BehaviorStats;
   };
+};
+
+export type BehaviorStats = {
+  /** Antal avgjorda kort (gilla + ogilla + sett). Exkluderar rena betygsrader. */
+  totalSwipes: number;
+  likes: number;
+  dislikes: number;
+  seen: number;
+  /** Andel likes av avgjorda kort, 0–1. null när inget swipats än. */
+  likeRatio: number | null;
+  /** Antal titlar med satt 1–10-betyg. */
+  ratedCount: number;
+  /** Snittbetyg 1–10, null när inget betygsatts. */
+  avgRating: number | null;
 };
 
 export type TasteProfileErr = { ok: false; message: string; status: number };
@@ -62,6 +80,42 @@ function asFavoriteItem(x: unknown): FavoriteItem | null {
     title: obj.title,
     year: typeof obj.year === "string" || typeof obj.year === "number" ? obj.year : null,
     poster: typeof obj.poster === "string" ? obj.poster : null,
+  };
+}
+
+/**
+ * Beteendestatistik ur Rating-raderna. decision är "like" | "dislike" | "seen"
+ * för swipade kort; "RATED"/"RATE_DISMISSED" kommer från betygsflödet och räknas
+ * inte som swipes.
+ */
+function computeBehaviorStats(rows: { rating: number | null; decision: string }[]): BehaviorStats {
+  let likes = 0;
+  let dislikes = 0;
+  let seen = 0;
+  let ratingSum = 0;
+  let ratedCount = 0;
+
+  for (const r of rows) {
+    if (r.decision === "like") likes++;
+    else if (r.decision === "dislike") dislikes++;
+    else if (r.decision === "seen") seen++;
+
+    if (typeof r.rating === "number") {
+      ratingSum += r.rating;
+      ratedCount++;
+    }
+  }
+
+  const totalSwipes = likes + dislikes + seen;
+
+  return {
+    totalSwipes,
+    likes,
+    dislikes,
+    seen,
+    likeRatio: totalSwipes > 0 ? likes / totalSwipes : null,
+    ratedCount,
+    avgRating: ratedCount > 0 ? ratingSum / ratedCount : null,
   };
 }
 
@@ -131,9 +185,14 @@ export async function computeTasteProfile(params: TasteProfileParams): Promise<T
         keywords: [],
         directors: [],
         cast: [],
+        genres: [],
       }),
       resolveSeedTitles(seeds.slice(0, 8), locale),
     ]);
+
+    // Beteendet är alltid användarens eget — även i gruppläge, där resten av
+    // panelen visar gruppens samlade smak.
+    const behavior = computeBehaviorStats(input.ratings);
 
     return {
       ok: true,
@@ -151,6 +210,7 @@ export async function computeTasteProfile(params: TasteProfileParams): Promise<T
         directors: labels.directors,
         cast: labels.cast,
         keywords: labels.keywords,
+        genres: labels.genres,
         topSeeds,
       },
       stats: {
@@ -158,6 +218,7 @@ export async function computeTasteProfile(params: TasteProfileParams): Promise<T
         watchlistCount,
         seedCount: seeds.length,
         hasEnoughData,
+        behavior,
       },
     };
   } catch (err) {

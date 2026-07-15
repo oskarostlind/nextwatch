@@ -1,10 +1,15 @@
 // Delad typ/validering för film/serie-filter i swipe (solo + grupp).
+//
+// Solo-filtret bodde tidigare i localStorage men ligger nu på
+// Profile.swipeMediaFilter (sätts under /profile, läses server-side i
+// computeUnifiedRecs). localStorage-nyckeln finns kvar enbart för att kunna
+// migrera befintliga användares val en sista gång — se lib/swipeSettingsStore.ts.
 
 export type SwipeMediaFilter = "movie" | "tv" | "both";
 
 export const SWIPE_MEDIA_FILTER_DEFAULT: SwipeMediaFilter = "both";
 
-const SOLO_STORAGE_KEY = "nw_swipe_media";
+const LEGACY_SOLO_STORAGE_KEY = "nw_swipe_media";
 
 export function isValidSwipeMediaFilter(v: unknown): v is SwipeMediaFilter {
   return v === "movie" || v === "tv" || v === "both";
@@ -32,20 +37,25 @@ export function swipeMediaFilterShortLabel(f: SwipeMediaFilter): string | null {
   return null;
 }
 
-export function readSoloSwipeMediaFilter(): SwipeMediaFilter {
-  if (typeof window === "undefined") return SWIPE_MEDIA_FILTER_DEFAULT;
+/**
+ * Läser ett ev. kvarvarande localStorage-filter från tiden före DB-flytten.
+ * Null när inget finns — till skillnad från förr går default inte att skilja
+ * från "aldrig satt", och migreringen ska bara röra faktiska val.
+ */
+export function readLegacySoloSwipeMediaFilter(): SwipeMediaFilter | null {
+  if (typeof window === "undefined") return null;
   try {
-    const v = localStorage.getItem(SOLO_STORAGE_KEY);
-    return normalizeSwipeMediaFilter(v);
+    const v = localStorage.getItem(LEGACY_SOLO_STORAGE_KEY);
+    return isValidSwipeMediaFilter(v) ? v : null;
   } catch {
-    return SWIPE_MEDIA_FILTER_DEFAULT;
+    return null;
   }
 }
 
-export function writeSoloSwipeMediaFilter(f: SwipeMediaFilter): void {
+export function clearLegacySoloSwipeMediaFilter(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(SOLO_STORAGE_KEY, f);
+    localStorage.removeItem(LEGACY_SOLO_STORAGE_KEY);
   } catch {
     /* ignore */
   }

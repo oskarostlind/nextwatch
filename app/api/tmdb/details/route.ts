@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { rateLimitAllow, getRateLimitKey, TMDB_DETAILS_LIMIT } from "../../../../lib/rateLimit";
+import {
+  pickTrailer,
+  VIDEO_APPEND_PARAMS,
+  VIDEO_LANGUAGE_PARAM,
+  type TmdbVideo,
+  type Trailer,
+} from "../../../../lib/tmdbVideos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +18,8 @@ const IMG = "https://image.tmdb.org/t/p";
 const H = { Authorization: `Bearer ${process.env.TMDB_V4_TOKEN!}` };
 
 type Genre = { id: number; name: string };
+
+type Videos = { results?: TmdbVideo[] };
 
 type MovieDetails = {
   id: number;
@@ -22,6 +31,7 @@ type MovieDetails = {
   vote_average?: number;
   vote_count?: number;
   genres?: Genre[];
+  videos?: Videos;
 };
 type TvDetails = {
   id: number;
@@ -33,6 +43,7 @@ type TvDetails = {
   vote_average?: number;
   vote_count?: number;
   genres?: Genre[];
+  videos?: Videos;
 };
 type NormalizedDetails = {
   ok: true;
@@ -49,6 +60,8 @@ type NormalizedDetails = {
   voteCount: number | null;
   genres: string[];
   blurDataURL: string | null;
+  /** null när titeln saknar trailer — knappen visas då inte. */
+  trailer: Trailer | null;
 };
 
 function posterUrl(path: string | null | undefined): string | null {
@@ -105,7 +118,13 @@ export async function GET(req: Request) {
       if (profile?.region) region = profile.region;
     }
 
-    const qs = new URLSearchParams({ language, region });
+    const qs = new URLSearchParams({
+      language,
+      region,
+      append_to_response: VIDEO_APPEND_PARAMS,
+      // Utan detta filtreras videos på `language` och svenska trailers är sällsynta.
+      include_video_language: VIDEO_LANGUAGE_PARAM,
+    });
     const r = await fetch(`${TMDB}/${type}/${id}?${qs.toString()}`, {
       headers: H,
       next: { revalidate: 3600 },
@@ -130,6 +149,7 @@ export async function GET(req: Request) {
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
         genres: genreNames(d.genres),
         blurDataURL,
+        trailer: pickTrailer(d.videos?.results),
       };
       return NextResponse.json(res);
     } else {
@@ -150,6 +170,7 @@ export async function GET(req: Request) {
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
         genres: genreNames(d.genres),
         blurDataURL,
+        trailer: pickTrailer(d.videos?.results),
       };
       return NextResponse.json(res);
     }

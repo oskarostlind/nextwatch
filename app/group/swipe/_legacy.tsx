@@ -90,15 +90,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
         );
       });
     });
-    // "Kolla nu"-länk hämtas parallellt med details (samma mönster som solo).
+    // Providers hämtas parallellt med details (samma mönster som solo).
     toFetch.forEach((t) => {
-      void fetchWatchProviders(t.mediaType, t.tmdbId, t.title).then(({ watchUrl, providers }) => {
+      void fetchWatchProviders(t.mediaType, t.tmdbId).then((providers) => {
         updateCards((prev) =>
-          prev.map((c) =>
-            c.id === t.id && c.watchUrl === undefined
-              ? { ...c, watchUrl, providers: providers ?? null }
-              : c
-          )
+          prev.map((c) => (c.id === t.id && c.providers === undefined ? { ...c, providers } : c))
         );
       });
     });

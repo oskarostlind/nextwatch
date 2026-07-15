@@ -8,7 +8,15 @@ import MediaFilters, { type MediaTypeFilter } from "../components/discover/Media
 import RatingModal from "../components/client/RatingModal";
 import Modal from "../components/ui/Modal";
 import WatchNowButton from "../components/watch/WatchNowButton";
-import { bestWatchUrl, providerWatchUrl } from "@/lib/watchLinks";
+import {
+  bestWatchUrl,
+  isPaidOnly,
+  providerGroupsFor,
+  providerWatchUrl,
+  PAID_ONLY_LABEL,
+  type WatchProviders as Providers,
+} from "@/lib/watchLinks";
+import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
 
 type Item = {
   id: number;
@@ -29,12 +37,6 @@ type SearchHit = {
 type ApiOk = { ok: true; page: number; totalPages: number; items: Item[] };
 type ApiErr = { ok: false; error: string };
 
-type Providers = {
-  link?: string;
-  flatrate?: { provider_name: string; logo_path: string | null }[];
-  rent?: { provider_name: string; logo_path: string | null }[];
-  buy?: { provider_name: string; logo_path: string | null }[];
-};
 type ProvidersResp = { ok: boolean; region?: string; providers: Providers | null };
 
 type Detail = { overview?: string };
@@ -73,6 +75,7 @@ async function fetchDetail(id: number, mediaType: "movie" | "tv"): Promise<Detai
 }
 
 export default function DiscoverPage() {
+  const { showPaidOptions } = useSwipeSettings();
   const [type, setType] = useState<MediaTypeFilter>("movie");
   const [sort, setSort] = useState("popularity.desc");
   const [genres, setGenres] = useState<string[]>([]);
@@ -183,24 +186,17 @@ export default function DiscoverPage() {
     setDetail({});
   }, []);
 
-  const providerGroups = useMemo(() => {
-    if (!providers) return [];
-    const out: { label: string; list: NonNullable<Providers["flatrate"]> }[] = [];
-    if (providers.flatrate?.length) out.push({ label: "Streama", list: providers.flatrate });
-    if (providers.rent?.length) out.push({ label: "Hyr", list: providers.rent });
-    if (providers.buy?.length) out.push({ label: "Köp", list: providers.buy });
-    return out;
-  }, [providers]);
+  const providerGroups = useMemo(
+    () => providerGroupsFor(providers, showPaidOptions),
+    [providers, showPaidOptions]
+  );
+
+  const paidOnly = useMemo(() => isPaidOnly(providers, showPaidOptions), [providers, showPaidOptions]);
 
   const watchUrl = useMemo(() => {
     if (!active) return undefined;
-    const names = [
-      ...(providers?.flatrate ?? []),
-      ...(providers?.rent ?? []),
-      ...(providers?.buy ?? []),
-    ].map((p) => p.provider_name);
-    return bestWatchUrl(names, active.title, providers?.link);
-  }, [providers, active]);
+    return bestWatchUrl(providers, active.title, showPaidOptions);
+  }, [providers, active, showPaidOptions]);
 
   function toggleGenre(id: string) {
     setPage(1);
@@ -375,7 +371,9 @@ export default function DiscoverPage() {
 
               <div className="mt-4 space-y-3">
                 {providerGroups.length === 0 && !modalLoading && (
-                  <p className="text-sm text-neutral-400">Ingen tillgänglig streamingdata för din region just nu.</p>
+                  <p className="text-sm text-neutral-400">
+                    {paidOnly ? PAID_ONLY_LABEL : "Ingen tillgänglig streamingdata för din region just nu."}
+                  </p>
                 )}
                 {providerGroups.map(({ label, list }) => (
                   <div key={label}>

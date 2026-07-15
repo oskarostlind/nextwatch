@@ -1,3 +1,10 @@
+// Type-only import: raderas vid kompilering, så den serverside-tunga tasteModel
+// (TMDB-anrop, tokens) följer inte med in i klientbundeln.
+import type { MatchEvidence } from "@/lib/tasteModel";
+import type { Trailer } from "@/lib/tmdbVideos";
+
+export type { MatchEvidence, Trailer };
+
 export type SwipeMediaType = "movie" | "tv";
 
 export type SwipeProvider = {
@@ -6,6 +13,8 @@ export type SwipeProvider = {
 };
 
 export type SwipeProviders = {
+  /** TMDB:s egen watch-sida — fallback när vi saknar direktlänk till tjänsten. */
+  link?: string;
   flatrate?: SwipeProvider[];
   rent?: SwipeProvider[];
   buy?: SwipeProvider[];
@@ -25,17 +34,23 @@ export type SwipeCard = {
   overview?: string | null;
   rating?: number | null;
   /**
-   * Direktlänk till streamingtjänst ("Kolla nu").
-   * undefined = inte hämtad än, null = hämtad men ingen tjänst tillgänglig.
-   */
-  watchUrl?: string | null;
-  /**
    * Streamingproviders för regionen.
    * undefined = inte hämtad än, null = hämtad men ingen data.
+   *
+   * "Kolla nu"-länken räknas ut vid rendering (lib/watchLinks.ts) i stället för
+   * att cachas här — den beror på Profile.showPaidOptions, som användaren kan
+   * ändra medan kortleken redan ligger i minnet.
    */
   providers?: SwipeProviders | null;
   /** Varför titeln matchar din smak (visas ibland på kortet). */
   reasons?: string[];
+  /** Satt när titeln är en toppmatch — solo-swipen firar liken med matchrutan. */
+  topMatch?: { evidence: MatchEvidence[] };
+  /**
+   * Trailer, hämtad tillsammans med details.
+   * undefined = inte hämtad än, null = titeln saknar trailer (vanligt).
+   */
+  trailer?: Trailer | null;
 };
 
 const HIDE_KEY = "nw_disliked_until";
@@ -129,6 +144,7 @@ type UnifiedItem = {
   poster_path?: string | null;
   vote_average?: number;
   reasons?: string[];
+  topMatch?: { evidence: MatchEvidence[] };
 };
 
 export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
@@ -150,6 +166,7 @@ export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
           overview: null,
           rating: typeof it.vote_average === "number" ? it.vote_average : null,
           ...(it.reasons && it.reasons.length > 0 ? { reasons: it.reasons } : {}),
+          ...(it.topMatch ? { topMatch: it.topMatch } : {}),
         };
       })
       .filter((v): v is SwipeCard => Boolean(v))

@@ -4,11 +4,7 @@ import {
   type SwipeCard,
 } from "@/lib/swipeDeck";
 import { injectAdCards } from "@/lib/ads";
-import {
-  readSoloSwipeMediaFilter,
-  writeSoloSwipeMediaFilter,
-  type SwipeMediaFilter,
-} from "@/lib/swipeMediaFilter";
+import { type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 
 export const PREFETCH_MIN_CARDS = 10;
 
@@ -73,8 +69,6 @@ const EMPTY_GROUP: GroupDeckState = {
 };
 
 let soloState = emptySolo();
-let soloMediaFilter: SwipeMediaFilter = "both";
-let soloMediaFilterReady = false;
 let groupDecks: Record<string, GroupDeckState> = {};
 let soloLoadInFlight = false;
 const groupLoadInFlight = new Set<string>();
@@ -99,31 +93,20 @@ export function getGroupDeckSnapshot(code: string): GroupDeckState {
   return groupDecks[code.toUpperCase()] ?? EMPTY_GROUP;
 }
 
-export function getSoloSwipeMediaFilter(): SwipeMediaFilter {
-  ensureSoloMediaFilterLoaded();
-  return soloMediaFilter;
-}
-
-function ensureSoloMediaFilterLoaded() {
-  if (soloMediaFilterReady) return;
-  soloMediaFilter = readSoloSwipeMediaFilter();
-  soloMediaFilterReady = true;
-}
-
-export function setSoloSwipeMediaFilter(filter: SwipeMediaFilter) {
-  ensureSoloMediaFilterLoaded();
-  if (filter === soloMediaFilter) return;
-  soloMediaFilter = filter;
-  writeSoloSwipeMediaFilter(filter);
+/**
+ * Kastar kortleken och hämtar om den. Anropas när film/serie-filtret ändrats i
+ * profilen — filtret ägs server-side (Profile.swipeMediaFilter), så däcket kan
+ * inte längre lita på sina redan hämtade kort.
+ */
+export function applySoloMediaFilterChange(filter: SwipeMediaFilter) {
+  if (filter === soloState.mediaFilter && soloState.ready) return;
   soloState = { ...emptySolo(), mediaFilter: filter };
   emit();
   void loadSoloPage(1, true);
 }
 
 function soloRecsUrl(page: number): string {
-  const params = new URLSearchParams({ page: String(page) });
-  if (soloMediaFilter !== "both") params.set("media", soloMediaFilter);
-  return `/api/recs/unified?${params.toString()}`;
+  return `/api/recs/unified?page=${page}`;
 }
 
 export function setSwipeBackgroundPrefetch(enabled: boolean) {
@@ -147,7 +130,6 @@ function setGroupDeck(code: string, patch: Partial<GroupDeckState>) {
 
 async function loadSoloPage(targetPage: number, replace: boolean) {
   if (soloLoadInFlight) return;
-  ensureSoloMediaFilterLoaded();
   soloLoadInFlight = true;
   if (replace) {
     patchSolo({
@@ -192,7 +174,8 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       error: null,
       mode: data.mode,
       group: data.group,
-      mediaFilter: data.mediaFilter ?? soloMediaFilter,
+      // Servern rapporterar vilket filter den faktiskt använde (från profilen).
+      mediaFilter: data.mediaFilter ?? soloState.mediaFilter,
       ready: true,
     };
     emit();
@@ -216,10 +199,9 @@ async function maybePrefetchSoloPages() {
 }
 
 export async function ensureSoloDeck(opts?: { force?: boolean }) {
-  ensureSoloMediaFilterLoaded();
   const force = opts?.force ?? false;
   const s = soloState;
-  if (!force && s.ready && s.cards.length > 0 && s.mediaFilter === soloMediaFilter) {
+  if (!force && s.ready && s.cards.length > 0) {
     if (backgroundPrefetchEnabled && s.cards.length < PREFETCH_MIN_CARDS && s.hasMore) {
       await maybePrefetchSoloPages();
     }
@@ -230,8 +212,7 @@ export async function ensureSoloDeck(opts?: { force?: boolean }) {
 }
 
 export async function retrySoloDeck() {
-  ensureSoloMediaFilterLoaded();
-  soloState = { ...emptySolo(), mediaFilter: soloMediaFilter };
+  soloState = { ...emptySolo(), mediaFilter: soloState.mediaFilter };
   emit();
   await loadSoloPage(1, true);
 }
@@ -319,7 +300,6 @@ export function updateGroupCards(code: string, fn: (cards: SwipeCard[]) => Swipe
 
 /** Förladda första sidan när appen startar — körs in idle time, inte på kritisk väg. */
 export function preloadSwipeDecksIdle() {
-  ensureSoloMediaFilterLoaded();
   const run = () => {
     void ensureSoloDeck();
     const code = readGroupCodeFromCookie();

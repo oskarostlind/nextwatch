@@ -22,6 +22,7 @@ type TMDBCredits = {
 type TMDBDetailsWithAppends = {
   keywords?: TMDBKeywords | TMDBKeywordsTV;
   credits?: TMDBCredits;
+  genres?: { id: number; name: string }[];
 };
 
 export type Seed = { id: number; type: MediaType; weight: number; title?: string };
@@ -37,6 +38,8 @@ export type TasteLabels = {
   keywords: WeightedLabel[];
   directors: WeightedLabel[];
   cast: WeightedLabel[];
+  /** Härledda ur titlarna användaren faktiskt gillat — inte ur profilens kryssrutor. */
+  genres: WeightedLabel[];
 };
 
 export type RatingSeedRow = {
@@ -86,6 +89,12 @@ type FeatureBundle = {
   keywords: { id: number; name: string }[];
   directors: { id: number; name: string }[];
   cast: { id: number; name: string }[];
+  /**
+   * Genrer enligt TMDB. Följer med gratis i samma detaljsvar som keywords/credits
+   * och används för att härleda favoritgenrer ur faktiskt beteende — till skillnad
+   * från Profile.favoriteGenres, som användaren kryssat i själv.
+   */
+  genres: { id: number; name: string }[];
 };
 
 /* ---------------- TMDB ---------------- */
@@ -176,7 +185,7 @@ export async function fetchFeatures(type: MediaType, id: number, locale: string)
     const keywords = extractKeywords(primary);
     const { directors, cast } = extractPeople(primary, type);
     if (keywords.length || directors.length || cast.length) {
-      return { keywords, directors, cast };
+      return { keywords, directors, cast, genres: primary.genres ?? [] };
     }
   }
 
@@ -188,6 +197,7 @@ export async function fetchFeatures(type: MediaType, id: number, locale: string)
   return {
     keywords: extractKeywords(fallback),
     ...extractPeople(fallback, type),
+    genres: fallback.genres ?? [],
   };
 }
 
@@ -260,12 +270,14 @@ export async function buildTasteLabels(seeds: Seed[], locale: string): Promise<T
   const keywordMap = new Map<number, { weight: number; name: string }>();
   const directorMap = new Map<number, { weight: number; name: string }>();
   const castMap = new Map<number, { weight: number; name: string }>();
+  const genreMap = new Map<number, { weight: number; name: string }>();
 
   const feats = await Promise.all(
     seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({
       keywords: [],
       directors: [],
       cast: [],
+      genres: [],
     }))),
   );
 
@@ -275,12 +287,14 @@ export async function buildTasteLabels(seeds: Seed[], locale: string): Promise<T
     for (const kw of f.keywords) incrementNamed(keywordMap, kw.id, kw.name, w);
     for (const p of f.directors) incrementNamed(directorMap, p.id, p.name, w);
     for (const p of f.cast) incrementNamed(castMap, p.id, p.name, w);
+    for (const g of f.genres) incrementNamed(genreMap, g.id, g.name, w);
   }
 
   return {
     keywords: labelsFromNamedMap(keywordMap, 8),
     directors: labelsFromNamedMap(directorMap, 5),
     cast: labelsFromNamedMap(castMap, 5),
+    genres: labelsFromNamedMap(genreMap, 5),
   };
 }
 
@@ -537,42 +551,64 @@ export function genreScoreNames(
   return { liked: likedHits, disliked: dislikedHits };
 }
 
-export function buildMatchReasons(opts: {
+/** Vad en träff bottnar i — låter UI:t skriva "skådespelaren X" i stället för bara "X". */
+export type MatchEvidenceKind = "genre" | "keyword" | "director" | "cast";
+
+export type MatchEvidence = { label: string; kind: MatchEvidenceKind };
+
+/**
+ * Rankade träffar mot användarens smak, med kategori kvar. Genrer väger tyngst
+ * som etikett men säger minst om smaken — de är explicit valda i profilen, medan
+ * personer och teman är härledda ur faktiskt beteende.
+ */
+export function buildMatchEvidence(opts: {
   taste: TasteMaps;
   features: FeatureBundle;
   genreHits: { liked: string[]; disliked: string[] };
-  peopleNames: Map<number, string>;
-  keywordNames: Map<number, string>;
   max?: number;
-}): string[] {
+}): MatchEvidence[] {
   const max = opts.max ?? 4;
-  const scored: { label: string; score: number }[] = [];
+  const scored: { label: string; kind: MatchEvidenceKind; score: number }[] = [];
 
   for (const g of opts.genreHits.liked) {
-    scored.push({ label: g, score: 2.0 });
+    scored.push({ label: g, kind: "genre", score: 2.0 });
   }
 
   for (const kw of opts.features.keywords) {
     const w = opts.taste.keywordW.get(kw.id);
-    if (w && w > 0) scored.push({ label: kw.name, score: 1.2 * w });
+    if (w && w > 0) scored.push({ label: kw.name, kind: "keyword", score: 1.2 * w });
   }
 
-  for (const p of [...opts.features.directors, ...opts.features.cast]) {
+  for (const p of opts.features.directors) {
     const w = opts.taste.peopleW.get(p.id);
-    if (w && w > 0) scored.push({ label: p.name, score: 1.4 * w });
+    if (w && w > 0) scored.push({ label: p.name, kind: "director", score: 1.4 * w });
+  }
+
+  for (const p of opts.features.cast) {
+    const w = opts.taste.peopleW.get(p.id);
+    if (w && w > 0) scored.push({ label: p.name, kind: "cast", score: 1.4 * w });
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const out: string[] = [];
+  const out: MatchEvidence[] = [];
   const seen = new Set<string>();
   for (const s of scored) {
     const key = s.label.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(s.label);
+    out.push({ label: s.label, kind: s.kind });
     if (out.length >= max) break;
   }
   return out;
+}
+
+export function buildMatchReasons(opts: {
+  taste: TasteMaps;
+  features: FeatureBundle;
+  genreHits: { liked: string[]; disliked: string[] };
+  max?: number;
+}): string[] {
+  return buildMatchEvidence(opts).map((e) => e.label);
 }
 
 export function shouldShowSwipeReasons(tmdbId: number, mediaType: MediaType, rate: number): boolean {

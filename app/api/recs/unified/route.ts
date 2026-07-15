@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { rateLimitAllow, getRateLimitKey, RECS_LIMIT } from "../../../../lib/rateLimit";
 import { computeUnifiedRecs } from "../../../../lib/unifiedRecs";
-import { isValidSwipeMediaFilter } from "../../../../lib/swipeMediaFilter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,17 +28,15 @@ export async function GET(req: Request) {
 
   const page = reqUrl.searchParams.get("page");
   const pageNum = Math.max(1, Number(page || "1"));
-  const mediaParam = reqUrl.searchParams.get("media");
-  const mediaFilter =
-    !groupCode && isValidSwipeMediaFilter(mediaParam) ? mediaParam : undefined;
 
+  // Film/serie-filtret läses server-side: solo från Profile.swipeMediaFilter,
+  // grupp från Group.mediaFilter. Klienten skickar det inte längre.
   const result = await computeUnifiedRecs({
     uid,
     region,
     locale,
     groupCode,
     page: pageNum,
-    mediaFilter,
   });
   if (!result.ok) return fail(result.message, result.status);
   return NextResponse.json(result);

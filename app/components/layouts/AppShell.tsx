@@ -9,12 +9,12 @@ import InviteToasts from "../InviteToasts";
 import Toast from "../ui/Toast";
 import PushRegistration from "../client/PushRegistration";
 import SplashScreenHide from "../client/SplashScreenHide";
-import PremiumBadge from "../client/PremiumBadge";
 import GuideOverlay from "../client/GuideOverlay";
 import { NAV_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasAuthCookie, hasSeenGuide } from "@/lib/userGuide";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 import { SocialPreloader } from "../client/SocialProvider";
+import { SwipeSettingsPreloader } from "../client/SwipeSettingsProvider";
 
 const PUBLIC_ROUTES = [
   /^\/$/,
@@ -59,9 +59,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <PushRegistration />
       <SwipeDeckPreloader />
       <SocialPreloader />
+      <SwipeSettingsPreloader />
       <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
-        {/* Diskret uppgraderings-ingång för gratisanvändare (döljs för premium). */}
-        <PremiumBadge />
         <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
           {children}
         </main>

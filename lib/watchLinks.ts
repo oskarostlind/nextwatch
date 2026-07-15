@@ -39,19 +39,82 @@ export function providerWatchUrl(providerName: string, title: string): string | 
   return null;
 }
 
+/* ---------------- Visning av providers ---------------- */
+//
+// Hyr-/köpalternativ är avstängda som standard och styrs av
+// Profile.showPaidOptions (se lib/swipeSettingsStore.ts). Anledningen är dels
+// att de tre sektionerna åt upp halva kortbaksidan, dels att "Kolla nu" annars
+// kunde skicka användaren till en hyrsida för en titel de trodde ingick i
+// deras abonnemang.
+
+export type WatchProviderEntry = { provider_name: string; logo_path: string | null };
+
+export type WatchProviders = {
+  link?: string;
+  flatrate?: WatchProviderEntry[];
+  rent?: WatchProviderEntry[];
+  buy?: WatchProviderEntry[];
+};
+
+export type ProviderGroup = { label: string; list: WatchProviderEntry[] };
+
 /**
- * Bästa "Kolla nu"-länk för en titel: första streamingtjänst (flatrate först,
- * sedan hyr/köp) som vi kan direktlänka till. Faller tillbaka på fallbackUrl
- * (TMDB:s watch-sida) om ingen tjänst är känd.
+ * Sektionerna som ska renderas. Utan opt-in returneras enbart "Streama" —
+ * hyr/köp utelämnas helt.
+ */
+export function providerGroupsFor(
+  providers: WatchProviders | null | undefined,
+  showPaidOptions: boolean
+): ProviderGroup[] {
+  if (!providers) return [];
+  const out: ProviderGroup[] = [];
+  if (providers.flatrate?.length) out.push({ label: "Streama", list: providers.flatrate });
+  if (showPaidOptions) {
+    if (providers.rent?.length) out.push({ label: "Hyr", list: providers.rent });
+    if (providers.buy?.length) out.push({ label: "Köp", list: providers.buy });
+  }
+  return out;
+}
+
+/**
+ * Titeln går bara att hyra/köpa och användaren har inte bett om de alternativen.
+ * Ytorna visar då en diskret rad istället för en länk som leder till en betalsida.
+ */
+export function isPaidOnly(
+  providers: WatchProviders | null | undefined,
+  showPaidOptions: boolean
+): boolean {
+  if (!providers || showPaidOptions) return false;
+  const hasFlatrate = Boolean(providers.flatrate?.length);
+  const hasPaid = Boolean(providers.rent?.length || providers.buy?.length);
+  return !hasFlatrate && hasPaid;
+}
+
+export const PAID_ONLY_LABEL = "Endast att hyra eller köpa";
+
+/**
+ * Bästa "Kolla nu"-länk för en titel. Utan opt-in vägs bara flatrate in, så
+ * knappen aldrig leder till en hyr-/köpsida — då returneras undefined och
+ * ytan döljer knappen.
  */
 export function bestWatchUrl(
-  providerNames: string[],
+  providers: WatchProviders | null | undefined,
   title: string,
-  fallbackUrl?: string
+  showPaidOptions: boolean
 ): string | undefined {
-  for (const name of providerNames) {
-    const url = providerWatchUrl(name, title);
+  if (!providers) return undefined;
+
+  const candidates: WatchProviderEntry[] = showPaidOptions
+    ? [...(providers.flatrate ?? []), ...(providers.rent ?? []), ...(providers.buy ?? [])]
+    : [...(providers.flatrate ?? [])];
+
+  for (const p of candidates) {
+    const url = providerWatchUrl(p.provider_name, title);
     if (url) return url;
   }
-  return fallbackUrl;
+
+  // TMDB:s egen watch-sida listar även hyr/köp — bara rimlig som fallback när
+  // användaren faktiskt bett om de alternativen.
+  if (showPaidOptions) return providers.link;
+  return candidates.length > 0 ? providers.link : undefined;
 }

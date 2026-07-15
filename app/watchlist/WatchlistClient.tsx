@@ -9,7 +9,15 @@ import RatingModal from '@/app/components/client/RatingModal';
 import ImdbImportModal from '@/app/components/client/ImdbImportModal';
 import MediaFilters, { type MediaTypeFilter } from '@/app/components/discover/MediaFilters';
 import { Button, SegmentedTabs } from '@/app/components/ui/kit';
-import { bestWatchUrl, providerWatchUrl } from '@/lib/watchLinks';
+import {
+  bestWatchUrl,
+  isPaidOnly,
+  providerGroupsFor,
+  providerWatchUrl,
+  PAID_ONLY_LABEL,
+  type WatchProviders as Providers,
+} from '@/lib/watchLinks';
+import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
 
 type WatchItem = {
   id: number;
@@ -38,12 +46,6 @@ type RatedListResp = { ok: boolean; items: RatedItem[] };
 
 type Tab = 'watchlist' | 'ratings';
 
-type Providers = {
-  link?: string;
-  flatrate?: { provider_name: string; logo_path: string | null }[];
-  rent?: { provider_name: string; logo_path: string | null }[];
-  buy?: { provider_name: string; logo_path: string | null }[];
-};
 type ProvidersResp = { ok: boolean; region?: string; providers: Providers | null };
 
 type Detail = { overview?: string };
@@ -91,6 +93,7 @@ async function fetchDetail(id: number, tmdbType: 'movie' | 'tv'): Promise<Detail
 }
 
 export default function WatchlistClient({ items: initial }: { items: WatchItem[] }) {
+  const { showPaidOptions } = useSwipeSettings();
   const [items, setItems] = useState<WatchItem[]>(initial);
   const [active, setActive] = useState<WatchItem | null>(null);
   const [providers, setProviders] = useState<Providers | null>(null);
@@ -309,26 +312,19 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
     setDetail({});
   }, []);
 
-  const providerGroups = useMemo(() => {
-    if (!providers) return [];
-    const out: { label: string; list: NonNullable<Providers['flatrate']> }[] = [];
-    if (providers.flatrate?.length) out.push({ label: 'Streama', list: providers.flatrate });
-    if (providers.rent?.length) out.push({ label: 'Hyr', list: providers.rent });
-    if (providers.buy?.length) out.push({ label: 'Köp', list: providers.buy });
-    return out;
-  }, [providers]);
+  const providerGroups = useMemo(
+    () => providerGroupsFor(providers, showPaidOptions),
+    [providers, showPaidOptions]
+  );
+
+  const paidOnly = useMemo(() => isPaidOnly(providers, showPaidOptions), [providers, showPaidOptions]);
 
   // "Kolla nu" ska öppna streamingtjänsten direkt (universal link → appen på mobil),
   // inte TMDB:s watch-sida. TMDB-länken är bara sista fallback.
   const watchUrl = useMemo(() => {
     if (!active) return undefined;
-    const names = [
-      ...(providers?.flatrate ?? []),
-      ...(providers?.rent ?? []),
-      ...(providers?.buy ?? []),
-    ].map((p) => p.provider_name);
-    return bestWatchUrl(names, active.title, providers?.link);
-  }, [providers, active]);
+    return bestWatchUrl(providers, active.title, showPaidOptions);
+  }, [providers, active, showPaidOptions]);
 
   return (
     <>
@@ -506,7 +502,9 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
 
               <div className="mt-4 space-y-3">
                 {providerGroups.length === 0 && !loading && (
-                  <p className="text-sm text-neutral-400">Ingen tillgänglig streamingdata för din region just nu.</p>
+                  <p className="text-sm text-neutral-400">
+                    {paidOnly ? PAID_ONLY_LABEL : 'Ingen tillgänglig streamingdata för din region just nu.'}
+                  </p>
                 )}
                 {providerGroups.map(({ label, list }) => (
                   <div key={label}>

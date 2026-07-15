@@ -3,20 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ChevronUp, Eye, Heart, X } from "lucide-react";
+import { ChevronUp, Eye, Heart, Settings, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
-import { Button, SegmentedTabs } from "@/app/components/ui/kit";
+import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
-import type { SwipeCard, SwipeProviders } from "@/lib/swipeDeck";
+import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
-import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 import { notify } from "@/app/components/lib/notify";
-import { bestWatchUrl, providerWatchUrl } from "@/lib/watchLinks";
+import {
+  bestWatchUrl,
+  isPaidOnly,
+  providerGroupsFor,
+  providerWatchUrl,
+  PAID_ONLY_LABEL,
+  type WatchProviders,
+} from "@/lib/watchLinks";
+import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
+import TrailerButton from "@/app/components/watch/TrailerButton";
+import MatchOverlay, { type GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
 import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
 import RatingModal from "@/app/components/client/RatingModal";
 import GuideOverlay from "@/app/components/client/GuideOverlay";
@@ -94,6 +103,7 @@ type DetailsDTO = {
   genres?: string[];
   backdropUrl?: string | null;
   backdropPath?: string | null;
+  trailer?: Trailer | null;
 };
 function parseDetails(d: unknown) {
   if (typeof d !== "object" || !d) return null;
@@ -149,64 +159,36 @@ function parseDetails(d: unknown) {
         : `https://image.tmdb.org/t/p/w780${o.backdropPath}`
       : null;
   const backdrop = backdropRaw && backdropRaw.length > 0 ? backdropRaw : null;
-  return { overview, rating, poster, title, year: y, genres, backdrop };
+  return { overview, rating, poster, title, year: y, genres, backdrop, trailer: o.trailer ?? null };
 }
-/* ---------- "Kolla nu"-länk (direkt till streamingtjänsten, som i watchlist) ---------- */
+/* ---------- Streamingproviders för kortets baksida ---------- */
 
 type ProvidersResp = {
   ok: boolean;
-  providers: {
-    link?: string;
-    flatrate?: { provider_name: string; logo_path: string | null }[];
-    rent?: { provider_name: string; logo_path: string | null }[];
-    buy?: { provider_name: string; logo_path: string | null }[];
-  } | null;
+  providers: WatchProviders | null;
 };
 
-export type WatchProviderResult = {
-  watchUrl: string | null;
-  providers: SwipeProviders | null;
-};
-
-/** Hämtar providers + bästa direktlänk för titeln. */
+/** Hämtar providers för titeln. Länken byggs vid rendering, se lib/watchLinks.ts. */
 export async function fetchWatchProviders(
   type: MediaType,
-  id: number,
-  title: string
-): Promise<WatchProviderResult> {
+  id: number
+): Promise<SwipeProviders | null> {
   try {
     const res = await fetch(`/api/tmdb/watch-providers?id=${id}&type=${type}`, {
       cache: "force-cache",
     });
-    if (!res.ok) return { watchUrl: null, providers: null };
+    if (!res.ok) return null;
     const j = (await res.json()) as ProvidersResp;
-    if (!j.ok || !j.providers) return { watchUrl: null, providers: null };
-    const names = [
-      ...(j.providers.flatrate ?? []),
-      ...(j.providers.rent ?? []),
-      ...(j.providers.buy ?? []),
-    ].map((p) => p.provider_name);
+    if (!j.ok || !j.providers) return null;
     return {
-      watchUrl: bestWatchUrl(names, title, j.providers.link) ?? null,
-      providers: {
-        flatrate: j.providers.flatrate,
-        rent: j.providers.rent,
-        buy: j.providers.buy,
-      },
+      link: j.providers.link,
+      flatrate: j.providers.flatrate,
+      rent: j.providers.rent,
+      buy: j.providers.buy,
     };
   } catch {
-    return { watchUrl: null, providers: null };
+    return null;
   }
-}
-
-/** Hämtar bästa direktlänk till en streamingtjänst för titeln, eller null. */
-export async function fetchWatchUrl(
-  type: MediaType,
-  id: number,
-  title: string
-): Promise<string | null> {
-  const r = await fetchWatchProviders(type, id, title);
-  return r.watchUrl;
 }
 
 export async function fetchDetailsWithFallback(type: MediaType, id: number) {
@@ -231,12 +213,45 @@ export async function fetchDetailsWithFallback(type: MediaType, id: number) {
 
 /* ---------- component ---------- */
 
+/**
+ * Swipekort → matchrutans format. Bara streamingtjänster tas med (och bara de vi
+ * kan direktlänka till) — matchrutan ska inte bli ännu en yta som skickar folk
+ * till en hyrsida, se lib/watchLinks.ts.
+ */
+function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
+  const groups = providerGroupsFor(card.providers, showPaidOptions);
+  const providers: { name: string; url: string }[] = [];
+  for (const g of groups) {
+    for (const p of g.list) {
+      const url = providerWatchUrl(p.provider_name, card.title);
+      if (url && !providers.some((x) => x.name === p.provider_name)) {
+        providers.push({ name: p.provider_name, url });
+      }
+    }
+  }
+
+  const yearNum = card.year ? Number(card.year) : NaN;
+
+  return {
+    tmdbId: card.tmdbId,
+    tmdbType: card.mediaType,
+    title: card.title,
+    ...(Number.isFinite(yearNum) ? { year: yearNum } : {}),
+    ...(card.poster ? { poster: card.poster } : {}),
+    ...(typeof card.rating === "number" ? { rating: card.rating } : {}),
+    ...(card.overview ? { overview: card.overview } : {}),
+    providers,
+    trailer: card.trailer ?? null,
+  };
+}
+
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard, mediaFilter, setMediaFilter } =
+  const { showPaidOptions } = useSwipeSettings();
+  const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } =
     useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
   const feedLoading = cards.length === 0 && (loading || !ready);
@@ -251,6 +266,10 @@ export default function SwipePageClient() {
   const [ratePrompt, setRatePrompt] = useState<Card | null>(null);
   const [ratingSaving, setRatingSaving] = useState(false);
   const [swipeGuideOpen, setSwipeGuideOpen] = useState(false);
+
+  // Kortet som utlöste en toppmatch. Behålls efter popTop() så rutan kan visa
+  // titeln även när den lämnat kortleken.
+  const [soloMatch, setSoloMatch] = useState<Card | null>(null);
 
   const controls = useAnimation();
 
@@ -296,21 +315,19 @@ export default function SwipePageClient() {
                   year: c.year ?? det.year,
                   genres: c.genres?.length ? c.genres : det.genres,
                   backdrop: c.backdrop ?? det.backdrop,
+                  trailer: c.trailer ?? det.trailer,
                 }
               : c
           )
         );
       });
     });
-    // "Kolla nu"-länk hämtas parallellt med details (separat endpoint).
+    // Providers hämtas parallellt med details (separat endpoint).
     toFetch.forEach((t) => {
-      const title = cards.find((c) => c.id === t.id)?.title ?? "";
-      void fetchWatchProviders(t.mediaType, t.tmdbId, title).then(({ watchUrl, providers }) => {
+      void fetchWatchProviders(t.mediaType, t.tmdbId).then((providers) => {
         updateSoloCards((prev) =>
           prev.map((c) =>
-            c.id === t.id && c.watchUrl === undefined
-              ? { ...c, watchUrl, providers: providers ?? null }
-              : c
+            c.id === t.id && c.providers === undefined ? { ...c, providers } : c
           )
         );
       });
@@ -430,6 +447,9 @@ export default function SwipePageClient() {
       /* best-effort */
     });
     sendGroupVoteBackground(c, "LIKE");
+
+    // Toppmatch firas bara i solo — i grupp äger gruppmatchen den rutan.
+    if (c.topMatch && mode !== "group") setSoloMatch(c);
   }
 
   function handleSeen(c: Card): void {
@@ -522,28 +542,31 @@ export default function SwipePageClient() {
     for (let i = Math.min(2, cards.length - 1); i >= 0; i--) stackIndices.push(i);
   }
 
-  const handleMediaFilterChange = (next: SwipeMediaFilter) => {
-    if (next === mediaFilter) return;
-    undoStackRef.current = [];
-    setMediaFilter(next);
-  };
-
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
-      <div className="shrink-0 px-3 pt-2">
-        <SegmentedTabs
-          layoutId="swipe-media-filter"
-          tabs={[
-            { id: "both" as SwipeMediaFilter, label: "Båda" },
-            { id: "movie" as SwipeMediaFilter, label: "Film" },
-            { id: "tv" as SwipeMediaFilter, label: "Serier" },
-          ]}
-          value={mediaFilter}
-          onChange={handleMediaFilterChange}
-        />
+      {/* Swipen hålls ren: allt som styr vad som visas (film/serie, tjänster,
+          genrer) bor i profilen och nås härifrån via kugghjulet. */}
+      <div className="flex shrink-0 items-center justify-end px-3 pt-2">
+        <button
+          type="button"
+          onClick={() => router.push("/profile")}
+          aria-label="Inställningar för förslag"
+          className="rounded-full p-2 text-white/50 transition hover:bg-white/5 hover:text-white/80"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
       </div>
+
+      <MatchOverlay
+        open={soloMatch !== null}
+        variant="solo"
+        item={soloMatch ? toMatchItem(soloMatch, showPaidOptions) : null}
+        evidence={soloMatch?.topMatch?.evidence}
+        onClose={() => setSoloMatch(null)}
+      />
+
       <RatingModal
         open={ratePrompt !== null}
         item={
@@ -894,16 +917,10 @@ function Front({ card }: { card: Card }) {
 
 function Back({ card }: { card: Card }) {
   const heroSrc = card.backdrop ?? card.poster;
-  const providerGroups: { label: string; list: NonNullable<SwipeProviders["flatrate"]> }[] = [];
-  if (card.providers?.flatrate?.length) {
-    providerGroups.push({ label: "Streama", list: card.providers.flatrate });
-  }
-  if (card.providers?.rent?.length) {
-    providerGroups.push({ label: "Hyra", list: card.providers.rent });
-  }
-  if (card.providers?.buy?.length) {
-    providerGroups.push({ label: "Köp", list: card.providers.buy });
-  }
+  const { showPaidOptions } = useSwipeSettings();
+  const providerGroups = providerGroupsFor(card.providers, showPaidOptions);
+  const paidOnly = isPaidOnly(card.providers, showPaidOptions);
+  const watchUrl = bestWatchUrl(card.providers, card.title, showPaidOptions);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950">
@@ -1013,9 +1030,17 @@ function Back({ card }: { card: Card }) {
         </div>
       ) : null}
 
-      {card.watchUrl !== undefined ? (
-        <div className="shrink-0 px-3 pb-3 pt-1" onClick={(e) => e.stopPropagation()}>
-          <WatchNowButton url={card.watchUrl ?? undefined} />
+      {paidOnly ? (
+        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{PAID_ONLY_LABEL}</div>
+      ) : null}
+
+      {card.providers !== undefined || card.trailer ? (
+        <div
+          className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
+          <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
         </div>
       ) : null}
     </div>

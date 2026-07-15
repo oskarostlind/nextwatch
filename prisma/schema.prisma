@@ -93,6 +93,14 @@ model Profile {
   favoriteGenres String[] @default([]) @map("favorite_genres")
   dislikedGenres String[] @default([]) @map("disliked_genres")
 
+  // Swipe-inställningar (styrs från profilen).
+  /// Visa hyr-/köpalternativ på titelkort. Av som standard: annars tror användaren
+  /// att titeln går att streama fritt och länkas till en betalsida.
+  showPaidOptions Boolean @default(false) @map("show_paid_options")
+  /// movie | tv | both — vilken typ av titlar solo-swipen visar (standard: both).
+  /// Grupper har sitt eget filter på Group.mediaFilter.
+  swipeMediaFilter String @default("both") @map("swipe_media_filter")
+
   // Notisinställningar (per användare). Default: allt på.
   notifyDailyRecs      Boolean @default(true) @map("notify_daily_recs")
   notifyGroupMatches   Boolean @default(true) @map("notify_group_matches")

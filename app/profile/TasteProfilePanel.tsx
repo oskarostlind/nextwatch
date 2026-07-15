@@ -8,25 +8,31 @@ type Props = {
   groupCode?: string | null;
 };
 
-function TagRow({ label, items, tone }: { label: string; items: string[]; tone?: "like" | "dislike" | "neutral" }) {
+function TagRow({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null;
-  const color =
-    tone === "like"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-      : tone === "dislike"
-        ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-        : "border-white/10 bg-white/5 text-white/75";
 
   return (
     <div>
       <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-white/45">{label}</div>
       <div className="flex flex-wrap gap-1.5">
         {items.map((item) => (
-          <span key={`${label}-${item}`} className={`rounded-lg border px-2 py-0.5 text-xs ${color}`}>
+          <span
+            key={`${label}-${item}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/75"
+          >
             {item}
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+      <div className="text-base font-semibold tabular-nums text-white/90">{value}</div>
+      <div className="text-[11px] leading-tight text-white/45">{label}</div>
     </div>
   );
 }
@@ -108,15 +114,14 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
 
   if (!data) return null;
 
-  const { explicit, inferred, stats, mode } = data;
-  const favorites = [
-    explicit.favoriteMovie?.title,
-    explicit.favoriteShow?.title,
-  ].filter((t): t is string => Boolean(t));
+  const { inferred, stats, mode } = data;
+  const { behavior } = stats;
 
   const seedTitles = inferred.topSeeds
     .filter((s) => s.weight > 0 && s.title)
     .map((s) => s.title as string);
+
+  const hasBehavior = behavior.totalSwipes > 0 || behavior.ratedCount > 0;
 
   if (!stats.hasEnoughData) {
     return (
@@ -138,15 +143,27 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
           {mode === "group" ? "Er gruppsmak" : "Din smakprofil"}
         </h3>
         <p className="mt-0.5 text-xs text-white/45">
-          Så här tolkar algoritmen {mode === "group" ? "ert sällskap" : "dig"} just nu.
+          Vad algoritmen har läst ut ur {mode === "group" ? "ert" : "ditt"} beteende — inte vad
+          {mode === "group" ? " ni" : " du"} kryssat i.
         </p>
       </div>
 
+      {hasBehavior ? (
+        <div className="grid grid-cols-3 gap-2">
+          <Stat value={String(behavior.totalSwipes)} label="Swipes" />
+          <Stat
+            value={behavior.likeRatio !== null ? `${Math.round(behavior.likeRatio * 100)} %` : "–"}
+            label="Gillade"
+          />
+          <Stat
+            value={behavior.avgRating !== null ? behavior.avgRating.toFixed(1) : "–"}
+            label={behavior.ratedCount > 0 ? `Snittbetyg (${behavior.ratedCount})` : "Snittbetyg"}
+          />
+        </div>
+      ) : null}
+
       <div className="grid gap-3">
-        <TagRow label="Gillar" items={explicit.likedGenres} tone="like" />
-        <TagRow label="Undviker" items={explicit.dislikedGenres} tone="dislike" />
-        <TagRow label="Favoriter" items={favorites} />
-        <TagRow label="Streaming" items={explicit.providers} />
+        <WeightedRow label="Genrer du dras till" items={inferred.genres} />
         <WeightedRow label="Regissörer / skapare" items={inferred.directors} />
         <WeightedRow label="Skådespelare" items={inferred.cast} />
         <WeightedRow label="Teman" items={inferred.keywords} />

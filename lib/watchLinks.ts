@@ -47,7 +47,12 @@ export function providerWatchUrl(providerName: string, title: string): string | 
 // kunde skicka användaren till en hyrsida för en titel de trodde ingick i
 // deras abonnemang.
 
-export type WatchProviderEntry = { provider_name: string; logo_path: string | null };
+export type WatchProviderEntry = {
+  provider_name: string;
+  logo_path: string | null;
+  /** TMDB:s regionala prioritet — lägre = mer använd tjänst. */
+  display_priority?: number;
+};
 
 export type WatchProviders = {
   link?: string;
@@ -57,6 +62,37 @@ export type WatchProviders = {
 };
 
 export type ProviderGroup = { label: string; list: WatchProviderEntry[] };
+
+/**
+ * Tak för antal butiker under "Hyr eller köp".
+ *
+ * En titel listar ofta sex likvärdiga butiker (Apple TV Store, Google Play,
+ * Rakuten, Blockbuster, SF Anytime, Amazon Video) som gör samma sak till samma
+ * pris. Att rada upp alla är brus, inte valfrihet.
+ */
+const PAID_PROVIDER_LIMIT = 3;
+
+export const PAID_GROUP_LABEL = "Hyr eller köp";
+
+function byDisplayPriority(a: WatchProviderEntry, b: WatchProviderEntry): number {
+  return (a.display_priority ?? Number.MAX_SAFE_INTEGER) - (b.display_priority ?? Number.MAX_SAFE_INTEGER);
+}
+
+/**
+ * De mest använda butikerna för titeln, hyr och köp ihopslaget.
+ *
+ * TMDB returnerar nästan alltid identiska rent- och buy-listor, och vår länk går
+ * till butikens söksida — samma URL oavsett vilken lista tjänsten kom ifrån. Två
+ * separata sektioner skulle alltså visa samma chips med samma länkar två gånger.
+ * Skillnaden hyra/köpa avgörs ändå först hos butiken.
+ */
+function topPaidProviders(providers: WatchProviders): WatchProviderEntry[] {
+  const merged = new Map<string, WatchProviderEntry>();
+  for (const p of [...(providers.rent ?? []), ...(providers.buy ?? [])]) {
+    if (!merged.has(p.provider_name)) merged.set(p.provider_name, p);
+  }
+  return Array.from(merged.values()).sort(byDisplayPriority).slice(0, PAID_PROVIDER_LIMIT);
+}
 
 /**
  * Sektionerna som ska renderas. Utan opt-in returneras enbart "Streama" —
@@ -70,8 +106,8 @@ export function providerGroupsFor(
   const out: ProviderGroup[] = [];
   if (providers.flatrate?.length) out.push({ label: "Streama", list: providers.flatrate });
   if (showPaidOptions) {
-    if (providers.rent?.length) out.push({ label: "Hyr", list: providers.rent });
-    if (providers.buy?.length) out.push({ label: "Köp", list: providers.buy });
+    const paid = topPaidProviders(providers);
+    if (paid.length) out.push({ label: PAID_GROUP_LABEL, list: paid });
   }
   return out;
 }
@@ -104,8 +140,10 @@ export function bestWatchUrl(
 ): string | undefined {
   if (!providers) return undefined;
 
+  // Samma urval som providerGroupsFor visar — knappen ska inte leda till en
+  // butik som inte står på kortet.
   const candidates: WatchProviderEntry[] = showPaidOptions
-    ? [...(providers.flatrate ?? []), ...(providers.rent ?? []), ...(providers.buy ?? [])]
+    ? [...(providers.flatrate ?? []), ...topPaidProviders(providers)]
     : [...(providers.flatrate ?? [])];
 
   for (const p of candidates) {

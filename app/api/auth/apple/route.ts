@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
 import { verifyAppleIdentityToken } from "../../../../lib/appleAuth";
 import { setAuthCookies } from "../../../../lib/auth";
@@ -58,6 +59,40 @@ export async function POST(req: Request) {
           },
         });
         user = { id: byEmail.id, profile: byEmail.profile };
+      }
+    }
+
+    if (!user) {
+      // Ta över det anonyma gästkontot som redan bär onboarding-profilen, om det
+      // finns och saknar egen inloggning. Utan detta skapades ett NYTT id här och
+      // profilen man precis fyllde i (sparad på det anonyma id:t) blev föräldralös
+      // → man kastades tillbaka till onboardingen. Bara ett riktigt anonymt konto
+      // (ingen appleSub, inget lösenord) får adopteras.
+      const anonUid = (await cookies()).get("nw_uid")?.value ?? null;
+      if (anonUid) {
+        const guest = await prisma.user.findUnique({
+          where: { id: anonUid },
+          select: {
+            id: true,
+            appleSub: true,
+            passwordHash: true,
+            email: true,
+            profile: { select: { userId: true } },
+          },
+        });
+        if (guest && !guest.appleSub && !guest.passwordHash) {
+          await prisma.user.update({
+            where: { id: guest.id },
+            data: {
+              appleSub: claims.sub,
+              // claims.email kan inte krocka här: en befintlig ägare hade fångats
+              // av e-postuppslaget ovan. Sätt bara om gästen saknar e-post.
+              ...(claims.email && !guest.email ? { email: claims.email } : {}),
+              ...(claims.emailVerified ? { emailVerified: new Date() } : {}),
+            },
+          });
+          user = { id: guest.id, profile: guest.profile };
+        }
       }
     }
 

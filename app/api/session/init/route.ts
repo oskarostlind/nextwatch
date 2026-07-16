@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { sessionCookieOpts } from "../../../../lib/cookies";
+import { signUid, verifyUid } from "../../../../lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,13 +14,15 @@ function newId() {
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    let uid = cookieStore.get("nw_uid")?.value;
+    // Denna route är undantagen från middleware, så cookien är fortfarande i
+    // signerad form här — verifiera själv i stället för att lita på råvärdet.
+    let uid = await verifyUid(cookieStore.get("nw_uid")?.value);
 
     if (!uid) {
       uid = newId();
       await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
       const res = NextResponse.json({ ok: true, userId: uid, hasProfile: false });
-      res.cookies.set("nw_uid", uid, sessionCookieOpts(60 * 60 * 24 * 365, true));
+      res.cookies.set("nw_uid", await signUid(uid), sessionCookieOpts(60 * 60 * 24 * 365, true));
       return res;
     }
 

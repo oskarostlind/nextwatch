@@ -1,6 +1,7 @@
 // middleware.ts
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { signUid, verifyUid } from "@/lib/session";
 
 function makeUid(): string {
   const c = crypto as Crypto & { randomUUID?: () => string };
@@ -14,58 +15,72 @@ function pickLocale(acceptLang: string | null, region: string): string {
   return "sv-SE";
 }
 
+// nw_uid sätts httpOnly:false eftersom klienten (userGuide.hasAuthCookie) bara
+// kollar att cookien FINNS, aldrig läser id:t. Signaturen — inte httpOnly —
+// är det som stoppar förfalskning.
+const UID_COOKIE = { path: "/", httpOnly: false, sameSite: "lax" as const, secure: true, maxAge: 60 * 60 * 24 * 365 };
+const FLAG_COOKIE = { path: "/", httpOnly: false, sameSite: "lax" as const, secure: true, maxAge: 60 * 60 * 24 * 365 };
+
+let warnedNoSecret = false;
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 0) Backcompat: rewrite /api/profile/get -> /api/profile
-  if (pathname === "/api/profile/get") {
-    const url = new URL("/api/profile", req.nextUrl);
-    const res = NextResponse.rewrite(url);
-
-    // se till att cookies finns även här
-    let uid = req.cookies.get("nw_uid")?.value ?? null;
-    const setUid = !uid;
-    if (!uid) uid = makeUid();
-
-    const headerRegion = req.headers.get("x-vercel-ip-country") ?? "";
-    const region = /^[A-Z]{2}$/.test(headerRegion) ? headerRegion : "SE";
-    const locale = pickLocale(req.headers.get("accept-language"), region);
-
-    if (setUid) {
-      res.cookies.set("nw_uid", uid, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
-    }
-    if (!req.cookies.get("nw_region")) {
-      res.cookies.set("nw_region", region, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
-    }
-    if (!req.cookies.get("nw_locale")) {
-      res.cookies.set("nw_locale", locale, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
-    }
-    return res;
+  // 0) Debug-routes får aldrig svara i produktion. De läcker env/tokens, kör
+  //    DDL mot databasen (debug/db?fix=1) och SMTP-verifieringar. Sätt
+  //    ENABLE_DEBUG_ROUTES=1 om de behövs tillfälligt i ett prod-liknande läge.
+  if (
+    pathname.startsWith("/api/debug") &&
+    process.env.NODE_ENV === "production" &&
+    process.env.ENABLE_DEBUG_ROUTES !== "1"
+  ) {
+    return NextResponse.json({ ok: false, message: "Not found" }, { status: 404 });
   }
 
-  // 1) säkerställ cookies på alla övriga requests
-  let uid = req.cookies.get("nw_uid")?.value ?? null;
-  const mustSetUid = !uid;
-  if (!uid) uid = makeUid();
+  // 1) Verifiera identitetscookien. Giltig signatur → lita på uid. Saknad,
+  //    osignerad (gammal cookie) eller förfalskad → mynta en ny anonym identitet.
+  const rawUid = req.cookies.get("nw_uid")?.value ?? null;
+  let uid = await verifyUid(rawUid);
+  let signedToSet: string | null = null;
+  if (!uid) {
+    uid = makeUid();
+    try {
+      signedToSet = await signUid(uid);
+    } catch {
+      // Felkonfigurerad hemlighet: degradera till osignerat värde så att sajten
+      // fortsätter fungera i stället för att 500:a varje request. Loggas en gång.
+      if (!warnedNoSecret) {
+        warnedNoSecret = true;
+        console.warn("[middleware] Kan inte signera session – SESSION_SECRET/NEXTAUTH_SECRET saknas.");
+      }
+      signedToSet = uid;
+    }
+  }
+
+  // Normalisera det som nedströms route handlers/server components läser via
+  // cookies(): de ska alltid se det verifierade bare-uid:t, aldrig "<uid>.<sig>".
+  req.cookies.set("nw_uid", uid);
 
   const headerRegion = req.headers.get("x-vercel-ip-country") ?? "";
   const region = /^[A-Z]{2}$/.test(headerRegion) ? headerRegion : "SE";
   const locale = pickLocale(req.headers.get("accept-language"), region);
-
   const mustSetRegion = !req.cookies.get("nw_region");
   const mustSetLocale = !req.cookies.get("nw_locale");
 
-  // 2) Skyddad route: profil-koll sker i layout/page (server component med Prisma), inte här
-  const res = NextResponse.next();
+  // Backcompat: rewrite /api/profile/get -> /api/profile (med normaliserade cookies).
+  const res =
+    pathname === "/api/profile/get"
+      ? NextResponse.rewrite(new URL("/api/profile", req.nextUrl), { request: { headers: req.headers } })
+      : NextResponse.next({ request: { headers: req.headers } });
 
-  if (mustSetUid) {
-    res.cookies.set("nw_uid", uid, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
+  if (signedToSet) {
+    res.cookies.set("nw_uid", signedToSet, UID_COOKIE);
   }
   if (mustSetRegion) {
-    res.cookies.set("nw_region", region, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set("nw_region", region, FLAG_COOKIE);
   }
   if (mustSetLocale) {
-    res.cookies.set("nw_locale", locale, { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set("nw_locale", locale, FLAG_COOKIE);
   }
 
   return res;

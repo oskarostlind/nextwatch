@@ -1,13 +1,14 @@
 // lib/auth.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { sessionCookieOpts } from './cookies';
+import { signUid } from './session';
 
 const ONE_YEAR = 60 * 60 * 24 * 365;
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 export { sessionCookieOpts } from './cookies';
 
-export function attachSessionCookies(
+export async function attachSessionCookies(
   res: NextResponse,
   uid: string,
   opts?: { remember?: boolean }
@@ -15,14 +16,15 @@ export function attachSessionCookies(
   // remember=true (eller default) → 1 år så samma enhet (t.ex. iOS) slipper logga in om och om igen.
   const maxAge = opts?.remember === false ? THIRTY_DAYS : ONE_YEAR;
 
-  res.cookies.set('nw_uid', uid, sessionCookieOpts(maxAge, true));
+  // Signerat värde: routes verifierar signaturen, så en förfalskad cookie duger inte.
+  res.cookies.set('nw_uid', await signUid(uid), sessionCookieOpts(maxAge, true));
 
   res.cookies.set('nw_last', String(Date.now()), sessionCookieOpts(60 * 5, true));
 
   return res;
 }
 
-export function sessionRedirect(
+export async function sessionRedirect(
   target: string | URL,
   uid: string,
   req?: NextRequest,

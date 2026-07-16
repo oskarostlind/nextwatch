@@ -40,6 +40,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, message: "Ogiltig röst." } as Err, { status: 400 });
   }
 
+  // Bara medlemmar får rösta i en grupp. Utan den här kontrollen kunde vem som
+  // helst med (eller som gissade) en gruppkod injicera röster och trigga
+  // gruppmatchningar (IDOR).
+  const membership = await prisma.groupMember.findUnique({
+    where: { groupCode_userId: { groupCode: code, userId: uid } },
+    select: { userId: true },
+  });
+  if (!membership) {
+    return NextResponse.json({ ok: false, message: "Du är inte med i gruppen." } as Err, { status: 403 });
+  }
+
   // Daglig swipegräns för gratisanvändare (premium = obegränsat). Gruppswipar
   // skriver ratings via /api/rate parallellt, men gatas här också så att
   // röster inte kan fortsätta efter att gränsen nåtts.

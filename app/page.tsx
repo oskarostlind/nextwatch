@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "../lib/prisma";
 import HeroReel from "./components/landing/HeroReel";
 import LoginCard from "./components/auth/LoginCard";
+import GuestEntryButton from "./components/auth/GuestEntryButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,14 @@ export default async function HomePage() {
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Grupp-swipe</span>
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Providers per region</span>
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Direktlänkar</span>
+            </div>
+
+            {/* Lägsta möjliga tröskel: börja swipa direkt utan konto eller onboarding. */}
+            <div className="mx-auto mt-5 w-full max-w-xs md:mx-0">
+              <GuestEntryButton label="Börja swipa direkt – som gäst" />
+              <p className="mt-2 text-center text-xs text-white/40 md:text-left">
+                Inget konto behövs. Du kan spara din profil senare.
+              </p>
             </div>
           </div>
 

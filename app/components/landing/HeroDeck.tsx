@@ -23,15 +23,17 @@ const VISIBLE_BEHIND = 4;
 const DIST_THRESHOLD = 110;
 const VELOCITY_THRESHOLD = 700;
 
-const SOFT_GATE_AT = 5;
-const HARD_GATE_AT = 10;
+// Fyra kort, sedan gaten. Kort investering, men besökaren når frågan innan hen
+// hinner tröttna — och blockkanten gör att slutet syns komma redan från första
+// swipen. Ingen mjuk gate: med bara fyra kort skulle den hinna landa en swipe
+// innan den hårda och bara vara i vägen.
+const HARD_GATE_AT = 4;
 
 /* ------------------------------------------------------------------ */
 
 export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
   const [index, setIndex] = React.useState(0);
   const [liked, setLiked] = React.useState<HeroCard[]>([]);
-  const [softDismissed, setSoftDismissed] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
   const [loginOpen, setLoginOpen] = React.useState(false);
 
@@ -39,7 +41,6 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
   const swipes = index;
   const hardGate = swipes >= HARD_GATE_AT;
-  const showSoft = swipes >= SOFT_GATE_AT && !softDismissed && !hardGate;
 
   // Drag-läget som en motion value: allt bakom leken härleds ur den utan
   // att någonsin trigga en React-render under draget.
@@ -105,14 +106,34 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         }
         setIndex((i) => i + 1);
         x.set(0);
-        controls.set({ x: 0, rotate: 0, opacity: 1 });
+
+        // Promotionen. Utan den placerades nya toppkortet direkt i sitt slutläge
+        // och poppade upp ur intet — ögat läser det som ett hack i leken, inte
+        // som ett kort. Nu startar det i djup 1:s pose och fjädrar fram, så det
+        // syns resa sig ur högen. Tunga saker svarar sent: det är viktkänslan.
+        const from = pose(1, spreadMV.get(), 0);
+        controls.set({ x: 0, rotate: 0, opacity: 1, y: from.y, z: from.z, scale: from.scale });
+        if (!reduce) {
+          void controls.start({
+            y: 0,
+            z: 0,
+            scale: 1,
+            transition: { type: "spring", stiffness: 320, damping: 26 },
+          });
+        } else {
+          controls.set({ y: 0, z: 0, scale: 1 });
+        }
       });
   }
 
   const remaining = Math.max(0, HARD_GATE_AT - swipes);
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-hidden bg-[#0a0a0a]">
+    // AppShell lägger redan pt-[env(safe-area-inset-top)] på <main> för publika
+    // routes. Ett min-h på fulla 100dvh här ovanpå den paddingen gör sidan högre
+    // än viewporten — därav scrollbaren. Heron ska aldrig scrolla; den är en scen,
+    // inte ett dokument.
+    <div className="relative flex min-h-[calc(100dvh-env(safe-area-inset-top))] w-full flex-col items-center justify-center overflow-hidden bg-[#0a0a0a]">
       {/* Accentglöd. Två staplade lager som korsfadas med opacity — bakgrundsfärg
           animeras aldrig, och blur är förbjuden (fill-rate i WebView). */}
       <AnimatePresence>
@@ -137,7 +158,9 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         style={{ background: "radial-gradient(circle at 50% 45%, transparent 30%, #0a0a0a 85%)" }}
       />
 
-      <header className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-5 py-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+      {/* Ingen egen safe-area-padding här: AppShell äger den redan, och dubbla
+          lager tryckte ner headern långt under notchen. */}
+      <header className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-5 py-4">
         <span className="text-sm font-semibold tracking-tight text-white/90">NextWatch</span>
         {/* Diskret med flit: heron ska äga ytan. Men den här länken är enda vägen
             in för befintliga konton — startsidan är iOS-appens launch-skärm för
@@ -255,46 +278,6 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
       <Pile liked={liked} reduce={reduce} />
 
-      <AnimatePresence>
-        {showSoft && (
-          <motion.div
-            initial={{ y: reduce ? 0 : 140, opacity: reduce ? 0 : 1 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: reduce ? 0 : 140, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 220, damping: 26 }}
-            className="absolute inset-x-0 bottom-0 z-40 border-t border-white/10 bg-neutral-950/95 px-5 pb-6 pt-4"
-          >
-            {/* Mjuk gate: en inbjudan, ingen vägg. Leken är fortfarande spelbar
-                bakom, och arket går att avfärda. Här säljs bara högen — själva
-                pitchen sparas till den hårda gaten, där den är efterfrågad. */}
-            <div className="mx-auto flex max-w-md items-center gap-4">
-              <p className="flex-1 text-sm leading-snug text-white/80">
-                Vi har hittat{" "}
-                <span className="font-semibold tabular-nums text-white">{liked.length}</span>{" "}
-                {liked.length === 1 ? "film" : "filmer"} åt dig — skapa konto så sparar vi dem.
-              </p>
-              <a
-                href="/onboarding"
-                className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold text-black transition-transform active:scale-[0.97]"
-                style={{
-                  background: `linear-gradient(180deg, ${top?.accent ?? "#fff"} 0%, ${top?.accent ?? "#fff"}D9 100%)`,
-                  boxShadow: `0 8px 22px -8px ${top?.accent ?? "#fff"}`,
-                }}
-              >
-                Skapa konto
-              </a>
-              <button
-                type="button"
-                onClick={() => setSoftDismissed(true)}
-                aria-label="Stäng"
-                className="shrink-0 rounded-full p-1.5 text-white/35 transition hover:text-white/70"
-              >
-                ✕
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ChevronUp, Eye, Heart, Settings, X } from "lucide-react";
-import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useAnimation,
+  useMotionValue,
+  useTransform,
+  type MotionValue,
+} from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
@@ -23,6 +30,7 @@ import {
   type WatchProviders,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
+import { accentFor, jitterFor, pose } from "@/lib/deckVisuals";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import MatchOverlay, { type GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
@@ -608,8 +616,30 @@ export default function SwipePageClient() {
         </div>
       ) : cards[0] ? (
           <div
-            className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden"
+            className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)]"
+            // EN perspective-wrapper. Nästlade 3d-kontexter spränger lagerantalet
+            // i WKWebView, så djupet ägs härifrån och ingen annanstans.
+            // (overflow-hidden är borttagen — den plattade till translateZ.)
+            style={{ perspective: 1100 }}
           >
+          {/* Accentglöd från topptitelns genre. Två staplade lager som korsfadas
+              med opacity — bakgrundsfärg animeras aldrig, och blur är förbjuden
+              (fill-rate i WebView). Samma språk som startsidan. */}
+          <AnimatePresence>
+            <motion.div
+              key={cards[0]?.id ?? "none"}
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2"
+              style={{
+                background: `radial-gradient(circle, ${accentFor(cards[0]?.genres)} 0%, transparent 62%)`,
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.22 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+            />
+          </AnimatePresence>
+
           {stackIndices.map((idx) => {
             const card = cards[idx];
             if (!card) return null;
@@ -666,21 +696,29 @@ export default function SwipePageClient() {
                 </motion.div>
               );
             }
+            // Djupet kommer från lib/deckVisuals — samma funktion som startsidan.
+            // spread=0: /swipe bor i AppShells max-w-md-kolumn, så bågen får aldrig
+            // plats här. Det är rätt: bågen är en desktop-gest, stacken är appen.
             const depth = idx;
-            const scale = depth === 1 ? 0.95 : 0.9;
-            const translateY = depth === 1 ? 10 : 20;
-            const z = depth === 1 ? 9 : 8;
+            const p = pose(depth, 0, jitterFor(card.tmdbId + depth));
             return (
               <div
                 key={card.id}
-                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92]"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5"
                 style={{
-                  zIndex: z,
-                  transform: `translateY(${translateY}px) scale(${scale})`,
-                  filter: "brightness(0.88)",
+                  zIndex: 10 - depth,
+                  transform: `translate3d(${p.x}px, ${p.y}px, ${p.z}px) rotateZ(${p.rotateZ}deg) scale(${p.scale})`,
                 }}
               >
-                <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
+                <div className="relative h-full max-h-full w-full min-h-0">
+                  <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
+                  {/* Statisk mörkläggning per djup. Ersätter filter: brightness —
+                      ett filterlager mindre att rastrera per kort. */}
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-black"
+                    style={{ opacity: 0.18 + depth * 0.12 }}
+                  />
+                </div>
               </div>
             );
           })}
@@ -789,8 +827,15 @@ export function StaticCard({
       onClick={interactive ? onFlip : undefined}
     >
       <div
-        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
-        style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
+        className="relative h-full max-h-full w-full min-h-0 rounded-2xl bg-black transition-transform duration-300 [transform-style:preserve-3d]"
+        style={{
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          // Pappersramen + två förbakade skuggor (tight kontakt + bred ambient).
+          // De animeras aldrig — bara korten rör sig. Samma språk som startsidan.
+          border: "3px solid rgba(245,245,245,0.9)",
+          boxShadow:
+            "0 1px 0 rgba(255,255,255,0.14), 0 18px 40px -12px rgba(0,0,0,0.9)",
+        }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
           <Front card={card} />

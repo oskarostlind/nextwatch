@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import React from "react";
 import Script from "next/script";
+import { Inter_Tight } from "next/font/google";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
@@ -9,6 +10,15 @@ import { cookies } from "next/headers";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 
 const ADSENSE_CLIENT_FALLBACK = "ca-pub-2616665688666431";
+
+// Variabel font: 400–900 i en enda nedladdning, vilket spelar roll när appen är
+// en WebView-wrapper och cold start är dyrbar. Har fullt stöd för å/ä/ö, vilket
+// gallrar bort de flesta trendiga display-snitten i den här stilen.
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter-tight",
+});
 
 export const metadata: Metadata = {
   title: "NextWatch",
@@ -41,7 +51,10 @@ export default async function RootLayout({
   const adsClient = adsenseClientId() ?? ADSENSE_CLIENT_FALLBACK;
 
   return (
-    <html lang="sv" className="min-h-[100dvh] overscroll-none bg-neutral-950">
+    <html
+      lang="sv"
+      className={`${interTight.variable} min-h-[100dvh] overscroll-none bg-neutral-950`}
+    >
       <body className="min-h-[100dvh] overscroll-none bg-neutral-950 text-neutral-100 antialiased">
         {adsFeatureEnabled() && (
           <Script

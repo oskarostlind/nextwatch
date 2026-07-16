@@ -2,17 +2,50 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "../lib/prisma";
-import HeroReel from "./components/landing/HeroReel";
-import LoginCard from "./components/auth/LoginCard";
+import { jitterFor } from "@/lib/deckVisuals";
+import { CURATED, type HeroCard } from "@/lib/curatedHero";
+import HeroDeck from "./components/landing/HeroDeck";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type TmdbMovie = {
+  id: number;
+  title?: string;
+  release_date?: string;
+  poster_path: string | null;
+};
+
+// TMDB-konventionen matchar app/api/tmdb/landing-posters/route.ts (kodbasen är
+// inkonsekvent — lib/tmdb.ts läser andra env-namn).
+//
+// tmdbId hårdkodas i den kurerade listan men poster_path hämtas här: filnamnen
+// hos TMDB kan rotera, och en hårdkodad path som 404:ar ger ett trasigt hero.
+// Cachas ett dygn — listan är statisk, så inget behöver vara färskare än så.
+async function fetchTitle(tmdbId: number): Promise<TmdbMovie | null> {
+  const apiKey = process.env.TMDB_API_KEY;
+  const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_v4_TOKEN;
+
+  const usp = new URLSearchParams({ language: "sv-SE" });
+  if (apiKey) usp.set("api_key", apiKey);
+
+  try {
+    const res = await fetch(`https://api.themoviedb.org/3/movie/${tmdbId}?${usp.toString()}`, {
+      headers: v4 ? { Authorization: `Bearer ${v4}` } : undefined,
+      next: { revalidate: 60 * 60 * 24 },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as TmdbMovie;
+  } catch {
+    return null;
+  }
+}
 
 export default async function HomePage() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
 
-  // Redan inloggad med verifierat konto + profil → hoppa över login (viktigt för iOS/Capacitor).
+  // Redan inloggad med verifierat konto + profil → hoppa över heron (viktigt för iOS/Capacitor).
   if (uid) {
     const user = await prisma.user.findUnique({
       where: { id: uid },
@@ -29,34 +62,19 @@ export default async function HomePage() {
     }
   }
 
-  return (
-    <div className="relative">
-      {/* Komprimerad hero-reel */}
-      <HeroReel durationMs={72000} heightClass="h-[180px] sm:h-[220px] md:h-[260px]" />
+  const fetched = await Promise.all(CURATED.map((c) => fetchTitle(c.tmdbId)));
 
-      {/* Innehåll i två kolumner för att undvika scroll */}
-      <section className="relative z-10 mx-auto max-w-6xl px-4 md:px-6 pt-6 md:pt-8 pb-6">
-        <div className="grid items-start md:items-center gap-6 md:gap-8 md:grid-cols-2">
-          <div className="text-center md:text-left">
-            <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">
-              Hitta nästa film/serie – snabbt
-            </h1>
-            <p className="mt-2 text-neutral-300">
-              Tinder-känsla för film &amp; serier. Bygg smakprofil, swipa solo eller i grupp.
-            </p>
-            <div className="mt-3 flex flex-wrap justify-center md:justify-start gap-2 text-xs md:text-sm text-white/80">
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Personliga tips</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Grupp-swipe</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Providers per region</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Direktlänkar</span>
-            </div>
-          </div>
+  const cards: HeroCard[] = CURATED.map((c, i) => {
+    const m = fetched[i];
+    return {
+      id: c.tmdbId,
+      title: m?.title || c.expect,
+      year: (m?.release_date ?? "").slice(0, 4),
+      poster: m?.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : null,
+      accent: c.accent,
+      jitter: jitterFor(i),
+    };
+  });
 
-          <div className="mx-auto w-full max-w-md">
-            <LoginCard />
-          </div>
-        </div>
-      </section>
-    </div>
-  );
+  return <HeroDeck cards={cards} />;
 }

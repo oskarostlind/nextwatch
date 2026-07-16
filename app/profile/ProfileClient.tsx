@@ -650,6 +650,8 @@ function SettingsTab() {
   const [savingKey, setSavingKey] = useState<keyof NotifPrefs | null>(null);
   const [portalBusy, setPortalBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -725,6 +727,27 @@ function SettingsTab() {
       setNote("Nätverksfel.");
     } finally {
       setPortalBusy(false);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/user/delete", { method: "POST", cache: "no-store" });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      if (res.ok && j.ok) {
+        // Kontot och sessionen är borta — börja om från landningssidan.
+        window.location.href = "/";
+        return;
+      }
+      setNote(j.message ?? "Kunde inte radera kontot.");
+      setDeleteConfirm(false);
+    } catch {
+      setNote("Nätverksfel.");
+      setDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -849,6 +872,45 @@ function SettingsTab() {
         <p className="text-xs text-white/40">
           Push kräver att du tillåtit notiser för appen i systeminställningarna.
         </p>
+      </section>
+
+      {/* Radera konto — App Store-krav (Guideline 5.1.1(v)). */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-rose-300/80">Radera konto</h3>
+        <div className="grid gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+          <p className="text-sm text-white/70">
+            Raderar ditt konto och all din data permanent: profil, betyg, watchlist,
+            grupper och vänner. Det går inte att ångra.
+          </p>
+          {billing?.source === "apple" && (
+            <p className="text-xs text-white/50">
+              Har du en prenumeration via App Store? Säg upp den separat i Inställningar → ditt
+              namn → Prenumerationer — att radera kontot här stänger inte av Apple-debiteringen.
+            </p>
+          )}
+          {!deleteConfirm ? (
+            <Button variant="secondary" onClick={() => setDeleteConfirm(true)}>
+              Radera mitt konto
+            </Button>
+          ) : (
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-rose-200">Är du helt säker?</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void deleteAccount()}
+                  disabled={deleting}
+                  className="inline-flex items-center justify-center rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
+                >
+                  {deleting ? "Raderar…" : "Ja, radera permanent"}
+                </button>
+                <Button variant="secondary" onClick={() => setDeleteConfirm(false)} disabled={deleting}>
+                  Avbryt
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       {note && <p className="text-sm text-rose-300">{note}</p>}

@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { sessionCookieOpts } from "../../../../lib/cookies";
+import { signUid } from "../../../../lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -222,7 +223,7 @@ export async function POST(req: NextRequest) {
 
     const res = ok(200, "Profilen sparades.", { profile, next: "/swipe" });
     const oneYear = 60 * 60 * 24 * 365;
-    res.cookies.set("nw_uid", uid, sessionCookieOpts(oneYear, true));
+    res.cookies.set("nw_uid", await signUid(uid), sessionCookieOpts(oneYear, true));
     res.cookies.set("nw_region", finalRegion, sessionCookieOpts(oneYear, false));
     res.cookies.set("nw_locale", finalLocale, sessionCookieOpts(oneYear, false));
     return res;

@@ -27,6 +27,10 @@ model User {
   passwordHash  String?   @map("password_hash")
   lastLoginAt   DateTime? @map("last_login_at")
 
+  /// Senaste tecknet på aktivitet (throttlad, ~1/min) — visas som "senast aktiv"
+  /// på vänprofiler. Skild från lastLoginAt som bara sätts vid inloggning.
+  lastActiveAt DateTime? @map("last_active_at")
+
   /// Senaste försöket att skicka dagens tips (app/api/cron/daily-recs).
   /// Kön sorteras på det här — den som väntat längst går först — så att inte
   /// samma användare hamnar sist varje körning när tidsbudgeten tar slut.

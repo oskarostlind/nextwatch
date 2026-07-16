@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { touchLastActive } from "@/lib/lastActive";
 
 type FriendsListUser = { id: string; username: string | null; displayName: string | null };
 
@@ -13,6 +14,9 @@ export async function GET() {
     const cookieStore = await cookies();
     const me = cookieStore.get("nw_uid")?.value ?? "";
     if (!me) return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+
+    // Throttlad aktivitetsstämpel (~1/min) — driver "senast aktiv" på vänprofiler.
+    touchLastActive(me);
 
     // Vänner (båda ordningar)
     const friendships = await prisma.friendship.findMany({

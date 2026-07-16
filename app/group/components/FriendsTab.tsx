@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Users, UserPlus, Check } from "lucide-react";
+import { Search, Plus, Users, UserPlus, Check, ChevronRight } from "lucide-react";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
+import FriendProfileModal from "./FriendProfileModal";
 import type { FriendsInitial } from "../page";
 
 type SearchRow = {
@@ -45,6 +46,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const [searchResults, setSearchResults] = useState<SearchRow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
+  const [openFriendId, setOpenFriendId] = useState<string | null>(null);
 
   useEffect(() => {
     // SSR-datan blir första snapshot (ingen flash) om store:n inte hunnit ladda.
@@ -177,16 +179,22 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         ) : (
           <ul className="flex flex-col gap-2">
             {friends.map((f) => (
-              <li
-                key={f.id}
-                className="flex flex-row items-center rounded-xl bg-white/5 px-4 py-3"
-              >
-                <span className="font-medium text-white/90">{displayName(f)}</span>
+              <li key={f.id}>
+                <button
+                  type="button"
+                  onClick={() => setOpenFriendId(f.id)}
+                  className="flex w-full flex-row items-center justify-between rounded-xl bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                >
+                  <span className="font-medium text-white/90">{displayName(f)}</span>
+                  <ChevronRight className="h-4 w-4 text-white/30" />
+                </button>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <FriendProfileModal friendId={openFriendId} onClose={() => setOpenFriendId(null)} />
 
       {hasPending && (
         <div className={cardClass}>

@@ -115,7 +115,7 @@ export async function POST(req: Request) {
 
     const redirect = user.profile ? "/swipe" : "/onboarding";
     const res = NextResponse.json({ ok: true, redirect });
-    setAuthCookies(res, user.id, { remember: true });
+    await setAuthCookies(res, user.id, { remember: true });
     return res;
   } catch (err) {
     console.error("[auth/apple]", err);

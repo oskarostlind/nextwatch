@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
+import GuestEntryButton from "@/app/components/auth/GuestEntryButton";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -636,6 +637,16 @@ export default function Client() {
               >
                 Nästa →
               </button>
+            </div>
+          )}
+
+          {/* Hoppa över hela onboardingen och börja swipa som gäst direkt. */}
+          {step === 0 && (
+            <div className="pt-1 text-center">
+              <GuestEntryButton
+                label="Hoppa in som gäst istället"
+                className="text-sm text-neutral-400 underline underline-offset-2 transition hover:text-neutral-200 disabled:opacity-50"
+              />
             </div>
           )}
 

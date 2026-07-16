@@ -34,6 +34,22 @@ export async function GET(req: NextRequest) {
       return bad("Missing group code.");
     }
 
+    // Gruppen kan ha gallrats bort av cron/cleanup (ett dygn utan aktivitet)
+    // medan nw_group-cookien lever i 14 dagar. Utan den här kontrollen skulle
+    // klienten fortsätta polla en spökgrupp: matchpollningen var 8:e sekund och
+    // en GroupBar som visar en grupp med noll medlemmar. Rensa cookien i stället
+    // så klienten faller tillbaka till solo av sig själv.
+    const groupExists = await prisma.group.findUnique({
+      where: { code },
+      select: { code: true },
+    });
+    if (!groupExists) {
+      if (jar.get("nw_group")?.value === code) {
+        jar.set("nw_group", "", { path: "/", maxAge: 0, sameSite: "lax", secure: true, httpOnly: false });
+      }
+      return bad("Group no longer exists.", 404);
+    }
+
     // Hämta alla medlemmar med minimalt fälturval (bakåtkompatibelt mot UI:t)
     const rows = await prisma.groupMember.findMany({
       where: { groupCode: code },

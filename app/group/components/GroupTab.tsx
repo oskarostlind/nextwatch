@@ -61,6 +61,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     });
   }, [initialMembers, initialCode]);
 
+  // useState fångar bara initialCode vid mount. Efter join/accept/leave kör
+  // servern om (router.refresh) med ett nytt initialCode ur nw_group-cookien —
+  // synka hit, annars fastnar vyn på det gamla värdet. Det var därför en
+  // accepterad inbjudan inte syntes ("som att jag inte gått med i någon grupp").
+  useEffect(() => {
+    setCode(initialCode);
+  }, [initialCode]);
+
   const members: PublicMember[] =
     social.membersReady && social.groupCode === code
       ? social.members.map((m) => ({

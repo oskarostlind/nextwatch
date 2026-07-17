@@ -24,6 +24,15 @@ import {
 } from "@/lib/swipeDeckStore";
 import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsFeatureEnabled } from "@/lib/ads";
+import { Capacitor } from "@capacitor/core";
+
+function isNativeApp(): boolean {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
 
 export type { SoloDeckState, GroupDeckState };
 
@@ -37,6 +46,12 @@ export function SwipeDeckPreloader() {
   // Avgör om annonser ska visas (gratisanvändare + feature-flagga på).
   // Körs före däcket hinner ladda flera sidor, så annonser injiceras stabilt.
   useEffect(() => {
+    // I native-appen sköts annonser av AdMob (lib/admobAds) — AdSense-korten
+    // hör hemma på webben och skulle dessutom bryta AdSense-policyn i WebView.
+    if (isNativeApp()) {
+      setSwipeAdsEnabled(false);
+      return;
+    }
     if (!adsFeatureEnabled()) {
       setSwipeAdsEnabled(false);
       return;

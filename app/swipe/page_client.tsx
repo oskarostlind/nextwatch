@@ -13,6 +13,7 @@ import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -589,6 +590,14 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
+      {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
+          poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
+          fel bildvariant. */}
+      <DeckPosterPreload
+        posters={cards.slice(3, 8).map((c) => c.poster)}
+        sizes="(max-width: 768px) 100vw, 600px"
+      />
+
       {/* Toppraden: film/serie-filtret bor här (flyttat från profilen — valet
           hör hemma där man ser effekten), resten av det som styr förslagen
           (tjänster, genrer) nås via kugghjulet. I gruppläge styr gruppens egna

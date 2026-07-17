@@ -13,6 +13,7 @@ import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
+import { Info, Play, Undo2 } from "lucide-react";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { Trailer } from "@/lib/tmdbVideos";
 import type { MatchEvidence } from "@/lib/tasteModel";
@@ -127,6 +128,10 @@ export default function MatchOverlay({
   }, [item]);
   const rating = item?.rating !== undefined ? item.rating.toFixed(1) : undefined;
   const providers: ProviderLink[] = item?.providers ?? [];
+
+  // Första providern är bästa valet: providerGroupsFor rankar streaming före
+  // hyr/köp, och listan innehåller bara tjänster vi kan direktlänka till.
+  const watch = providers[0] ?? null;
 
   const onFlip = useCallback(() => setFlipped((f) => !f), []);
 
@@ -281,26 +286,43 @@ export default function MatchOverlay({
             </div>
 
             <motion.div
-              className="pointer-events-auto mt-3 flex flex-wrap justify-center gap-2"
+              className="pointer-events-auto mt-3 grid gap-2"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.28 }}
             >
-              <TrailerButton trailer={item.trailer} title={item.title} variant="solid" />
-              <button
-                type="button"
-                onClick={onFlip}
-                className="rounded-xl border border-neutral-600 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-400 hover:text-white"
-              >
-                {flipped ? "Framsida" : "Mer info"}
-              </button>
-              <button
-                type="button"
-                onClick={close}
-                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-              >
-                Fortsätt swipa
-              </button>
+              {/* Hjälte-CTA:n är själva poängen med matchen: se den. Konkret
+                  tjänstenamn i knappen — "Kolla nu på Netflix" slår "Kolla nu". */}
+              {watch ? (
+                <a
+                  href={watch.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-[15px] font-semibold text-black shadow-[0_8px_24px_-8px_rgba(34,211,238,0.7)] transition hover:bg-cyan-400 active:scale-[0.98]"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  Kolla nu på {watch.name}
+                </a>
+              ) : null}
+
+              <div className="flex flex-wrap justify-center gap-2">
+                <TrailerButton trailer={item.trailer} title={item.title} variant="solid" />
+                <button
+                  type="button"
+                  onClick={onFlip}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                >
+                  {flipped ? <Undo2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+                  {flipped ? "Framsida" : "Mer info"}
+                </button>
+                <button
+                  type="button"
+                  onClick={close}
+                  className="inline-flex items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+                >
+                  Fortsätt swipa
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         </motion.div>

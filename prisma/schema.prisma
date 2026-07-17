@@ -45,6 +45,8 @@ model User {
 
   profile   Profile?
   ratings   Rating[]
+  sharesSent     SharedTitle[] @relation("sharesSent")
+  sharesReceived SharedTitle[] @relation("sharesReceived")
   watchlist watchlist[]
   purchases Purchase[]
 
@@ -171,6 +173,30 @@ model watchlist {
 
   @@unique([userId, tmdbId, mediaType])
   @@map("watchlist")
+}
+
+/// Filmtips mellan vänner ("chatten", omscopad): ett delat titelkort, ingen
+/// fritext. Unik per (från, till, titel) — att tipsa om samma film igen bumpar
+/// raden i stället för att spamma mottagarens inbox.
+model SharedTitle {
+  id         String    @id @default(cuid())
+  fromUserId String    @map("from_user_id")
+  toUserId   String    @map("to_user_id")
+  tmdbId     Int       @map("tmdb_id")
+  mediaType  String    @map("media_type")
+  title      String
+  year       String?
+  poster     String?
+  /// När mottagaren öppnat tipset (null = oläst).
+  seenAt     DateTime? @map("seen_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  from User @relation("sharesSent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User @relation("sharesReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId, tmdbId, mediaType], map: "shared_titles_unique_tip")
+  @@index([toUserId, createdAt], map: "idx_shared_titles_inbox")
+  @@map("shared_titles")
 }
 
 model Purchase {

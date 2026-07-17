@@ -15,6 +15,7 @@ import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
+import { hideSwipeBanner, registerSwipeForAds, showSwipeBanner } from "@/lib/admobAds";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -586,11 +587,21 @@ export default function SwipePageClient() {
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
+    // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
+    registerSwipeForAds();
     // Återställ direkt (utan animation) så nästa kort inte glider in från sidan.
     x.set(0);
     y.set(0);
     controls.set({ x: 0, y: 0, opacity: 1 });
   }
+
+  // AdMob-banner medan swipen är öppen (no-op på webben/premium/annonsfritt).
+  useEffect(() => {
+    void showSwipeBanner();
+    return () => {
+      void hideSwipeBanner();
+    };
+  }, []);
 
   const stackIndices: number[] = [];
   if (cards.length > 0) {

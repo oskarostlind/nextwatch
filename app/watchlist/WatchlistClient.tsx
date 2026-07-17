@@ -7,6 +7,8 @@ import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
 import RatingModal from '@/app/components/client/RatingModal';
 import ImdbImportModal from '@/app/components/client/ImdbImportModal';
+import ShareTitleModal, { type ShareItem } from '@/app/components/client/ShareTitleModal';
+import SharedTipsInbox from '@/app/components/client/SharedTipsInbox';
 import MediaFilters, { type MediaTypeFilter } from '@/app/components/discover/MediaFilters';
 import { Button, SegmentedTabs } from '@/app/components/ui/kit';
 import {
@@ -125,6 +127,7 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
   const [ratedType, setRatedType] = useState<MediaTypeFilter>('movie');
 
   const [imdbOpen, setImdbOpen] = useState(false);
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null);
   const [rateFromWl, setRateFromWl] = useState<WatchItem | null>(null);
   const [rateWlSaving, setRateWlSaving] = useState(false);
 
@@ -339,6 +342,9 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
 
   return (
     <>
+      {/* Filmtips från vänner — visas bara när det finns några. */}
+      <SharedTipsInbox onAdded={refetchWatchlist} />
+
       <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1">
         {(
           [
@@ -583,6 +589,23 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                 <button
                   type="button"
                   onClick={() => {
+                    const it = active;
+                    close();
+                    setShareItem({
+                      tmdbId: it.id,
+                      mediaType: it.tmdbType,
+                      title: it.title,
+                      year: it.year ?? null,
+                      poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  Tipsa en vän
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     // Har titeln redan ett betyg öppnas ändra-flödet (med "Ta bort
                     // betyg"), annars nybetygsättning.
                     const current = userRatingFor(active.id, active.tmdbType);
@@ -658,6 +681,8 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
         onRate={saveWatchlistRating}
         onSkip={() => setRateFromWl(null)}
       />
+
+      <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
 
       <ImdbImportModal
         open={imdbOpen}

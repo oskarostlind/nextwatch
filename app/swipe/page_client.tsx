@@ -23,6 +23,8 @@ import {
   type WatchProviders,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
+import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
+import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import MatchOverlay, { type GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
@@ -245,12 +247,53 @@ function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
   };
 }
 
+/**
+ * Minimal film/serie-väljare, centrerad i toppraden. Skriver till samma
+ * profilinställning som förut (saveSwipeSettings → /api/profile/swipe-settings),
+ * så valet överlever mellan sessioner och kortleken hämtas om av storen.
+ */
+function MediaFilterPill({
+  value,
+  onChange,
+}: {
+  value: SwipeMediaFilter;
+  onChange: (next: SwipeMediaFilter) => void;
+}) {
+  const options: { id: SwipeMediaFilter; label: string }[] = [
+    { id: "both", label: "Båda" },
+    { id: "movie", label: "Film" },
+    { id: "tv", label: "Serier" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Visa i swipen"
+      className="absolute left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/10 bg-white/[0.06] p-0.5"
+    >
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={value === o.id}
+          onClick={() => value !== o.id && onChange(o.id)}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+            value === o.id ? "bg-white/15 text-white" : "text-white/45 hover:text-white/75"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { showPaidOptions } = useSwipeSettings();
+  const { showPaidOptions, mediaFilter } = useSwipeSettings();
   const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } =
     useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
@@ -546,9 +589,17 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
-      {/* Swipen hålls ren: allt som styr vad som visas (film/serie, tjänster,
-          genrer) bor i profilen och nås härifrån via kugghjulet. */}
-      <div className="flex shrink-0 items-center justify-end px-3 pt-2">
+      {/* Toppraden: film/serie-filtret bor här (flyttat från profilen — valet
+          hör hemma där man ser effekten), resten av det som styr förslagen
+          (tjänster, genrer) nås via kugghjulet. I gruppläge styr gruppens egna
+          inställningar, så pillen visas bara solo. */}
+      <div className="relative flex shrink-0 items-center justify-end px-3 pt-2">
+        {mode === "individual" && (
+          <MediaFilterPill
+            value={mediaFilter}
+            onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
+          />
+        )}
         <button
           type="button"
           onClick={() => router.push("/profile")}

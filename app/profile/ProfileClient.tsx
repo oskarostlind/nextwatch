@@ -10,7 +10,6 @@ import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClien
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
-import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import CompactGenrePicker from "./CompactGenrePicker";
 import TasteProfilePanel from "./TasteProfilePanel";
 import { toSvGenres } from "./profileGenres";
@@ -809,26 +808,11 @@ function SettingsTab() {
         )}
       </section>
 
-      {/* Förslag — styr vad swipen visar. Låg tidigare som en toggle i /swipe. */}
+      {/* Förslag — styr vad swipen visar. Film/serie-valet bor numera som en
+          pill direkt på /swipe (där man ser effekten); här finns bara det som
+          inte behöver vara ett svep bort. */}
       <section className="grid gap-3">
         <h3 className="text-sm font-semibold text-white/80">Förslag</h3>
-
-        <div className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-          <div className="text-sm text-white/85">Visa i swipen</div>
-          <div className="text-xs text-white/45">Gäller bara när du swipar själv — grupper har egna inställningar.</div>
-          <div className="mt-1">
-            <SegmentedTabs
-              layoutId="profile-media-filter"
-              tabs={[
-                { id: "both" as SwipeMediaFilter, label: "Båda" },
-                { id: "movie" as SwipeMediaFilter, label: "Film" },
-                { id: "tv" as SwipeMediaFilter, label: "Serier" },
-              ]}
-              value={swipeSettings.mediaFilter}
-              onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
-            />
-          </div>
-        </div>
 
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">

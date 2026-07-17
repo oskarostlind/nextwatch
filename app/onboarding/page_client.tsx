@@ -8,6 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import GuestEntryButton from "@/app/components/auth/GuestEntryButton";
+import { replayAnonLikes } from "@/lib/anonLikes";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -332,6 +333,13 @@ export default function Client() {
       }
       const data = (await res.json()) as { ok?: boolean; message?: string };
       if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
+
+      // Startsidan är spelbar innan man har konto, och gaten lovar att swipesen
+      // "följer med". Här infrias löftet: likesen har legat i localStorage och
+      // spelas upp mot profilen nu när den finns. Best-effort — en misslyckad
+      // titel får aldrig blockera onboardingen.
+      await replayAnonLikes().catch(() => 0);
+
       router.replace(redirect);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ett fel uppstod.");

@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useCallback, useMemo, useState } from 'react';
-import { Star } from 'lucide-react';
+import { Send, Star } from 'lucide-react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
 import RatingModal from '@/app/components/client/RatingModal';
@@ -473,6 +473,22 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
               key={`${it.tmdbType}-${it.id}`}
               className="group relative overflow-hidden rounded-xl border border-white/10 transition hover:ring-2 hover:ring-cyan-500/60"
             >
+              <button
+                type="button"
+                aria-label="Tipsa en vän"
+                onClick={() =>
+                  setShareItem({
+                    tmdbId: it.id,
+                    mediaType: it.tmdbType,
+                    title: it.title,
+                    year: it.year ?? null,
+                    poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
+                  })
+                }
+                className="absolute left-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-cyan-500 hover:text-black"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
               <button
                 type="button"
                 aria-label="Ta bort från watchlist"

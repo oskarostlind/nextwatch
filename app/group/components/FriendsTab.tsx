@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Users, UserPlus, Check, ChevronRight } from "lucide-react";
+import { Search, Plus, Users, UserPlus, Check, ChevronRight, MessageCircle } from "lucide-react";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
+import FilmChatModal from "@/app/components/client/FilmChatModal";
 import Avatar from "@/app/components/ui/Avatar";
 import type { FriendsInitial } from "../page";
 
@@ -48,6 +49,30 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const [isSearching, setIsSearching] = useState(false);
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
   const [openFriendId, setOpenFriendId] = useState<string | null>(null);
+  const [chatFriendId, setChatFriendId] = useState<string | null>(null);
+  // Olästa filmtips per vän — driver badgen på chattikonen.
+  const [unseenByFriend, setUnseenByFriend] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let active = true;
+    const loadThreads = () => {
+      void fetch("/api/share/threads", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { ok?: boolean; threads?: { friendId: string; unseen: number }[] } | null) => {
+          if (!active || !j?.ok) return;
+          const map: Record<string, number> = {};
+          for (const t of j.threads ?? []) map[t.friendId] = t.unseen;
+          setUnseenByFriend(map);
+        })
+        .catch(() => {});
+    };
+    loadThreads();
+    const t = setInterval(loadThreads, 15000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [chatFriendId]); // reload när chatten stängs — tråd-GET:en har nollat olästa
 
   useEffect(() => {
     // SSR-datan blir första snapshot (ingen flash) om store:n inte hunnit ladda.
@@ -179,26 +204,57 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
-            {friends.map((f) => (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpenFriendId(f.id)}
-                  className="flex w-full flex-row items-center justify-between rounded-xl bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Avatar avatarId={f.avatarId} name={displayName(f)} size={36} />
-                    <span className="truncate font-medium text-white/90">{displayName(f)}</span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-white/30" />
-                </button>
-              </li>
-            ))}
+            {friends.map((f) => {
+              const unseen = unseenByFriend[f.id] ?? 0;
+              return (
+                <li key={f.id} className="flex items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 transition hover:bg-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFriendId(f.id)}
+                    className="flex min-w-0 flex-1 items-center justify-between px-2 py-1.5 text-left"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Avatar avatarId={f.avatarId} name={displayName(f)} size={36} />
+                      <span className="truncate font-medium text-white/90">{displayName(f)}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />
+                  </button>
+                  {/* Filmchatten: egen knapp så profilklicket lämnas ifred. */}
+                  <button
+                    type="button"
+                    aria-label={`Filmtips med ${displayName(f)}`}
+                    onClick={() => setChatFriendId(f.id)}
+                    className="relative shrink-0 rounded-full p-2.5 text-cyan-300/80 transition hover:bg-cyan-500/15 hover:text-cyan-200"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    {unseen > 0 && (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold text-black">
+                        {unseen}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
-      <FriendProfileModal friendId={openFriendId} onClose={() => setOpenFriendId(null)} />
+      <FriendProfileModal
+        friendId={openFriendId}
+        onClose={() => setOpenFriendId(null)}
+        onOpenChat={(id) => {
+          setOpenFriendId(null);
+          setChatFriendId(id);
+        }}
+      />
+
+      <FilmChatModal
+        friendId={chatFriendId}
+        friendName={displayName(friends.find((f) => f.id === chatFriendId) ?? { id: chatFriendId ?? "" })}
+        friendAvatarId={friends.find((f) => f.id === chatFriendId)?.avatarId ?? null}
+        onClose={() => setChatFriendId(null)}
+      />
 
       {hasPending && (
         <div className={cardClass}>

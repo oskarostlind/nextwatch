@@ -9,8 +9,6 @@ description: >-
 
 # iOS Appflow Build (NextWatch)
 
-> Speglad i `.claude/skills/ios-appflow-build/SKILL.md` — uppdatera båda vid ändring.
-
 ## Auto build-nummer (primärt — ingen manuell bump behövs)
 
 Appflow kör `npm run appflow:build` som:

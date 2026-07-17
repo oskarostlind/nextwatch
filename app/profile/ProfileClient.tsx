@@ -7,6 +7,7 @@ import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
+import { AVATARS } from "@/lib/avatars";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
@@ -24,6 +25,8 @@ export type FavoriteItem = {
 // DTO exakt som servern skickar från app/profile/page.tsx
 export type ProfileDTO = {
   displayName: string | null;
+  /** Vald avatar ur lib/avatars.ts, null = ingen vald. */
+  avatarId?: string | null;
   /** User.username */
   username?: string | null;
   dob: string | null;
@@ -282,6 +285,7 @@ function SearchBox({
 // —————————————————————— Huvudkomponent ——————————————————————
 export default function ProfileClient({ initial }: Props) {
   const [displayName, setDisplayName] = useState<string>(initial?.displayName ?? "");
+  const [avatarId, setAvatarId] = useState<string | null>(initial?.avatarId ?? null);
   const [username, setUsername] = useState<string>(initial?.username ?? "");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState<string>(toInputDate(initial?.dob ?? null));
@@ -325,6 +329,8 @@ export default function ProfileClient({ initial }: Props) {
         if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
         if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
         if (typeof p.displayName === "string") setDisplayName(p.displayName);
+        if (typeof p.avatarId === "string") setAvatarId(p.avatarId);
+        else if (p.avatarId === null) setAvatarId(null);
         if (typeof p.username === "string") setUsername(p.username);
         else if (p.username === null) setUsername("");
         if (typeof p.dob === "string") setDob(toInputDate(p.dob));
@@ -380,6 +386,7 @@ export default function ProfileClient({ initial }: Props) {
         cache: "no-store",
         body: JSON.stringify({
           displayName,
+          avatarId,
           dob,
           uiLanguage,
           favoriteGenres,
@@ -441,6 +448,35 @@ export default function ProfileClient({ initial }: Props) {
       <Card className="overflow-hidden">
         {tab === "bas" && (
           <div className="grid gap-4">
+            {/* Frivillig avatar ur förvalt bibliotek (à la Netflix). Klick på
+                vald avatar avmarkerar — null sparas och rensar valet. */}
+            <div className="min-w-0">
+              <label className="mb-1 block text-sm text-white/70">Profilbild</label>
+              <p className="mb-2 text-xs text-white/45">
+                Frivilligt — gör dig lättare att känna igen bland vänner och i grupper.
+              </p>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                {AVATARS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    title={a.label}
+                    aria-label={a.label}
+                    aria-pressed={avatarId === a.id}
+                    onClick={() => setAvatarId((cur) => (cur === a.id ? null : a.id))}
+                    className={`relative overflow-hidden rounded-xl border transition ${
+                      avatarId === a.id
+                        ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                        : "border-white/10 opacity-80 hover:border-white/30 hover:opacity-100"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/avatars/${a.id}.svg`} alt={a.label} className="h-auto w-full" draggable={false} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">
                 <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>

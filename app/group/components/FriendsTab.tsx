@@ -5,6 +5,7 @@ import { Search, Plus, Users, UserPlus, Check, ChevronRight } from "lucide-react
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
+import Avatar from "@/app/components/ui/Avatar";
 import type { FriendsInitial } from "../page";
 
 type SearchRow = {
@@ -185,7 +186,10 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   onClick={() => setOpenFriendId(f.id)}
                   className="flex w-full flex-row items-center justify-between rounded-xl bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
                 >
-                  <span className="font-medium text-white/90">{displayName(f)}</span>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <Avatar avatarId={f.avatarId} name={displayName(f)} size={36} />
+                    <span className="truncate font-medium text-white/90">{displayName(f)}</span>
+                  </span>
                   <ChevronRight className="h-4 w-4 text-white/30" />
                 </button>
               </li>
@@ -208,7 +212,10 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                 key={r.requestId}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/5 px-4 py-3"
               >
-                <span className="text-sm font-medium text-white/90">{displayName(r.from)}</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Avatar avatarId={r.from.avatarId} name={displayName(r.from)} size={30} />
+                  <span className="truncate text-sm font-medium text-white/90">{displayName(r.from)}</span>
+                </span>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -232,7 +239,10 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                 key={r.requestId}
                 className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"
               >
-                <span className="text-sm font-medium text-white/90">{displayName(r.to)}</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <Avatar avatarId={r.to.avatarId} name={displayName(r.to)} size={30} />
+                  <span className="truncate text-sm font-medium text-white/90">{displayName(r.to)}</span>
+                </span>
                 <span className="text-xs text-white/40">Väntar…</span>
               </li>
             ))}

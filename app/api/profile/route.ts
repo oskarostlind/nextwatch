@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import prisma from "../../../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { isValidAvatarId } from "@/lib/avatars";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export async function GET() {
     select: {
       userId: true,
       displayName: true,
+      avatarId: true,
       dob: true,
       region: true,
       locale: true,
@@ -79,6 +81,10 @@ export async function PUT(req: Request) {
 
   const displayName = s(body.displayName);
   const dobStr = s(body.dob);
+  // Frivilligt val ur förvalda biblioteket: giltigt id sätter, explicit null
+  // rensar, utelämnat fält lämnar orört. Okända id:n ignoreras tyst.
+  const avatarId: string | null | undefined =
+    body.avatarId === null ? null : isValidAvatarId(body.avatarId) ? body.avatarId : undefined;
   const favoriteGenres = arr(body.favoriteGenres);
   const dislikedGenres = arr(body.dislikedGenres);
   const providers = arr(body.providers);
@@ -95,6 +101,7 @@ export async function PUT(req: Request) {
       where: { userId: uid },
       data: {
         displayName: displayName ?? undefined,
+        avatarId,
         dob: dobStr ? new Date(dobStr) : undefined,
         uiLanguage,
         region,
@@ -121,6 +128,7 @@ export async function PUT(req: Request) {
     data: {
       userId: uid,
       displayName,
+      avatarId: avatarId ?? null,
       dob: new Date(dobStr),
       uiLanguage,
       region,

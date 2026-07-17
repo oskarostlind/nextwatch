@@ -32,6 +32,12 @@ export type WeightedLabel = { id: number; name: string; weight: number };
 export type TasteMaps = {
   keywordW: Map<number, number>;
   peopleW: Map<number, number>;
+  /**
+   * Anime kontra västerländsk animation, härlett ur seeds: −1 (bara västerländskt
+   * gillat / anime ogillat) … +1 (bara anime gillat). 0 = ingen signal (inga
+   * animerade seeds). Se hasAnimeMarker.
+   */
+  animeAffinity: number;
 };
 
 export type TasteLabels = {
@@ -201,6 +207,21 @@ export async function fetchFeatures(type: MediaType, id: number, locale: string)
   };
 }
 
+/* ---------------- Animationsstil (anime vs västerländskt) ---------------- */
+
+// TMDB:s genre "Animation" (16) buntar ihop Ghibli med Disney — enorm skillnad
+// i praktiken. Nyckelorden skiljer dem åt: TMDB-keywords är alltid engelska
+// (lokaliseras inte), så namnmatchning är stabil oavsett locale.
+export const ANIMATION_GENRE_ID = 16;
+const ANIME_KEYWORD_IDS = new Set([210024 /* anime */, 13141 /* based on manga */]);
+const ANIME_KEYWORD_NAMES = new Set(["anime", "based on manga", "manga", "based on anime"]);
+
+export function hasAnimeMarker(keywords: { id: number; name: string }[]): boolean {
+  return keywords.some(
+    (kw) => ANIME_KEYWORD_IDS.has(kw.id) || ANIME_KEYWORD_NAMES.has(kw.name.toLowerCase()),
+  );
+}
+
 function increment(map: Map<number, number>, key: number, amount: number) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
@@ -245,24 +266,39 @@ function labelsFromNamedMap(
 export async function buildTasteMaps(seeds: Seed[], locale: string): Promise<TasteMaps> {
   const keywordW = new Map<number, number>();
   const peopleW = new Map<number, number>();
-  const feats = await Promise.all(
+  const feats: FeatureBundle[] = await Promise.all(
     seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({
       keywords: [],
       directors: [],
       cast: [],
+      genres: [],
     }))),
   );
+
+  // Anime-affinitet: av de ANIMERADE titlar användaren reagerat på, hur
+  // anime-lutande är reaktionerna? Negativa seed-vikter (dislikes) drar åt
+  // andra hållet, så "gillar Ghibli, ogillar Disney" → +1 och tvärtom.
+  let animeRaw = 0;
+  let westernRaw = 0;
 
   for (let i = 0; i < seeds.length; i++) {
     const w = seeds[i].weight;
     const f = feats[i];
     for (const kw of f.keywords) increment(keywordW, kw.id, w);
     for (const p of [...f.directors, ...f.cast]) increment(peopleW, p.id, w);
+
+    if ((f.genres ?? []).some((g) => g.id === ANIMATION_GENRE_ID)) {
+      if (hasAnimeMarker(f.keywords)) animeRaw += w;
+      else westernRaw += w;
+    }
   }
+
+  const styleDenom = Math.abs(animeRaw) + Math.abs(westernRaw);
 
   return {
     keywordW: normalizeTopK(keywordW, 60),
     peopleW: normalizeTopK(peopleW, 60),
+    animeAffinity: styleDenom > 0 ? (animeRaw - westernRaw) / styleDenom : 0,
   };
 }
 

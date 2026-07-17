@@ -13,11 +13,13 @@ import {
   TOPMATCH_MIN_TASTE_SCORE,
 } from "@/lib/tasteFeature";
 import {
+  ANIMATION_GENRE_ID,
   buildMatchEvidence,
   buildSeeds,
   buildTasteMaps,
   fetchFeatures,
   genreScoreNames,
+  hasAnimeMarker,
   resolveGenreSets,
   resolveMaxCert,
   resolveProviderStrings,
@@ -42,6 +44,8 @@ type TMDBListItem = {
   vote_count?: number;
   first_air_date?: string | null;
   release_date?: string | null;
+  /** Följer med gratis i discover-svaret; används för anime-klassningen. */
+  original_language?: string;
 };
 type TMDBGenreList = { genres: { id: number; name: string }[] };
 
@@ -464,6 +468,24 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       features: CachedFeatures;
     };
 
+    // Animationsstil: genren "Animation" är EN bucket hos TMDB men två världar i
+    // praktiken (Ghibli ≠ Disney). animeAffinity är härledd ur seeds; på animerade
+    // kandidater skjuter den anime upp/ner efter smak och västerländskt åt andra
+    // hållet (dämpat — att älska anime betyder inte att man hatar Pixar).
+    // Vikten 1.5 är i klass med V1:s genreterm (1.6 × ±1), så stilen kan faktiskt
+    // vända ordningen mellan två animerade titlar — men inte begrava kvalitet.
+    const ANIME_STYLE_WEIGHT = 1.5;
+    const WESTERN_COUNTERWEIGHT = -0.6;
+    function styleAdjustment(base: TMDBListItem, f: CachedFeatures): number {
+      if (taste.animeAffinity === 0) return 0;
+      const animated =
+        (base.genre_ids ?? []).includes(ANIMATION_GENRE_ID) ||
+        f.genres.some((g) => g.id === ANIMATION_GENRE_ID);
+      if (!animated) return 0;
+      const isAnime = hasAnimeMarker(f.keywords) || base.original_language === "ja";
+      return ANIME_STYLE_WEIGHT * taste.animeAffinity * (isAnime ? 1 : WESTERN_COUNTERWEIGHT);
+    }
+
     const scoredFinal: ScoredFinal[] = [];
     for (const s of topItems) {
       const f = featureCache.get(`${s.type}:${s.id}:${locale}`) ?? {
@@ -478,7 +500,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         id: s.id,
         type: s.type,
         base: s.base,
-        scoreFinal: s.scoreV1 + tasteOnly,
+        scoreFinal: s.scoreV1 + tasteOnly + styleAdjustment(s.base, f),
         scoreTasteOnly: tasteOnly,
         kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),

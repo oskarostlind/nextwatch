@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Star } from "lucide-react";
+import { Send, Star } from "lucide-react";
 import { PageHeader, Button, Note } from "../components/ui/kit";
 import MediaFilters, { type MediaTypeFilter } from "../components/discover/MediaFilters";
 import RatingModal from "../components/client/RatingModal";
+import ShareTitleModal, { type ShareItem } from "../components/client/ShareTitleModal";
 import Modal from "../components/ui/Modal";
 import WatchNowButton from "../components/watch/WatchNowButton";
 import {
@@ -52,6 +53,16 @@ function posterSrc(posterPath: string | null, size: "w342" | "w500" = "w342") {
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
 }
 
+function itemToShareItem(it: Item): ShareItem {
+  return {
+    tmdbId: it.id,
+    mediaType: it.mediaType,
+    title: it.title,
+    year: it.year,
+    poster: posterSrc(it.posterPath, "w500"),
+  };
+}
+
 function searchHitToItem(hit: SearchHit, mediaType: MediaTypeFilter): Item {
   return {
     id: hit.id,
@@ -95,6 +106,7 @@ export default function DiscoverPage() {
   const [modalLoading, setModalLoading] = useState(false);
 
   const [rateTarget, setRateTarget] = useState<Item | null>(null);
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null);
   const [rateSaving, setRateSaving] = useState(false);
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
 
@@ -275,6 +287,18 @@ export default function DiscoverPage() {
         >
           <Star className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          aria-label="Tipsa en vän"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShareItem(itemToShareItem(it));
+          }}
+          className="absolute right-1.5 top-11 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-cyan-500 hover:text-black"
+        >
+          <Send className="h-4 w-4" />
+        </button>
       </div>
     );
   }
@@ -437,11 +461,25 @@ export default function DiscoverPage() {
                     ? ` (${userRatings[`${active.mediaType}_${active.id}`]}/10)`
                     : ""}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const it = active;
+                    closeModal();
+                    setShareItem(itemToShareItem(it));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  <Send className="h-4 w-4" />
+                  Tipsa en vän
+                </button>
               </div>
             </div>
           </div>
         )}
       </Modal>
+
+      <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
 
       <RatingModal
         open={rateTarget !== null}

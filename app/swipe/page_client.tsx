@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ChevronUp, Eye, Heart, Settings, X } from "lucide-react";
+import { ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
@@ -14,6 +14,7 @@ import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
+import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -295,6 +296,16 @@ let groupRefreshAttempted = false;
 export default function SwipePageClient() {
   const router = useRouter();
   const { showPaidOptions, mediaFilter } = useSwipeSettings();
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null);
+  const shareCard = useCallback((c: Card) => {
+    setShareItem({
+      tmdbId: c.tmdbId,
+      mediaType: c.mediaType,
+      title: c.title,
+      year: c.year,
+      poster: c.poster,
+    });
+  }, []);
   const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } =
     useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
@@ -714,6 +725,7 @@ export default function SwipePageClient() {
                     flipped={flippedId === card.id}
                     interactive
                     onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                    onShare={shareCard}
                   />
 
                   <SwipeStampOverlays
@@ -764,6 +776,8 @@ export default function SwipePageClient() {
           onLike={() => void swipeOut("right")}
         />
       </div>
+
+      <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
 
       <GuideOverlay
         guideId="swipe"
@@ -829,11 +843,14 @@ export function StaticCard({
   flipped,
   onFlip,
   interactive = true,
+  onShare,
 }: {
   card: Card;
   flipped: boolean;
   interactive?: boolean;
   onFlip: () => void;
+  /** Öppnar "Tipsa en vän" för kortet. Bara meningsfullt på toppkortet. */
+  onShare?: (card: Card) => void;
 }) {
   // Annonskort: ingen flip, ingen poster – renderar AdCard (AdSense/AdMob).
   if (card.kind === "ad") {
@@ -856,7 +873,7 @@ export function StaticCard({
           <Front card={card} />
         </div>
         <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-          <Back card={card} />
+          <Back card={card} onShare={onShare} />
         </div>
       </div>
     </div>
@@ -975,7 +992,7 @@ function Front({ card }: { card: Card }) {
   );
 }
 
-function Back({ card }: { card: Card }) {
+function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void }) {
   const heroSrc = card.backdrop ?? card.poster;
   const { showPaidOptions } = useSwipeSettings();
   const providerGroups = providerGroupsFor(card.providers, showPaidOptions);
@@ -1094,15 +1111,23 @@ function Back({ card }: { card: Card }) {
         <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{PAID_ONLY_LABEL}</div>
       ) : null}
 
-      {card.providers !== undefined || card.trailer ? (
-        <div
-          className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
-          <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
-        </div>
-      ) : null}
+      <div
+        className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
+        <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
+        {onShare ? (
+          <button
+            type="button"
+            onClick={() => onShare(card)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-white/25 hover:bg-white/10"
+          >
+            <Send className="h-4 w-4" />
+            Tipsa
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

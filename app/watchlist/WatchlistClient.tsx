@@ -66,6 +66,17 @@ type WatchlistApiItem = {
 const PLACEHOLDER_POSTER =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
+/** Betyg-flikens kort öppnar samma detaljmodal som watchlisten — inte bara betyget. */
+function ratedToWatchItem(it: RatedItem): WatchItem {
+  return {
+    id: it.tmdbId,
+    tmdbType: it.mediaType,
+    title: it.title,
+    year: it.year ?? undefined,
+    posterUrl: it.poster ?? PLACEHOLDER_POSTER,
+  };
+}
+
 function mapWatchlistItem(raw: WatchlistApiItem): WatchItem {
   return {
     id: raw.tmdbId,
@@ -409,7 +420,7 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
               <button
                 key={`${it.mediaType}-${it.tmdbId}`}
                 type="button"
-                onClick={() => setEditing(it)}
+                onClick={() => void open(ratedToWatchItem(it))}
                 className="group relative block overflow-hidden rounded-xl border border-white/10 text-left transition hover:ring-2 hover:ring-cyan-500/60"
               >
                 {it.poster ? (
@@ -440,7 +451,15 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
           </div>
         )
       ) : filtered.length === 0 ? (
-        <p className="text-neutral-400">Inga träffar.</p>
+        <p className="text-neutral-400">
+          {items.length === 0
+            ? 'Din watchlist är tom. Swipa höger på titlar du vill se, så hamnar de här.'
+            : items.some((it) => it.tmdbType === wlType)
+            ? 'Inga träffar.'
+            : wlType === 'movie'
+            ? 'Inga filmer i listan — men du har serier. Byt till Serier ovanför.'
+            : 'Inga serier i listan — men du har filmer. Byt till Film ovanför.'}
+        </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {filtered.map((it) => (
@@ -493,7 +512,14 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                 {active.title}{active.year ? ` (${active.year})` : ''}
               </h2>
               <p className="mt-1 text-sm text-neutral-300">
-                {typeof active.rating === 'number' ? `Betyg: ${active.rating.toFixed(1)}` : 'Betyg saknas'}
+                {[
+                  typeof active.rating === 'number' ? `Betyg: ${active.rating.toFixed(1)}` : null,
+                  typeof userRatingFor(active.id, active.tmdbType) === 'number'
+                    ? `Ditt betyg: ${userRatingFor(active.id, active.tmdbType)}/10`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Betyg saknas'}
               </p>
 
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
@@ -557,8 +583,22 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
                 <button
                   type="button"
                   onClick={() => {
+                    // Har titeln redan ett betyg öppnas ändra-flödet (med "Ta bort
+                    // betyg"), annars nybetygsättning.
+                    const current = userRatingFor(active.id, active.tmdbType);
                     close();
-                    setRateFromWl(active);
+                    if (typeof current === 'number') {
+                      setEditing({
+                        tmdbId: active.id,
+                        mediaType: active.tmdbType,
+                        title: active.title,
+                        year: active.year ?? null,
+                        poster: active.posterUrl.startsWith('data:') ? null : active.posterUrl,
+                        userRating: current,
+                      });
+                    } else {
+                      setRateFromWl(active);
+                    }
                   }}
                   className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
                 >

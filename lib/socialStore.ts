@@ -12,6 +12,8 @@ export type SocialUser = {
   id: string;
   username: string | null;
   displayName: string | null;
+  /** Vald avatar ur lib/avatars.ts — null/undefined när ingen valts (initial-fallback). */
+  avatarId?: string | null;
 };
 
 export type FriendRequestIn = { requestId: string; from: SocialUser };
@@ -89,7 +91,14 @@ type FriendRowData = {
   userId?: string;
   username?: string | null;
   displayName?: string | null;
-  other?: { id?: string; userId?: string; username?: string | null; displayName?: string | null };
+  avatarId?: string | null;
+  other?: {
+    id?: string;
+    userId?: string;
+    username?: string | null;
+    displayName?: string | null;
+    avatarId?: string | null;
+  };
 };
 
 type FriendsListResp = {
@@ -116,6 +125,7 @@ function parseFriendRow(row: FriendRowData): SocialUser {
     id: String(u.id ?? u.userId ?? ""),
     username: u.username ?? null,
     displayName: u.displayName ?? null,
+    avatarId: u.avatarId ?? null,
   };
 }
 

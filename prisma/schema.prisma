@@ -98,6 +98,9 @@ model Profile {
 
   // Smakprofil
   displayName    String?  @map("display_name")
+  /// Vald avatar ur det förvalda biblioteket (lib/avatars.ts), t.ex. "popcorn".
+  /// Null = ingen vald (frivilligt val — UI faller tillbaka på initial).
+  avatarId       String?  @map("avatar_id")
   favoriteMovie  Json?    @map("favorite_movie")
   favoriteShow   Json?    @map("favorite_show")
   favoriteGenres String[] @default([]) @map("favorite_genres")

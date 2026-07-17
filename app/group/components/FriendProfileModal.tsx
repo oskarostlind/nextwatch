@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Modal from "@/app/components/ui/Modal";
+import Avatar from "@/app/components/ui/Avatar";
 
 type Top = { tmdbId: number; tmdbType: "movie" | "tv"; title: string; year: string | null; poster: string | null };
 type Prof = {
   id: string;
   displayName: string;
   username: string | null;
+  avatarId: string | null;
   genres: string[];
   top3: Top[];
   lastActiveAt: string | null;
@@ -68,10 +70,13 @@ export default function FriendProfileModal({
         {error && <p className="py-8 text-center text-sm text-rose-300">{error}</p>}
         {prof && (
           <div className="space-y-5">
-            <div>
-              <h3 className="text-xl font-bold text-white">{prof.displayName}</h3>
-              {prof.username && <p className="text-sm text-white/40">@{prof.username}</p>}
-              <p className="mt-1 text-xs text-emerald-300/80">{lastActiveLabel(prof.lastActiveAt)}</p>
+            <div className="flex items-center gap-4">
+              <Avatar avatarId={prof.avatarId} name={prof.displayName} size={56} />
+              <div className="min-w-0">
+                <h3 className="truncate text-xl font-bold text-white">{prof.displayName}</h3>
+                {prof.username && <p className="text-sm text-white/40">@{prof.username}</p>}
+                <p className="mt-1 text-xs text-emerald-300/80">{lastActiveLabel(prof.lastActiveAt)}</p>
+              </div>
             </div>
 
             {prof.genres.length > 0 && (

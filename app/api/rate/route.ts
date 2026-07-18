@@ -27,9 +27,14 @@ export async function POST(req: Request) {
       return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
     }
 
+    // OBS: rating röres INTE här. Tidigare nollades den vid varje swipe, vilket
+    // raderade nysatta betyg i sett-flödet: swipen skjuter /api/rate parallellt
+    // med att betygsmodalen sparar via /api/ratings/save, och när det här
+    // anropet (efter swipegräns-kollen) landade sist vann rating: null.
+    // Betyget ägs av betygsflödena — ett svep ändrar bara beslutet.
     await prisma.rating.upsert({
       where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
-      update: { decision, decidedAt: new Date(), rating: null },
+      update: { decision, decidedAt: new Date() },
       create: { id: newId(), userId: uid, tmdbId, mediaType, decision },
     });
     return NextResponse.json({ ok: true });

@@ -36,6 +36,7 @@ const TYPE_TO_PREF_COLUMN: Record<string, keyof PrefRow> = {
   friend_accepted: "notifyFriendRequests",
   group_invite: "notifyGroupInvites",
   group_invite_accepted: "notifyGroupInvites",
+  share_received: "notifyShares",
   marketing: "notifyMarketing",
 };
 
@@ -44,6 +45,7 @@ type PrefRow = {
   notifyGroupMatches: boolean;
   notifyFriendRequests: boolean;
   notifyGroupInvites: boolean;
+  notifyShares: boolean;
   notifyMarketing: boolean;
 };
 
@@ -63,6 +65,7 @@ async function userAllowsNotification(userId: string, type: string | undefined):
         notifyGroupMatches: true,
         notifyFriendRequests: true,
         notifyGroupInvites: true,
+        notifyShares: true,
         notifyMarketing: true,
       },
     });

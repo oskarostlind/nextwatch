@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
         year: true,
         poster: true,
         createdAt: true,
+        seenAt: true,
+        reaction: true,
       },
     }),
     prisma.sharedTitle.updateMany({
@@ -65,6 +67,11 @@ export async function GET(req: NextRequest) {
       poster: r.poster,
       fromMe: r.fromUserId === me,
       createdAt: r.createdAt.toISOString(),
+      // Status på MINA bubblor ("Skickat"/"Läst") + motpartens reaktion.
+      // OBS: seenAt för inkommande nollställs av updateMany ovan — irrelevant,
+      // statusen visas bara på fromMe-bubblor.
+      seenAt: r.seenAt ? r.seenAt.toISOString() : null,
+      reaction: r.reaction ?? null,
     })),
   });
 }

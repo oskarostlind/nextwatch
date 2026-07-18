@@ -121,6 +121,8 @@ model Profile {
   notifyGroupMatches   Boolean @default(true) @map("notify_group_matches")
   notifyFriendRequests Boolean @default(true) @map("notify_friend_requests")
   notifyGroupInvites   Boolean @default(true) @map("notify_group_invites")
+  /// Push när en vän skickar ett filmtips (filmchatten).
+  notifyShares         Boolean @default(true) @map("notify_shares")
   notifyMarketing      Boolean @default(false) @map("notify_marketing")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -189,6 +191,9 @@ model SharedTitle {
   poster     String?
   /// När mottagaren öppnat tipset (null = oläst).
   seenAt     DateTime? @map("seen_at")
+  /// Mottagarens fasta reaktion: "seen" (Redan sett) | "want" (Vill kolla) |
+  /// "skip" (Vill inte se). Null = ingen reaktion än.
+  reaction   String?
   createdAt  DateTime  @default(now()) @map("created_at")
 
   from User @relation("sharesSent", fields: [fromUserId], references: [id], onDelete: Cascade)

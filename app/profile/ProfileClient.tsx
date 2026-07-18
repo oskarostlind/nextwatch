@@ -636,6 +636,7 @@ type NotifPrefs = {
   groupMatches: boolean;
   friendRequests: boolean;
   groupInvites: boolean;
+  shares: boolean;
   marketing: boolean;
 };
 
@@ -652,6 +653,7 @@ const NOTIF_LABELS: { key: keyof NotifPrefs; label: string; hint: string }[] = [
   { key: "groupMatches", label: "Gruppmatchningar", hint: "När din grupp hittar en gemensam titel." },
   { key: "friendRequests", label: "Vänförfrågningar", hint: "Nya förfrågningar och accepterade vänner." },
   { key: "groupInvites", label: "Gruppinbjudningar", hint: "När någon bjuder in dig till en grupp." },
+  { key: "shares", label: "Filmtips från vänner", hint: "När en vän skickar dig ett filmtips i chatten." },
   { key: "marketing", label: "Nyheter & erbjudanden", hint: "Enstaka uppdateringar om NextWatch." },
 ];
 

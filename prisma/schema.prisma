@@ -37,6 +37,11 @@ model User {
   /// null = har aldrig fått ett tips och går därför främst i kön.
   lastDailyRecAt DateTime? @map("last_daily_rec_at")
 
+  /// Senast PUSHADE dagliga tipset. Utan interaktion är recs-listan stabil, så
+  /// items[0] blev samma titel dag efter dag — cronen hoppar över den här.
+  lastDailyRecTmdbId    Int?    @map("last_daily_rec_tmdb_id")
+  lastDailyRecMediaType String? @map("last_daily_rec_media_type")
+
   // Username för kompis-sök
   username String? @unique
 

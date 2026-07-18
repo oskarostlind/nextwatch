@@ -70,7 +70,12 @@ export async function GET(req: Request) {
   // aldrig fick sin push. Nu roterar kön i stället.
   const users = await prisma.user.findMany({
     where: { pushTokens: { some: {} }, profile: { isNot: null } },
-    select: { id: true, profile: { select: { region: true, locale: true } } },
+    select: {
+      id: true,
+      lastDailyRecTmdbId: true,
+      lastDailyRecMediaType: true,
+      profile: { select: { region: true, locale: true } },
+    },
     orderBy: { lastDailyRecAt: { sort: "asc", nulls: "first" } },
   });
 
@@ -98,7 +103,13 @@ export async function GET(req: Request) {
         return;
       }
 
-      const pick = result.items[0];
+      // Utan interaktion är recs-listan stabil → items[0] blev samma titel dag
+      // efter dag. Hoppa över det senast pushade tipset; finns inget annat
+      // (listan med exakt 1 titel) skickas den ändå hellre än ingenting.
+      const pick =
+        result.items.find(
+          (i) => !(i.id === user.lastDailyRecTmdbId && i.tmdbType === user.lastDailyRecMediaType),
+        ) ?? result.items[0];
       const mediaWord = pick.tmdbType === "movie" ? "film" : "serie";
       const titleWithYear = pick.year ? `${pick.title} (${pick.year})` : pick.title;
 
@@ -107,6 +118,14 @@ export async function GET(req: Request) {
         body: `${titleWithYear} – en ${mediaWord} vi tror du gillar!`,
         data: { type: "daily_rec", tmdbId: String(pick.id), tmdbType: pick.tmdbType },
       });
+      await prisma.user
+        .update({
+          where: { id: user.id },
+          data: { lastDailyRecTmdbId: pick.id, lastDailyRecMediaType: pick.tmdbType },
+        })
+        .catch(() => {
+          /* best-effort — en missad stämpel ger i värsta fall en repris imorgon */
+        });
       notified++;
     } catch (e) {
       failed++;

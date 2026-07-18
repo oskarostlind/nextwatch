@@ -20,6 +20,9 @@ const PUBLIC_ROUTES = [
   /^\/$/,
   /^\/onboarding(?:\/.*)?$/,
   /^\/auth(?:\/.*)?$/,
+  // Admin är ett desktopverktyg — mobilramen (max-w-md) kapade tabellerna.
+  // Ingen chrome behövs: sidan är gate:ad server-side och har egen layout.
+  /^\/admin(?:\/.*)?$/,
 ];
 
 /**

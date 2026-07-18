@@ -184,20 +184,14 @@ export default function FilmChatModal({
         {/* Topprad */}
         <div className="flex items-center gap-3 border-b border-white/10 pb-3">
           <Avatar avatarId={friendAvatarId} name={friendName} size={38} />
-          <div className="min-w-0 flex-1">
+          {/* Inget eget stängkryss här — ui/Modal renderar redan ett uppe till
+              höger, och två kryss ovanpå varandra såg ut som en bugg. */}
+          <div className="min-w-0 flex-1 pr-8">
             <h3 id="filmchat-heading" className="truncate text-base font-bold text-white">
               {friendName}
             </h3>
             <p className="text-xs text-white/40">Filmtips fram och tillbaka</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Stäng"
-            className="rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         {/* Tråden */}

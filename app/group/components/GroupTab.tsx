@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings } from "lucide-react";
+import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings, Sparkles } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
 import GroupSettingsModal from "./GroupSettingsModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
@@ -35,6 +36,74 @@ type Props = {
   initialMembers: PublicMember[];
   initialMeUserId?: string | null;
 };
+
+type CommonItem = {
+  tmdbId: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  year: string | null;
+  poster: string | null;
+  count: number;
+};
+
+/**
+ * "Gemensamt i era watchlists" — titlar som ≥2 medlemmar redan sparat.
+ * Svaret på "vad händer när alla swipat klart?": det ni redan är överens om.
+ */
+function CommonWatchlistSection({ code, memberCount }: { code: string; memberCount: number }) {
+  const [items, setItems] = useState<CommonItem[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/group/common-watchlist?code=${encodeURIComponent(code)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { ok?: boolean; items?: CommonItem[] } | null) => {
+        if (active && j?.ok) setItems(j.items ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [code, memberCount]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div>
+      <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
+        <Sparkles className="h-4 w-4" /> Gemensamt i era watchlists
+      </h3>
+      <p className="mb-2 text-xs text-white/40">
+        Titlar som flera av er redan sparat — börja kvällen här.
+      </p>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {items.map((it) => (
+          <div key={`${it.mediaType}-${it.tmdbId}`} className="w-[100px] shrink-0">
+            <div className="relative overflow-hidden rounded-lg border border-white/10">
+              {it.poster ? (
+                <Image
+                  src={it.poster}
+                  alt={it.title}
+                  width={100}
+                  height={150}
+                  className="h-[150px] w-[100px] object-cover"
+                />
+              ) : (
+                <div className="flex h-[150px] w-[100px] items-center justify-center bg-neutral-800 p-2 text-center text-[11px] text-neutral-400">
+                  {it.title}
+                </div>
+              )}
+              <span className="absolute right-1 top-1 rounded-full bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {it.count}/{memberCount}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-[11px] text-white/70">{it.title}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function GroupTab({ initialCode, initialRegion, initialMembers, initialMeUserId }: Props) {
   const router = useRouter();
@@ -262,6 +331,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             ))}
           </ul>
         </div>
+
+        <CommonWatchlistSection code={code} memberCount={members.length} />
 
         <Modal open={inviteOpen} onClose={() => setInviteOpen(false)}>
           <div className="p-2">

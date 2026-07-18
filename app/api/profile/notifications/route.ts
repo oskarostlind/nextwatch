@@ -1,8 +1,8 @@
 // app/api/profile/notifications/route.ts
 //
-// Läser/uppdaterar användarens notisinställningar (lagras på Profile).
-// GET  -> nuvarande värden (defaults om profil saknas)
-// PUT  -> uppdaterar en delmängd av flaggorna
+// LÃ¤ser/uppdaterar anvÃ¤ndarens notisinstÃ¤llningar (lagras pÃ¥ Profile).
+// GET  -> nuvarande vÃ¤rden (defaults om profil saknas)
+// PUT  -> uppdaterar en delmÃ¤ngd av flaggorna
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export type NotificationPrefs = {
   groupMatches: boolean;
   friendRequests: boolean;
   groupInvites: boolean;
+  shares: boolean;
   marketing: boolean;
 };
 
@@ -23,6 +24,7 @@ const DEFAULTS: NotificationPrefs = {
   groupMatches: true,
   friendRequests: true,
   groupInvites: true,
+  shares: true,
   marketing: false,
 };
 
@@ -38,6 +40,7 @@ export async function GET() {
       notifyGroupMatches: true,
       notifyFriendRequests: true,
       notifyGroupInvites: true,
+      notifyShares: true,
       notifyMarketing: true,
     },
   });
@@ -48,6 +51,7 @@ export async function GET() {
         groupMatches: p.notifyGroupMatches,
         friendRequests: p.notifyFriendRequests,
         groupInvites: p.notifyGroupInvites,
+        shares: p.notifyShares,
         marketing: p.notifyMarketing,
       }
     : DEFAULTS;
@@ -72,17 +76,18 @@ export async function PUT(req: NextRequest) {
   if (typeof body.groupMatches === "boolean") data.notifyGroupMatches = body.groupMatches;
   if (typeof body.friendRequests === "boolean") data.notifyFriendRequests = body.friendRequests;
   if (typeof body.groupInvites === "boolean") data.notifyGroupInvites = body.groupInvites;
+  if (typeof body.shares === "boolean") data.notifyShares = body.shares;
   if (typeof body.marketing === "boolean") data.notifyMarketing = body.marketing;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ ok: false, error: "no valid fields" }, { status: 400 });
   }
 
-  // Profilen kan saknas för nyregistrerade – uppdatera bara om den finns.
+  // Profilen kan saknas fÃ¶r nyregistrerade â€“ uppdatera bara om den finns.
   const existing = await prisma.profile.findUnique({ where: { userId: uid }, select: { userId: true } });
   if (!existing) {
     return NextResponse.json(
-      { ok: false, error: "profile_missing", message: "Slutför onboarding först." },
+      { ok: false, error: "profile_missing", message: "SlutfÃ¶r onboarding fÃ¶rst." },
       { status: 409 }
     );
   }
@@ -95,6 +100,7 @@ export async function PUT(req: NextRequest) {
       notifyGroupMatches: true,
       notifyFriendRequests: true,
       notifyGroupInvites: true,
+      notifyShares: true,
       notifyMarketing: true,
     },
   });
@@ -106,6 +112,7 @@ export async function PUT(req: NextRequest) {
       groupMatches: p.notifyGroupMatches,
       friendRequests: p.notifyFriendRequests,
       groupInvites: p.notifyGroupInvites,
+      shares: p.notifyShares,
       marketing: p.notifyMarketing,
     },
   });

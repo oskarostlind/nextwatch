@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { sendPushToUser } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,21 @@ export async function POST(req: NextRequest) {
     },
     update: { createdAt: new Date(), seenAt: null },
   });
+
+  // Push till mottagaren (lib/push respekterar notify_shares via data.type).
+  // Fire-and-forget: en död token eller saknade APNS-env får aldrig fälla tipset.
+  void (async () => {
+    const sender = await prisma.profile.findUnique({
+      where: { userId: me },
+      select: { displayName: true, user: { select: { username: true } } },
+    });
+    const senderName = sender?.displayName ?? sender?.user?.username ?? "En vän";
+    await sendPushToUser(toUserId, {
+      title: "Nytt filmtips 🍿",
+      body: `${senderName} tipsade dig om ${title}`,
+      data: { type: "share_received", friendId: me },
+    });
+  })().catch(() => {});
 
   return NextResponse.json({ ok: true, message: "Tips skickat." });
 }

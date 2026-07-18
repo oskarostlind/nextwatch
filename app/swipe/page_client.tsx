@@ -15,7 +15,7 @@ import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
-import { hideSwipeBanner, registerSwipeForAds, showSwipeBanner } from "@/lib/admobAds";
+import { registerSwipeForAds } from "@/lib/admobAds";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -594,14 +594,6 @@ export default function SwipePageClient() {
     y.set(0);
     controls.set({ x: 0, y: 0, opacity: 1 });
   }
-
-  // AdMob-banner medan swipen är öppen (no-op på webben/premium/annonsfritt).
-  useEffect(() => {
-    void showSwipeBanner();
-    return () => {
-      void hideSwipeBanner();
-    };
-  }, []);
 
   const stackIndices: number[] = [];
   if (cards.length > 0) {

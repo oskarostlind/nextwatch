@@ -8,6 +8,8 @@ import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 import { AVATARS } from "@/lib/avatars";
+import Avatar from "@/app/components/ui/Avatar";
+import Modal from "@/app/components/ui/Modal";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
@@ -286,6 +288,7 @@ function SearchBox({
 export default function ProfileClient({ initial }: Props) {
   const [displayName, setDisplayName] = useState<string>(initial?.displayName ?? "");
   const [avatarId, setAvatarId] = useState<string | null>(initial?.avatarId ?? null);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [username, setUsername] = useState<string>(initial?.username ?? "");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState<string>(toInputDate(initial?.dob ?? null));
@@ -448,14 +451,26 @@ export default function ProfileClient({ initial }: Props) {
       <Card className="overflow-hidden">
         {tab === "bas" && (
           <div className="grid gap-4">
-            {/* Frivillig avatar ur förvalt bibliotek (à la Netflix). Klick på
-                vald avatar avmarkerar — null sparas och rensar valet. */}
+            {/* Frivillig avatar ur förvalt bibliotek. Griden (16 st) tog för
+                mycket plats inline — nu vald avatar + knapp som öppnar modal. */}
             <div className="min-w-0">
               <label className="mb-1 block text-sm text-white/70">Profilbild</label>
-              <p className="mb-2 text-xs text-white/45">
-                Frivilligt — gör dig lättare att känna igen bland vänner och i grupper.
-              </p>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+              <div className="flex items-center gap-4">
+                <Avatar avatarId={avatarId} name={displayName} size={56} />
+                <div className="grid gap-1">
+                  <Button variant="secondary" onClick={() => setAvatarModalOpen(true)}>
+                    {avatarId ? "Byt profilbild" : "Välj profilbild"}
+                  </Button>
+                  <p className="text-xs text-white/45">Frivilligt — syns hos vänner och i grupper.</p>
+                </div>
+              </div>
+            </div>
+
+            <Modal open={avatarModalOpen} onClose={() => setAvatarModalOpen(false)} labelledBy="avatar-picker-heading">
+              <h3 id="avatar-picker-heading" className="mb-3 text-lg font-bold text-white">
+                Välj profilbild
+              </h3>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {AVATARS.map((a) => (
                   <button
                     key={a.id}
@@ -463,7 +478,11 @@ export default function ProfileClient({ initial }: Props) {
                     title={a.label}
                     aria-label={a.label}
                     aria-pressed={avatarId === a.id}
-                    onClick={() => setAvatarId((cur) => (cur === a.id ? null : a.id))}
+                    onClick={() => {
+                      // Klick på redan vald avmarkerar (null rensar valet vid spara).
+                      setAvatarId((cur) => (cur === a.id ? null : a.id));
+                      setAvatarModalOpen(false);
+                    }}
                     className={`relative overflow-hidden rounded-xl border transition ${
                       avatarId === a.id
                         ? "border-cyan-400 ring-2 ring-cyan-400/60"
@@ -475,7 +494,7 @@ export default function ProfileClient({ initial }: Props) {
                   </button>
                 ))}
               </div>
-            </div>
+            </Modal>
 
             <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">

@@ -64,6 +64,10 @@ export async function POST(req: Request) {
       });
     }
 
+    // Betyg = du har sett den → bort ur att-se-listan (Oskars beslut: alltid).
+    // Titeln syns i stället under Betyg-fliken.
+    await prisma.watchlist.deleteMany({ where: { userId: uid, tmdbId, mediaType } });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("ratings/save error:", err);

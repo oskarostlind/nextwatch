@@ -50,20 +50,29 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
   const [openFriendId, setOpenFriendId] = useState<string | null>(null);
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
-  // Olästa filmtips per vän — driver badgen på chattikonen.
+  // Olästa filmtips + senaste interaktion per vän — driver badge och sortering.
   const [unseenByFriend, setUnseenByFriend] = useState<Record<string, number>>({});
+  const [lastAtByFriend, setLastAtByFriend] = useState<Record<string, string>>({});
+  const [friendFilter, setFriendFilter] = useState("");
 
   useEffect(() => {
     let active = true;
     const loadThreads = () => {
       void fetch("/api/share/threads", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((j: { ok?: boolean; threads?: { friendId: string; unseen: number }[] } | null) => {
-          if (!active || !j?.ok) return;
-          const map: Record<string, number> = {};
-          for (const t of j.threads ?? []) map[t.friendId] = t.unseen;
-          setUnseenByFriend(map);
-        })
+        .then(
+          (j: { ok?: boolean; threads?: { friendId: string; unseen: number; lastAt: string }[] } | null) => {
+            if (!active || !j?.ok) return;
+            const unseen: Record<string, number> = {};
+            const lastAt: Record<string, string> = {};
+            for (const t of j.threads ?? []) {
+              unseen[t.friendId] = t.unseen;
+              lastAt[t.friendId] = t.lastAt;
+            }
+            setUnseenByFriend(unseen);
+            setLastAtByFriend(lastAt);
+          },
+        )
         .catch(() => {});
     };
     loadThreads();
@@ -73,6 +82,23 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
       clearInterval(t);
     };
   }, [chatFriendId]); // reload när chatten stängs — tråd-GET:en har nollat olästa
+
+  // Senast interagerad först, övriga alfabetiskt; filtret söker i namn/användarnamn.
+  const visibleFriends = friends
+    .filter((f) => {
+      const needle = friendFilter.trim().toLowerCase();
+      if (!needle) return true;
+      return (
+        displayName(f).toLowerCase().includes(needle) ||
+        (f.username ?? "").toLowerCase().includes(needle)
+      );
+    })
+    .sort((a, b) => {
+      const la = lastAtByFriend[a.id] ?? "";
+      const lb = lastAtByFriend[b.id] ?? "";
+      if (la !== lb) return lb.localeCompare(la);
+      return displayName(a).localeCompare(displayName(b), "sv");
+    });
 
   useEffect(() => {
     // SSR-datan blir första snapshot (ingen flash) om store:n inte hunnit ladda.
@@ -203,8 +229,17 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
             <p className="text-sm text-white/50">Inga vänner än. Sök och lägg till någon ovan.</p>
           </div>
         ) : (
+          <>
+            {friends.length > 3 && (
+              <input
+                value={friendFilter}
+                onChange={(e) => setFriendFilter(e.target.value)}
+                placeholder="Filtrera dina vänner…"
+                className="mb-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+              />
+            )}
           <ul className="flex flex-col gap-2">
-            {friends.map((f) => {
+            {visibleFriends.map((f) => {
               const unseen = unseenByFriend[f.id] ?? 0;
               return (
                 <li key={f.id} className="flex items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 transition hover:bg-white/10">
@@ -237,6 +272,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
               );
             })}
           </ul>
+          </>
         )}
       </div>
 

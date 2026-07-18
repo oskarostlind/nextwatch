@@ -42,10 +42,14 @@ export default function ShareTitleModal({
 }) {
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [sendState, setSendState] = useState<Record<string, SendState>>({});
+  const [q, setQ] = useState("");
+  // Senast interagerad (share/threads lastAt) → standard-sorteringen.
+  const [lastAtByFriend, setLastAtByFriend] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) {
       setSendState({});
+      setQ("");
       return;
     }
     let active = true;
@@ -59,6 +63,15 @@ export default function ShareTitleModal({
         setFriends(list);
       })
       .catch(() => active && setFriends([]));
+    fetch("/api/share/threads", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { ok?: boolean; threads?: { friendId: string; lastAt: string }[] } | null) => {
+        if (!active || !j?.ok) return;
+        const map: Record<string, string> = {};
+        for (const t of j.threads ?? []) map[t.friendId] = t.lastAt;
+        setLastAtByFriend(map);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -83,6 +96,17 @@ export default function ShareTitleModal({
 
   const name = (f: Friend) => f.displayName ?? f.username ?? "Okänd";
 
+  // Senast tipsad-med först (chattens rytm), övriga alfabetiskt; sök filtrerar.
+  const needle = q.trim().toLowerCase();
+  const sortedFilteredFriends = (friends ?? [])
+    .filter((f) => !needle || name(f).toLowerCase().includes(needle) || (f.username ?? "").toLowerCase().includes(needle))
+    .sort((a, b) => {
+      const la = lastAtByFriend[a.id] ?? "";
+      const lb = lastAtByFriend[b.id] ?? "";
+      if (la !== lb) return lb.localeCompare(la);
+      return name(a).localeCompare(name(b), "sv");
+    });
+
   return (
     <Modal open={open} onClose={onClose} labelledBy="share-title-heading">
       <div className="p-2">
@@ -96,6 +120,15 @@ export default function ShareTitleModal({
           </p>
         )}
 
+        {(friends?.length ?? 0) > 3 && (
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Sök vän…"
+            className="mt-3 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+          />
+        )}
+
         <div className="mt-4 grid gap-2">
           {friends === null ? (
             <p className="py-6 text-center text-sm text-white/50">Laddar vänner…</p>
@@ -104,7 +137,7 @@ export default function ShareTitleModal({
               Inga vänner än — lägg till någon under Grupp → Vänner först.
             </p>
           ) : (
-            friends.map((f) => {
+            sortedFilteredFriends.map((f) => {
               const st = sendState[f.id] ?? "idle";
               return (
                 <div

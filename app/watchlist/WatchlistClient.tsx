@@ -286,6 +286,8 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
             }
             return [next, ...prev];
           });
+          // Betyg = sedd → servern tar bort watchlist-raden; spegla direkt i UI:t.
+          setItems((cur) => cur.filter((x) => !(x.id === it.id && x.tmdbType === it.tmdbType)));
         }
       })
       .finally(() => {

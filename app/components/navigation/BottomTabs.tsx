@@ -3,11 +3,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { navItems } from "../lib/nav";
 import { motion } from "framer-motion";
+import { useSocial } from "../client/SocialProvider";
 
 export default function BottomTabs() {
   const pathname = usePathname();
+
+  // Oläst-badge på Grupp-fliken: vänförfrågningar + gruppinbjudningar (från
+  // social-storens 5s-poll) + olästa filmchattar (egen gles poll — 30s räcker
+  // för en badge, chattytorna pollar tätare själva).
+  const social = useSocial();
+  const [unseenChats, setUnseenChats] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      void fetch("/api/share/threads", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { ok?: boolean; threads?: { unseen: number }[] } | null) => {
+          if (!active || !j?.ok) return;
+          setUnseenChats((j.threads ?? []).reduce((sum, t) => sum + t.unseen, 0));
+        })
+        .catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [pathname]); // sidbyte = naturligt tillfälle att fräscha upp badgen
+
+  const groupBadge =
+    social.pendingIn.length + social.invitesIncoming.length + unseenChats;
 
   return (
     // Behåller ditt z-20 och backdrop-blur
@@ -47,6 +76,12 @@ export default function BottomTabs() {
                   active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-300",
                 ].join(" ")}
               />
+
+              {item.href === "/group" && groupBadge > 0 && (
+                <span className="absolute right-1 top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold text-black">
+                  {groupBadge > 9 ? "9+" : groupBadge}
+                </span>
+              )}
             </Link>
           );
         })}

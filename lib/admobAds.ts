@@ -1,10 +1,11 @@
 // lib/admobAds.ts
 //
 // AdMob för iOS-appen (webben har inga native-annonser; AdSense nekade sajten
-// och webbens annonskort visar bara premium-CTA). Tre format:
-//   - adaptiv banner i botten på /swipe (ovanför bottentabbarna)
+// och webbens annonskort visar bara premium-CTA). Två format:
 //   - interstitial var 15:e swipe, aldrig tätare än var 3:e minut
 //   - rewarded: titta klart på en video → 24h annonsfritt (nw_adfree_until)
+// Bannern togs BORT (Oskars beslut 2026-07-18): den låg i vägen för knapparna
+// och förstörde upplevelsen oavsett placering — intäkten motiverade den inte.
 //
 // Gate: bara native iOS (isNativeIos), aldrig för premium, aldrig under ett
 // aktivt 24h-fönster. Samtycke före första annonsen: UMP-formuläret (GDPR)
@@ -17,14 +18,12 @@
 import { isNativeIos } from "@/lib/premiumPurchase";
 
 const TEST_IDS = {
-  banner: "ca-app-pub-3940256099942544/2934735716",
   interstitial: "ca-app-pub-3940256099942544/4411468910",
   rewarded: "ca-app-pub-3940256099942544/1712485313",
 };
 
 function adId(kind: keyof typeof TEST_IDS): string {
   const env = {
-    banner: process.env.NEXT_PUBLIC_ADMOB_BANNER_ID,
     interstitial: process.env.NEXT_PUBLIC_ADMOB_INTERSTITIAL_ID,
     rewarded: process.env.NEXT_PUBLIC_ADMOB_REWARDED_ID,
   }[kind];
@@ -65,7 +64,6 @@ let initialized = false;
 let initInFlight: Promise<boolean> | null = null;
 let eligible = false; // native + ej premium — 24h-fönstret kollas per visning
 let npa = false;
-let bannerVisible = false;
 let interstitialReady = false;
 let swipesSinceAd = 0;
 let lastInterstitialAt = 0;
@@ -145,39 +143,6 @@ export async function initAdMobIfEligible(): Promise<boolean> {
   return initInFlight;
 }
 
-/* ---------- Banner (swipe-ytan) ---------- */
-
-/** px ovanför skärmens botten: bottentabbarna (4rem) + home-indicator-marginal. */
-const BANNER_BOTTOM_MARGIN = 98;
-
-export async function showSwipeBanner(): Promise<void> {
-  if (!(await initAdMobIfEligible()) || adFreeActive() || bannerVisible) return;
-  try {
-    const { AdMob, BannerAdSize, BannerAdPosition } = await plugin();
-    await AdMob.showBanner({
-      adId: adId("banner"),
-      adSize: BannerAdSize.ADAPTIVE_BANNER,
-      position: BannerAdPosition.BOTTOM_CENTER,
-      margin: BANNER_BOTTOM_MARGIN,
-      npa,
-    });
-    bannerVisible = true;
-  } catch {
-    /* ingen fill / offline — tyst */
-  }
-}
-
-export async function hideSwipeBanner(): Promise<void> {
-  if (!bannerVisible) return;
-  bannerVisible = false;
-  try {
-    const { AdMob } = await plugin();
-    await AdMob.removeBanner();
-  } catch {
-    /* tyst */
-  }
-}
-
 /* ---------- Interstitial (var 15:e swipe) ---------- */
 
 async function prepareInterstitial(): Promise<void> {
@@ -213,6 +178,13 @@ export function registerSwipeForAds(): void {
       lastInterstitialAt = Date.now();
       interstitialReady = false;
       void prepareInterstitial();
+      // Upsell-popupen lyssnar ("titta på video → 24h annonsfritt" / premium).
+      // Event i stället för direkt import — PremiumUpsellModal importerar oss.
+      try {
+        window.dispatchEvent(new Event("nw:admob-ad-shown"));
+      } catch {
+        /* SSR/edge — irrelevant här */
+      }
     } catch {
       interstitialReady = false;
     }
@@ -252,10 +224,7 @@ export async function watchRewardedForAdFree(): Promise<boolean> {
     await AdMob.showRewardVideoAd();
 
     const ok = await rewarded;
-    if (ok) {
-      grantAdFree24h();
-      void hideSwipeBanner();
-    }
+    if (ok) grantAdFree24h();
     return ok;
   } catch {
     return false;

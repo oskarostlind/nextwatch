@@ -46,8 +46,15 @@ export default function PremiumUpsellModal() {
       setRewardAvailable(canOfferAdFreeReward());
       setOpen(true);
     };
+    // I native-appen triggas upsellen av AdMob-interstitials (AdSense-korten
+    // som drev maybeTriggerAdUpsell är avstängda där) — samma sessions-cap.
+    const onNativeAd = () => maybeTriggerAdUpsell();
     window.addEventListener(UPSELL_EVENT, onUpsell);
-    return () => window.removeEventListener(UPSELL_EVENT, onUpsell);
+    window.addEventListener("nw:admob-ad-shown", onNativeAd);
+    return () => {
+      window.removeEventListener(UPSELL_EVENT, onUpsell);
+      window.removeEventListener("nw:admob-ad-shown", onNativeAd);
+    };
   }, []);
 
   if (!open) return null;

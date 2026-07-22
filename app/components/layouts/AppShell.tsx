@@ -23,6 +23,10 @@ const PUBLIC_ROUTES = [
   // Admin är ett desktopverktyg — mobilramen (max-w-md) kapade tabellerna.
   // Ingen chrome behövs: sidan är gate:ad server-side och har egen layout.
   /^\/admin(?:\/.*)?$/,
+  // Legal + support måste vara nåbara utan konto (App Store-review, AdMob,
+  // och länkarna i App Store Connect pekar hit).
+  /^\/legal(?:\/.*)?$/,
+  /^\/support$/,
 ];
 
 /**

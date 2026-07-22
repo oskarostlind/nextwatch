@@ -285,6 +285,25 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
       <Pile liked={liked} reduce={reduce} />
 
+      {/* Diskret legal-rad — Apple/AdMob kräver nåbar policy och TMDB kräver
+          attribution. Medvetet nästan osynlig: heron äger fortfarande scenen. */}
+      <footer className="absolute inset-x-0 bottom-2 z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 text-center text-[10px] text-white/25">
+        <a href="/legal/privacy" className="transition hover:text-white/60">Integritetspolicy</a>
+        <a href="/legal/terms" className="transition hover:text-white/60">Villkor</a>
+        <a href="/support" className="transition hover:text-white/60">Support</a>
+        <span>
+          Data från{" "}
+          <a
+            href="https://www.themoviedb.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#01b4e4]/60 transition hover:text-[#01b4e4]"
+          >
+            TMDB
+          </a>{" "}
+          — ej godkänd/certifierad av TMDB
+        </span>
+      </footer>
     </div>
   );
 }

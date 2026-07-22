@@ -954,6 +954,37 @@ function SettingsTab() {
         </div>
       </section>
 
+      {/* Om — legal/support-länkarna Apple kräver + TMDB-attribution (TMDB:s villkor). */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Om NextWatch</h3>
+        <div className="grid gap-1 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm">
+          <a href="/legal/privacy" className="py-1.5 text-white/85 transition hover:text-white">
+            Integritetspolicy
+          </a>
+          <a href="/legal/terms" className="py-1.5 text-white/85 transition hover:text-white">
+            Användarvillkor
+          </a>
+          <a href="/support" className="py-1.5 text-white/85 transition hover:text-white">
+            Support &amp; vanliga frågor
+          </a>
+          <a href="mailto:support@nextwatch.se" className="py-1.5 text-white/85 transition hover:text-white">
+            Kontakta oss
+          </a>
+        </div>
+        <p className="px-1 text-xs leading-relaxed text-white/40">
+          Film- och seriedata från{" "}
+          <a
+            href="https://www.themoviedb.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#01b4e4]"
+          >
+            TMDB
+          </a>
+          . Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB.
+        </p>
+      </section>
+
       {note && <p className="text-sm text-rose-300">{note}</p>}
     </div>
   );

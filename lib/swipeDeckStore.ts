@@ -1,12 +1,96 @@
 import {
+  filterSwipeCards,
   mapUnifiedItems,
   readGroupCodeFromCookie,
   type SwipeCard,
 } from "@/lib/swipeDeck";
 import { injectAdCards } from "@/lib/ads";
 import { type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
+import { getCached, removeCached, setCached } from "@/lib/clientCache";
 
 export const PREFETCH_MIN_CARDS = 10;
+
+/**
+ * Kortleken sparas mellan appstarter. Utan den kördes hela recs-pipelinen om
+ * från noll vid varje kallstart — mätt till ~4 s mot ett riktigt konto
+ * (discover-sidor, smakmodell, MMR) — för att i praktiken visa samma lek som
+ * förra gången. I native-appen är varje öppning en kallstart, så det var den
+ * enskilt dyraste väntan i appen.
+ */
+const DECK_CACHE_KEY = "solo_deck";
+const DECK_TTL_MS = 24 * 60 * 60 * 1000;
+/** Skrivningen debouncas så snabb swipning inte hamrar localStorage. */
+const DECK_WRITE_DEBOUNCE_MS = 500;
+
+type PersistedDeck = {
+  cards: SwipeCard[];
+  nextTmdbPage: number;
+  mediaFilter: SwipeMediaFilter;
+};
+
+let deckWriteTimer: ReturnType<typeof setTimeout> | null = null;
+
+function persistSoloDeckSoon() {
+  if (typeof window === "undefined") return;
+  if (deckWriteTimer) clearTimeout(deckWriteTimer);
+  deckWriteTimer = setTimeout(() => {
+    deckWriteTimer = null;
+    const s = soloState;
+    // Annonskort hör till en session och ska inte återuppstå ur cachen.
+    const cards = s.cards.filter((c) => c.kind !== "ad");
+    if (cards.length === 0) {
+      removeCached(DECK_CACHE_KEY);
+      return;
+    }
+    const payload: PersistedDeck = {
+      cards,
+      nextTmdbPage: s.nextTmdbPage,
+      mediaFilter: s.mediaFilter,
+    };
+    setCached(DECK_CACHE_KEY, payload, DECK_TTL_MS);
+  }, DECK_WRITE_DEBOUNCE_MS);
+}
+
+function clearPersistedSoloDeck() {
+  if (deckWriteTimer) {
+    clearTimeout(deckWriteTimer);
+    deckWriteTimer = null;
+  }
+  removeCached(DECK_CACHE_KEY);
+}
+
+/**
+ * Läser sparad lek vid modulinit — inte i en effekt. En effekt hade gett en
+ * bildruta skelett innan korten dök upp, vilket är precis den blinkning det
+ * här ska ta bort.
+ */
+function hydrateSoloDeck(): SoloDeckState {
+  const base = emptySolo();
+  if (typeof window === "undefined") return base;
+  const saved = getCached<PersistedDeck>(DECK_CACHE_KEY);
+  if (!saved || !Array.isArray(saved.cards) || saved.cards.length === 0) return base;
+
+  // Allt som swipats sedan leken sparades faller bort här (seen-listan har
+  // 24 h TTL sedan regressionsfixen), så ett kort man just gjort sig av med
+  // kan inte komma tillbaka.
+  const cards = filterSwipeCards(saved.cards);
+  if (cards.length === 0) return base;
+
+  return {
+    ...base,
+    cards,
+    nextTmdbPage: saved.nextTmdbPage > 0 ? saved.nextTmdbPage : 1,
+    mediaFilter: saved.mediaFilter ?? base.mediaFilter,
+    ready: true,
+  };
+}
+
+/** Slår ihop utan dubbletter — hydrerad lek och färskt svar kan överlappa. */
+function appendUnique(existing: SwipeCard[], incoming: SwipeCard[]): SwipeCard[] {
+  const seen = new Set(existing.map((c) => c.id));
+  const extra = incoming.filter((c) => !seen.has(c.id));
+  return extra.length === 0 ? existing : [...existing, ...extra];
+}
 
 // Sätts av klienten (SwipeDeckPreloader) efter att premium-status hämtats.
 // Endast gratisanvändare med aktiverad annons-flagga får true.
@@ -76,7 +160,7 @@ const EMPTY_GROUP: GroupDeckState = {
   ready: false,
 };
 
-let soloState = emptySolo();
+let soloState = hydrateSoloDeck();
 let groupDecks: Record<string, GroupDeckState> = {};
 let soloLoadInFlight = false;
 const groupLoadInFlight = new Set<string>();
@@ -97,6 +181,18 @@ export function getSoloDeckSnapshot(): SoloDeckState {
   return soloState;
 }
 
+/**
+ * Server-snapshot för useSyncExternalStore. Måste vara en STABIL referens och
+ * matcha det servern renderade — annars ser React hydreringen som en mismatch,
+ * eftersom klientens snapshot redan innehåller den cachade leken. React gör om
+ * renderingen med klientens snapshot direkt efter hydreringen, så korten dyker
+ * upp ändå: vinsten är att nätverket hoppas över, inte en bildruta.
+ */
+const SERVER_SOLO_SNAPSHOT: SoloDeckState = emptySolo();
+export function getSoloDeckServerSnapshot(): SoloDeckState {
+  return SERVER_SOLO_SNAPSHOT;
+}
+
 export function getGroupDeckSnapshot(code: string): GroupDeckState {
   return groupDecks[code.toUpperCase()] ?? EMPTY_GROUP;
 }
@@ -108,6 +204,7 @@ export function getGroupDeckSnapshot(code: string): GroupDeckState {
  */
 export function applySoloMediaFilterChange(filter: SwipeMediaFilter) {
   if (filter === soloState.mediaFilter && soloState.ready) return;
+  clearPersistedSoloDeck(); // sparad lek har fel medietyp nu
   soloState = { ...emptySolo(), mediaFilter: filter };
   emit();
   void loadSoloPage(1, true);
@@ -179,7 +276,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     const mapped = withAdsMaybe(mapUnifiedItems(data.items), targetPage);
     soloState = {
       ...soloState,
-      cards: replace ? mapped : [...soloState.cards, ...mapped],
+      cards: replace ? mapped : appendUnique(soloState.cards, mapped),
       page: targetPage,
       nextTmdbPage: data.nextTmdbPage ?? soloState.nextTmdbPage + 1,
       // Servern gräver nu upp till 40 TMDB-sidor innan den ger upp, så en tom
@@ -194,6 +291,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       ready: true,
     };
     emit();
+    persistSoloDeckSoon();
     if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
   } catch {
     if (replace) {
@@ -213,10 +311,21 @@ async function maybePrefetchSoloPages() {
   }
 }
 
+/** Sant tills den hydrerade leken fyllts på en gång. */
+let hydratedNeedsRevalidate = soloState.ready && soloState.cards.length > 0;
+
 export async function ensureSoloDeck(opts?: { force?: boolean }) {
   const force = opts?.force ?? false;
   const s = soloState;
   if (!force && s.ready && s.cards.length > 0) {
+    // Leken kom ur cachen: visa den direkt, men fyll på i bakgrunden så urvalet
+    // inte fastnar på gårdagens kort. `replace = false` gör att påfyllningen
+    // läggs underifrån — toppkortet byts aldrig under fingret.
+    if (hydratedNeedsRevalidate) {
+      hydratedNeedsRevalidate = false;
+      void loadSoloPage(s.page + 1, false);
+      return;
+    }
     if (backgroundPrefetchEnabled && s.cards.length < PREFETCH_MIN_CARDS && s.hasMore) {
       await maybePrefetchSoloPages();
     }
@@ -227,6 +336,8 @@ export async function ensureSoloDeck(opts?: { force?: boolean }) {
 }
 
 export async function retrySoloDeck() {
+  clearPersistedSoloDeck();
+  hydratedNeedsRevalidate = false;
   soloState = { ...emptySolo(), mediaFilter: soloState.mediaFilter };
   emit();
   await loadSoloPage(1, true);
@@ -235,17 +346,20 @@ export async function retrySoloDeck() {
 export function popSoloCard() {
   soloState = { ...soloState, cards: soloState.cards.slice(1) };
   emit();
+  persistSoloDeckSoon();
   if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
 }
 
 export function unshiftSoloCard(card: SwipeCard) {
   soloState = { ...soloState, cards: [card, ...soloState.cards] };
   emit();
+  persistSoloDeckSoon();
 }
 
 export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
   soloState = { ...soloState, cards: fn(soloState.cards) };
   emit();
+  persistSoloDeckSoon();
 }
 
 export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) {

@@ -83,12 +83,49 @@ function normalize(x: TmdbTitle, mediaType: "movie" | "tv", addedAt: Date): Watc
   };
 }
 
-export async function buildWatchlistCards(uid: string): Promise<WatchlistCard[]> {
+/** En watchlist-rad utan TMDB-berikning. */
+export type WatchlistRow = {
+  tmdbId: number;
+  mediaType: "movie" | "tv";
+  addedAt: string;
+};
+
+/**
+ * Bara DB-raderna — en Prisma-fråga, noll TMDB-anrop. Används när klienten har
+ * titelmetadatan cachad (lib/titleCache) och alltså bara behöver veta VILKA
+ * titlar som ligger i listan.
+ */
+export async function listWatchlistRows(uid: string): Promise<WatchlistRow[]> {
   const rows = await prisma.watchlist.findMany({
     where: { userId: uid },
     select: { tmdbId: true, mediaType: true, addedAt: true },
     orderBy: { addedAt: "desc" },
   });
+  return rows.map((r) => ({
+    tmdbId: r.tmdbId,
+    mediaType: r.mediaType as "movie" | "tv",
+    addedAt: r.addedAt.toISOString(),
+  }));
+}
+
+/**
+ * @param onlyIds Begränsar berikningen till dessa nycklar (`movie_123`). Används
+ * när klientens titelcache saknar enstaka titlar — typiskt de man precis gillat
+ * — så hela listan inte behöver byggas om.
+ */
+export async function buildWatchlistCards(
+  uid: string,
+  opts?: { onlyIds?: Set<string> },
+): Promise<WatchlistCard[]> {
+  const allRows = await prisma.watchlist.findMany({
+    where: { userId: uid },
+    select: { tmdbId: true, mediaType: true, addedAt: true },
+    orderBy: { addedAt: "desc" },
+  });
+
+  const rows = opts?.onlyIds
+    ? allRows.filter((r) => opts.onlyIds!.has(`${r.mediaType}_${r.tmdbId}`))
+    : allRows;
 
   if (rows.length === 0) return [];
 

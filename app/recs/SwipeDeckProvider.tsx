@@ -6,6 +6,7 @@ import {
   ensureGroupDeck,
   ensureSoloDeck,
   getGroupDeckSnapshot,
+  getSoloDeckServerSnapshot,
   getSoloDeckSnapshot,
   popGroupCard,
   popSoloCard,
@@ -97,7 +98,9 @@ export function useSoloSwipeDeck() {
   const solo = useSyncExternalStore(
     subscribeSwipeDeck,
     getSoloDeckSnapshot,
-    getSoloDeckSnapshot
+    // Stabil tom snapshot vid hydrering — klientens snapshot innehåller redan
+    // den cachade leken och skulle annars räknas som hydration-mismatch.
+    getSoloDeckServerSnapshot
   );
 
   useEffect(() => {

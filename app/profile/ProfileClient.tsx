@@ -12,6 +12,7 @@ import Avatar from "@/app/components/ui/Avatar";
 import Modal from "@/app/components/ui/Modal";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { getBillingStatus } from "@/lib/billingStore";
+import { clearClientCache } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import CompactGenrePicker from "./CompactGenrePicker";
@@ -793,7 +794,10 @@ function SettingsTab() {
       const res = await fetch("/api/user/delete", { method: "POST", cache: "no-store" });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       if (res.ok && j.ok) {
-        // Kontot och sessionen är borta — börja om från landningssidan.
+        // Kontot och sessionen är borta — även den lokala cachen (kortlek,
+        // watchlist, betyg) måste bort, annars ligger raderad data kvar på
+        // enheten.
+        clearClientCache();
         window.location.href = "/";
         return;
       }

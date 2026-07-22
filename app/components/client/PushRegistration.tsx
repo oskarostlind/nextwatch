@@ -1,7 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
+
+/**
+ * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
+ * bara ångras djupt inne i Inställningar. Egen fråga först ger kontext och
+ * fler ja. "Inte nu" backar av i 3 dagar.
+ */
+const SOFTASK_KEY = "nw_push_softask_at";
+const SOFTASK_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+
+function softAskSnoozed(): boolean {
+  try {
+    const at = Number(window.localStorage.getItem(SOFTASK_KEY)) || 0;
+    return Date.now() - at < SOFTASK_SNOOZE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function snoozeSoftAsk(): void {
+  try {
+    window.localStorage.setItem(SOFTASK_KEY, String(Date.now()));
+  } catch {
+    /* privat läge — frågan återkommer, acceptabelt */
+  }
+}
 
 /**
  * Registrerar enheten för push-notiser när appen körs som native (Capacitor/iOS)
@@ -16,6 +41,9 @@ import { Capacitor } from "@capacitor/core";
  */
 export default function PushRegistration() {
   const pendingToken = useRef<string | null>(null);
+  const [softAskOpen, setSoftAskOpen] = useState(false);
+  // Sätts av effekten; anropas av soft-askens "Ja"-knapp.
+  const requestAndRegister = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -69,6 +97,9 @@ export default function PushRegistration() {
             const type = data?.type;
             if (type === "friend_request" || type === "friend_accepted" || type === "group_invite") {
               window.location.href = "/group";
+            } else if (type === "share_received") {
+              // Filmtips: inboxen överst i watchlisten öppnar tråden.
+              window.location.href = "/watchlist";
             } else if (type === "group_match" || type === "group_invite_accepted") {
               const code = data?.groupCode;
               window.location.href = code
@@ -83,19 +114,32 @@ export default function PushRegistration() {
           () => void actionHandle.remove()
         );
 
-        /** Be om behörighet vid behov och registrera. Idempotent: register()
-         *  ger tillbaka samma token, så det är ofarligt att köra flera gånger. */
+        /** Registrera om behörighet finns. Har vi ALDRIG frågat (prompt) visas
+         *  soft-asken i stället för OS-dialogen — Apple ogillar kall fråga vid
+         *  start, och en nekad OS-dialog kan bara ångras i Inställningar.
+         *  Idempotent: register() ger samma token, ofarligt att köra igen. */
         const ensureRegistered = async () => {
           if (registered) return;
           try {
-            let perm = await PushNotifications.checkPermissions();
+            const perm = await PushNotifications.checkPermissions();
             if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
-              perm = await PushNotifications.requestPermissions();
+              if (!softAskSnoozed()) setSoftAskOpen(true);
+              return;
             }
             if (perm.receive !== "granted") return;
             await PushNotifications.register();
           } catch {
             /* pluginet saknas eller webb – ignorera */
+          }
+        };
+
+        // Soft-askens "Ja": nu FÅR vi visa OS-dialogen.
+        requestAndRegister.current = async () => {
+          try {
+            const perm = await PushNotifications.requestPermissions();
+            if (perm.receive === "granted") await PushNotifications.register();
+          } catch {
+            /* ignorera */
           }
         };
 
@@ -143,5 +187,40 @@ export default function PushRegistration() {
     };
   }, []);
 
-  return null;
+  if (!softAskOpen) return null;
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[70] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+      <div className="mx-auto max-w-sm rounded-2xl border border-white/15 bg-neutral-900 p-4 shadow-2xl">
+        <p className="text-sm font-semibold text-white">Vill du få notiser? 🔔</p>
+        <p className="mt-1 text-sm leading-relaxed text-white/60">
+          Vi säger till när din grupp matchar, när vänner skickar filmtips och när dagens
+          rekommendation landar. Du väljer själv vilka typer i inställningarna.
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSoftAskOpen(false);
+              snoozeSoftAsk();
+              void requestAndRegister.current?.();
+            }}
+            className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
+          >
+            Ja, aktivera
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSoftAskOpen(false);
+              snoozeSoftAsk();
+            }}
+            className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/5"
+          >
+            Inte nu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

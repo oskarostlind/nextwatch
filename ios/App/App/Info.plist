@@ -58,6 +58,10 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Endast standard-HTTPS-kryptering → undantagen från exportkrav. Utan
+	     nyckeln ställer App Store Connect exportfrågan vid varje upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- AdMob: app-id från AdMob-konsolen (Nextwatch iOS). -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-2616665688666431~8922574955</string>

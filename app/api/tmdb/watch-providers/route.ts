@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { cookies, headers } from 'next/headers';
+import { tmdbFetch } from '@/lib/tmdbClient';
 
 type Provider = {
   provider_id: number;
@@ -34,7 +35,7 @@ async function tmdbGet<T>(path: string): Promise<T> {
   if (!v4 && !v3) throw new Error('TMDB credentials missing');
   // Providers per titel ändras sällan — en timmes cache tar bort de flesta
   // upprepade anropen (varje kortöppning/flip hämtade tidigare kallt).
-  const res = await fetch(url, { headers: headersObj, next: { revalidate: 3600 } });
+  const res = await tmdbFetch(url, { headers: headersObj, next: { revalidate: 3600 } });
   if (!res.ok) throw new Error(`TMDB ${res.status}`);
   return (await res.json()) as T;
 }

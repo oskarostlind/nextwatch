@@ -10,6 +10,7 @@
 // cookie) såg allt. Direktanrop tar bort hela felklassen.
 
 import prisma from "@/lib/prisma";
+import { tmdbFetch } from "@/lib/tmdbClient";
 
 export type WatchlistCard = {
   id: string;
@@ -58,7 +59,7 @@ async function tmdbGet<T>(path: string): Promise<T> {
   }
   // Titelmetadata (namn/år/poster) är i praktiken stabil — ett dygns cache tar
   // bort merparten av anropen mot TMDB för återkommande listor.
-  const res = await fetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
+  const res = await tmdbFetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -92,8 +93,10 @@ export async function buildWatchlistCards(uid: string): Promise<WatchlistCard[]>
   if (rows.length === 0) return [];
 
   // Alla berikningar parallellt — tidigare kördes batchar om 10 SEKVENTIELLT,
-  // vilket gjorde en 40-titlarslista till fyra vänteomgångar. Med cache ovanpå
-  // är även kall last hanterbar.
+  // vilket gjorde en 40-titlarslista till fyra vänteomgångar. Trycket hålls nere
+  // av concurrency-taket i lib/tmdbClient i stället för av batchgränser; utan
+  // det gav fan-outen 429:or som `.catch(() => null)` nedan svalde, så titlar
+  // försvann tyst ur listan.
   const results = await Promise.all(
     rows.map(async (r) => {
       const mediaType = r.mediaType as "movie" | "tv";

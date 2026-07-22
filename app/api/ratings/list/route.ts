@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { tmdbFetch } from "@/lib/tmdbClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ async function tmdbGet<T>(path: string): Promise<T> {
     throw new Error("TMDB credentials missing");
   }
   // Titelmetadata är stabil — dygnscache (samma resonemang som lib/watchlistCards).
-  const res = await fetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
+  const res = await tmdbFetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -73,7 +74,9 @@ export async function POST() {
     if (rows.length === 0) return NextResponse.json({ ok: true, items: [] });
 
     // Parallellt i stället för sekventiella 10-batchar (upp till 20 vänte-
-    // omgångar för 200 betyg); dygnscachen ovanpå gör även kall last ok.
+    // omgångar för 200 betyg). Concurrency-taket i lib/tmdbClient håller
+    // trycket nere — 200 samtidiga anrop gav 429:or som `.catch(() => null)`
+    // nedan svalde, vilket tyst tömde delar av betygslistan.
     const results = await Promise.all(
       rows.map(async (r): Promise<RatedCard | null> => {
         const mediaType = r.mediaType as "movie" | "tv";

@@ -348,6 +348,13 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       const tmdbPage = startTmdbPage + offset;
       if (tmdbPage > 500) break; // TMDB tillåter max 500 sidor.
 
+      // En trasig sida får inte fälla hela leken. Tidigare bubblade ett kastat
+      // discover-anrop (t.ex. TMDB 429) till yttre catch → 500 → "Slut på
+      // förslag nu", trots att tidigare sidor redan gett fullt användbara
+      // kandidater. Värst för mediaFilter "both", som gör dubbelt så många
+      // anrop per varv. Ger ALLA sidor noll träffar landar vi i det befintliga
+      // tomma läget nedan, vilket är rätt signal.
+      const emptyPage = { page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 };
       const [popMovie, popTv] = await Promise.all([
         wantMovie
           ? tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
@@ -359,8 +366,11 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               "certification.lte": certMax,
               sort_by: "popularity.desc",
               page: tmdbPage,
-            }, "force-cache")
-          : Promise.resolve({ page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 }),
+            }, "force-cache").catch((err) => {
+              console.error(`discover/movie sida ${tmdbPage} misslyckades:`, err);
+              return emptyPage;
+            })
+          : Promise.resolve(emptyPage),
         // OBS: TMDB:s /discover/tv saknar certification-filter (endast movie),
         // så åldersgränsen (certMax) kan bara appliceras på filmer.
         wantTv
@@ -371,8 +381,11 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               with_watch_providers: tmdbProviderString,
               sort_by: "popularity.desc",
               page: tmdbPage,
-            }, "force-cache")
-          : Promise.resolve({ page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 }),
+            }, "force-cache").catch((err) => {
+              console.error(`discover/tv sida ${tmdbPage} misslyckades:`, err);
+              return emptyPage;
+            })
+          : Promise.resolve(emptyPage),
       ]);
 
       maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);

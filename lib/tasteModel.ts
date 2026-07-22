@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { parseProvidersJson } from "@/lib/groupSettings";
+import { tmdbFetch } from "@/lib/tmdbClient";
 
 export type MediaType = "movie" | "tv";
 
@@ -121,7 +122,11 @@ export async function tmdbGet<T>(
   if (!v4 && v3) usp.set("api_key", v3);
 
   const url = `https://api.themoviedb.org/3${path}${usp.toString() ? `?${usp.toString()}` : ""}`;
-  const res = await fetch(url, {
+  // Via tmdbClient: recs-pipelinen fyrar upp till 50 fetchFeatures parallellt
+  // (2–3 TMDB-anrop styck) plus 8–16 discover-sidor. Utan tak gav det 429:or,
+  // och ett enda kastat discover-anrop bubblar till computeUnifiedRecs yttre
+  // catch → tom kortlek.
+  const res = await tmdbFetch(url, {
     headers: v4 ? { Authorization: `Bearer ${v4}` } : undefined,
     cache: cacheMode,
   });

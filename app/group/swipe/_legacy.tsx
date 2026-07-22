@@ -18,6 +18,7 @@ import {
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 
@@ -126,6 +127,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
             reportSwipeLimitFrom(res);
             return null;
           }
+          emitGroupVoted(); // OverlayMount snabb-pollar matchen (ersatte fetch-patchen)
           return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
             cache: "no-store",
           });

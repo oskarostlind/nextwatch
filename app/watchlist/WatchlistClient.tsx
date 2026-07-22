@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Send, Star } from 'lucide-react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
@@ -20,6 +20,7 @@ import {
   type WatchProviders as Providers,
 } from '@/lib/watchLinks';
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
+import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
 
 type WatchItem = {
   id: number;
@@ -105,9 +106,12 @@ async function fetchDetail(id: number, tmdbType: 'movie' | 'tv'): Promise<Detail
   return (await res.json()) as Detail;
 }
 
-export default function WatchlistClient({ items: initial }: { items: WatchItem[] }) {
+export default function WatchlistClient({ items: initial }: { items?: WatchItem[] }) {
   const { showPaidOptions } = useSwipeSettings();
-  const [items, setItems] = useState<WatchItem[]>(initial);
+  const [items, setItems] = useState<WatchItem[]>(initial ?? []);
+  // Klient-hämtad lista (sidan server-renderar inte längre datan): sant tills
+  // första svaret, så tomt-läget inte ljuger under laddning.
+  const [wlLoading, setWlLoading] = useState(initial === undefined);
   const [active, setActive] = useState<WatchItem | null>(null);
   const [providers, setProviders] = useState<Providers | null>(null);
   const [detail, setDetail] = useState<Detail>({});
@@ -141,7 +145,13 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
       })
       .catch(() => {
         /* best-effort */
-      });
+      })
+      .finally(() => setWlLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (initial === undefined) refetchWatchlist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refetchRated = useCallback(() => {
@@ -458,6 +468,8 @@ export default function WatchlistClient({ items: initial }: { items: WatchItem[]
             ))}
           </div>
         )
+      ) : wlLoading ? (
+        <PosterGridSkeleton />
       ) : filtered.length === 0 ? (
         <p className="text-neutral-400">
           {items.length === 0

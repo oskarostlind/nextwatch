@@ -211,6 +211,26 @@ export function refreshSocial(): Promise<void> {
 
 /* ---------- poller (en enda för hela appen) ---------- */
 
+// Pathname-medveten polltakt: 5s realtidskänsla bara där socialdatan faktiskt
+// SYNS (gruppytorna); 15s räcker gott för navbadge/toasts på övriga sidor.
+// Var 5s överallt tidigare = 3 fetches var 5:e sekund hela sessionen.
+const POLL_MS_ACTIVE = POLL_MS; // 5s
+const POLL_MS_IDLE = 15_000;
+let currentPollMs = POLL_MS_IDLE;
+
+/** Anropas från SocialPreloader vid route-byte. */
+export function setSocialPollProfile(profile: "active" | "idle") {
+  const next = profile === "active" ? POLL_MS_ACTIVE : POLL_MS_IDLE;
+  if (next === currentPollMs) return;
+  currentPollMs = next;
+  // Starta om timern med nya takten (om pollen är igång).
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    if (pollTickets > 0) scheduleNext();
+  }
+}
+
 function scheduleNext() {
   if (pollTimer !== null) return;
   pollTimer = setTimeout(() => {
@@ -223,7 +243,7 @@ function scheduleNext() {
     void refreshSocial().finally(() => {
       if (pollTickets > 0) scheduleNext();
     });
-  }, POLL_MS);
+  }, currentPollMs);
 }
 
 function hookVisibility() {

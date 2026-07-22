@@ -24,6 +24,7 @@ import {
 } from "@/lib/swipeDeckStore";
 import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsFeatureEnabled } from "@/lib/ads";
+import { getBillingStatus } from "@/lib/billingStore";
 import { Capacitor } from "@capacitor/core";
 
 function isNativeApp(): boolean {
@@ -57,15 +58,15 @@ export function SwipeDeckPreloader() {
       return;
     }
     let cancelled = false;
-    void fetch("/api/billing/status", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { isPremium?: boolean } | null) => {
+    // Delad billing-store: en fetch per session i stället för att varje yta
+    // hämtar sin egen status.
+    void getBillingStatus()
+      .then((j) => {
         if (cancelled) return;
-        // Annonser bara för icke-premium.
-        setSwipeAdsEnabled(!(j?.isPremium ?? false));
+        // Annonser bara för icke-premium; vid fel (null) hellre inga annonser.
+        setSwipeAdsEnabled(j ? !j.isPremium : false);
       })
       .catch(() => {
-        /* vid fel: visa hellre inga annonser */
         if (!cancelled) setSwipeAdsEnabled(false);
       });
     return () => {

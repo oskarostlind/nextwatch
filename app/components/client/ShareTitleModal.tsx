@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import Modal from "@/app/components/ui/Modal";
 import Avatar from "@/app/components/ui/Avatar";
+import { useShareThreads } from "@/lib/threadsStore";
 
 export type ShareItem = {
   tmdbId: number;
@@ -43,8 +44,11 @@ export default function ShareTitleModal({
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [sendState, setSendState] = useState<Record<string, SendState>>({});
   const [q, setQ] = useState("");
-  // Senast interagerad (share/threads lastAt) → standard-sorteringen.
-  const [lastAtByFriend, setLastAtByFriend] = useState<Record<string, string>>({});
+  // Senast interagerad (share/threads lastAt) → standard-sorteringen. Läses ur
+  // delade threads-storen — ingen egen hämtning.
+  const { threads } = useShareThreads();
+  const lastAtByFriend: Record<string, string> = {};
+  for (const t of threads) lastAtByFriend[t.friendId] = t.lastAt;
 
   useEffect(() => {
     if (!open) {
@@ -63,15 +67,6 @@ export default function ShareTitleModal({
         setFriends(list);
       })
       .catch(() => active && setFriends([]));
-    fetch("/api/share/threads", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { ok?: boolean; threads?: { friendId: string; lastAt: string }[] } | null) => {
-        if (!active || !j?.ok) return;
-        const map: Record<string, string> = {};
-        for (const t of j.threads ?? []) map[t.friendId] = t.lastAt;
-        setLastAtByFriend(map);
-      })
-      .catch(() => {});
     return () => {
       active = false;
     };

@@ -51,7 +51,8 @@ async function tmdbGet<T>(path: string): Promise<T> {
   } else {
     throw new Error("TMDB credentials missing");
   }
-  const res = await fetch(url.toString(), { headers, cache: "no-store" });
+  // Titelmetadata är stabil — dygnscache (samma resonemang som lib/watchlistCards).
+  const res = await fetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -71,31 +72,28 @@ export async function POST() {
 
     if (rows.length === 0) return NextResponse.json({ ok: true, items: [] });
 
-    const BATCH_SIZE = 10;
-    const items: RatedCard[] = [];
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (r): Promise<RatedCard | null> => {
-          const mediaType = r.mediaType as "movie" | "tv";
-          const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
-          const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
-          if (!t) return null; // titel borttagen från TMDB — hoppa över
-          const title = mediaType === "movie" ? t.title ?? "" : t.name ?? "";
-          const date = mediaType === "movie" ? t.release_date : t.first_air_date;
-          return {
-            id: `${mediaType}_${r.tmdbId}`,
-            tmdbId: r.tmdbId,
-            mediaType,
-            title,
-            year: date && date.length >= 4 ? date.slice(0, 4) : null,
-            poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
-            userRating: r.rating as number,
-          };
-        })
-      );
-      for (const it of batchResults) if (it) items.push(it);
-    }
+    // Parallellt i stället för sekventiella 10-batchar (upp till 20 vänte-
+    // omgångar för 200 betyg); dygnscachen ovanpå gör även kall last ok.
+    const results = await Promise.all(
+      rows.map(async (r): Promise<RatedCard | null> => {
+        const mediaType = r.mediaType as "movie" | "tv";
+        const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
+        const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
+        if (!t) return null; // titel borttagen från TMDB — hoppa över
+        const title = mediaType === "movie" ? t.title ?? "" : t.name ?? "";
+        const date = mediaType === "movie" ? t.release_date : t.first_air_date;
+        return {
+          id: `${mediaType}_${r.tmdbId}`,
+          tmdbId: r.tmdbId,
+          mediaType,
+          title,
+          year: date && date.length >= 4 ? date.slice(0, 4) : null,
+          poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
+          userRating: r.rating as number,
+        };
+      })
+    );
+    const items = results.filter((it): it is RatedCard => it !== null);
 
     return NextResponse.json({ ok: true, items });
   } catch {

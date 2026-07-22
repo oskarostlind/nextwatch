@@ -32,7 +32,9 @@ async function tmdbGet<T>(path: string): Promise<T> {
   if (v4) headersObj.Authorization = `Bearer ${v4}`;
   if (!v4 && v3) url += `${path.includes('?') ? '&' : '?'}api_key=${v3}`;
   if (!v4 && !v3) throw new Error('TMDB credentials missing');
-  const res = await fetch(url, { headers: headersObj, cache: 'no-store' });
+  // Providers per titel ändras sällan — en timmes cache tar bort de flesta
+  // upprepade anropen (varje kortöppning/flip hämtade tidigare kallt).
+  const res = await fetch(url, { headers: headersObj, next: { revalidate: 3600 } });
   if (!res.ok) throw new Error(`TMDB ${res.status}`);
   return (await res.json()) as T;
 }

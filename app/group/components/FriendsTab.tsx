@@ -7,6 +7,7 @@ import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
 import Avatar from "@/app/components/ui/Avatar";
+import { refreshThreads, useShareThreads } from "@/lib/threadsStore";
 import type { FriendsInitial } from "../page";
 
 type SearchRow = {
@@ -50,38 +51,21 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
   const [openFriendId, setOpenFriendId] = useState<string | null>(null);
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
-  // Olästa filmtips + senaste interaktion per vän — driver badge och sortering.
-  const [unseenByFriend, setUnseenByFriend] = useState<Record<string, number>>({});
-  const [lastAtByFriend, setLastAtByFriend] = useState<Record<string, string>>({});
   const [friendFilter, setFriendFilter] = useState("");
 
+  // Olästa filmtips + senaste interaktion per vän — delade threads-storen
+  // (en poll för hela appen). Stängd chatt → explicit refresh: tråd-GET:en
+  // har nollat olästa server-side.
+  const { threads } = useShareThreads();
   useEffect(() => {
-    let active = true;
-    const loadThreads = () => {
-      void fetch("/api/share/threads", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then(
-          (j: { ok?: boolean; threads?: { friendId: string; unseen: number; lastAt: string }[] } | null) => {
-            if (!active || !j?.ok) return;
-            const unseen: Record<string, number> = {};
-            const lastAt: Record<string, string> = {};
-            for (const t of j.threads ?? []) {
-              unseen[t.friendId] = t.unseen;
-              lastAt[t.friendId] = t.lastAt;
-            }
-            setUnseenByFriend(unseen);
-            setLastAtByFriend(lastAt);
-          },
-        )
-        .catch(() => {});
-    };
-    loadThreads();
-    const t = setInterval(loadThreads, 15000);
-    return () => {
-      active = false;
-      clearInterval(t);
-    };
-  }, [chatFriendId]); // reload när chatten stängs — tråd-GET:en har nollat olästa
+    if (chatFriendId === null) void refreshThreads();
+  }, [chatFriendId]);
+  const unseenByFriend: Record<string, number> = {};
+  const lastAtByFriend: Record<string, string> = {};
+  for (const t of threads) {
+    unseenByFriend[t.friendId] = t.unseen;
+    lastAtByFriend[t.friendId] = t.lastAt;
+  }
 
   // Senast interagerad först, övriga alfabetiskt; filtret söker i namn/användarnamn.
   const visibleFriends = friends

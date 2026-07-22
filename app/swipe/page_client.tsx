@@ -16,6 +16,7 @@ import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/Sw
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
 import { registerSwipeForAds } from "@/lib/admobAds";
+import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -439,6 +440,7 @@ export default function SwipePageClient() {
     })
       .then((res) => {
         if (!res.ok) return null;
+        emitGroupVoted(); // OverlayMount snabb-pollar matchen (ersatte fetch-patchen)
         return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, { cache: "no-store" });
       })
       .then((matchRes) => {

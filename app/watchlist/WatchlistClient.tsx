@@ -80,6 +80,20 @@ const WL_CACHE_KEY = 'watchlist_items';
 const RATED_CACHE_KEY = 'rated_items';
 const LIST_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Routerna tar max 200 id per anrop. Vid kall cache och en lång lista måste
+ * saknade titlar därför delas upp — annars kapas resten och visas som
+ * platshållare. (Verifierat i produktion: 222 titlar gav 22 utan metadata när
+ * berikningen kapades i stället för att delas upp.)
+ */
+const ENRICH_CHUNK = 200;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 /** Betyg-flikens kort öppnar samma detaljmodal som watchlisten — inte bara betyget. */
 function ratedToWatchItem(it: RatedItem): WatchItem {
   return {
@@ -194,21 +208,26 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           .filter((k) => !cache[k]);
 
         if (missing.length > 0) {
-          const enrichRes = await fetch(
-            `/api/watchlist/list?ids=${encodeURIComponent(missing.join(','))}`,
-            { method: 'POST', cache: 'no-store' },
-          );
-          if (enrichRes.ok) {
-            const enriched = (await enrichRes.json()) as { ok?: boolean; items?: WatchlistApiItem[] };
-            if (enriched.ok && Array.isArray(enriched.items)) {
-              const add: Record<string, CachedTitle> = {};
+          const add: Record<string, CachedTitle> = {};
+          // Klumpvis: en lista längre än ENRICH_CHUNK skulle annars kapas och
+          // resten fastna som platshållare.
+          await Promise.all(
+            chunk(missing, ENRICH_CHUNK).map(async (del) => {
+              const enrichRes = await fetch(
+                `/api/watchlist/list?ids=${encodeURIComponent(del.join(','))}`,
+                { method: 'POST', cache: 'no-store' },
+              );
+              if (!enrichRes.ok) return;
+              const enriched = (await enrichRes.json()) as { ok?: boolean; items?: WatchlistApiItem[] };
+              if (!enriched.ok || !Array.isArray(enriched.items)) return;
               for (const it of enriched.items) {
-                add[titleKey(it.mediaType, it.tmdbId)] = toCachedTitle(it);
-                cache[titleKey(it.mediaType, it.tmdbId)] = toCachedTitle(it);
+                const meta = toCachedTitle(it);
+                add[titleKey(it.mediaType, it.tmdbId)] = meta;
+                cache[titleKey(it.mediaType, it.tmdbId)] = meta;
               }
-              putTitles(add);
-            }
-          }
+            }),
+          );
+          putTitles(add);
         }
 
         // Raderna bestämmer vilka titlar som finns; cachen dekorerar bara. En
@@ -258,14 +277,16 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           .filter((k) => !cache[k]);
 
         if (missing.length > 0) {
-          const enrichRes = await fetch(
-            `/api/ratings/list?ids=${encodeURIComponent(missing.join(','))}`,
-            { method: 'POST', cache: 'no-store' },
-          );
-          if (enrichRes.ok) {
-            const enriched = (await enrichRes.json()) as RatedListResp;
-            if (enriched.ok && Array.isArray(enriched.items)) {
-              const add: Record<string, CachedTitle> = {};
+          const add: Record<string, CachedTitle> = {};
+          await Promise.all(
+            chunk(missing, ENRICH_CHUNK).map(async (del) => {
+              const enrichRes = await fetch(
+                `/api/ratings/list?ids=${encodeURIComponent(del.join(','))}`,
+                { method: 'POST', cache: 'no-store' },
+              );
+              if (!enrichRes.ok) return;
+              const enriched = (await enrichRes.json()) as RatedListResp;
+              if (!enriched.ok || !Array.isArray(enriched.items)) return;
               for (const it of enriched.items) {
                 const meta: CachedTitle = {
                   title: it.title,
@@ -280,9 +301,9 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                 add[titleKey(it.mediaType, it.tmdbId)] = meta;
                 cache[titleKey(it.mediaType, it.tmdbId)] = meta;
               }
-              putTitles(add);
-            }
-          }
+            }),
+          );
+          putTitles(add);
         }
 
         const mapped: RatedItem[] = rows.map((r) => {

@@ -54,7 +54,32 @@ export type SwipeCard = {
 };
 
 const HIDE_KEY = "nw_disliked_until";
-const SEEN_KEY = "nw_seen_ids";
+/**
+ * Gamla nyckeln: en ren `string[]` som växte för alltid. Den läses inte längre
+ * (se SEEN_KEY nedan) och städas bort vid första skrivningen.
+ */
+const LEGACY_SEEN_KEY = "nw_seen_ids";
+const SEEN_KEY = "nw_seen_until";
+
+/**
+ * Hur länge en swipead titel hålls borta LOKALT.
+ *
+ * Rot-orsaken till "Slut på förslag nu" (2026-07-22): den gamla listan hade
+ * varken TTL eller tak. Servern återvinner titlar efter Profile.recycleAfterDays
+ * (14 som standard) och levererade 50 kandidater — men klienten filtrerade bort
+ * exakt dem, eftersom de låg kvar i localStorage sedan förra gången. Mätt mot
+ * produktionsdata för de två mest aktiva kontona: 34 av 50 respektive 50 av 50
+ * korten försvann i klientfiltret, samtliga swipade för 14–19 dagar sedan. Alltså
+ * precis de titlar servern medvetet återvunnit. Klientlistan annullerade hela
+ * återvinningen, och ju mer man swipade desto värre blev det.
+ *
+ * Listan är nu bara ett kapplöpningsskydd: den hindrar ett kort från att komma
+ * tillbaka innan swipens POST hunnit landa och servern hunnit se den. Vilka
+ * titlar som ska undvikas på riktigt äger servern (watchKeys i lib/unifiedRecs),
+ * som har både betygen och watchlisten. Ett dygn räcker för kapplöpningen och
+ * kan aldrig överleva serverns återvinningsfönster.
+ */
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function readGroupCodeFromCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -85,15 +110,15 @@ function writeHideMap(map: Record<string, number>) {
 }
 
 export function markSeen(id: string) {
-  const s = readSeen();
-  s.add(id);
-  writeSeen(s);
+  const m = readSeenMap();
+  m[id] = Date.now() + SEEN_TTL_MS;
+  writeSeenMap(m);
 }
 
 export function unmarkSeen(id: string) {
-  const s = readSeen();
-  s.delete(id);
-  writeSeen(s);
+  const m = readSeenMap();
+  delete m[id];
+  writeSeenMap(m);
 }
 
 export function hideFor7Days(tmdbId: number) {
@@ -109,8 +134,31 @@ export function unhide(tmdbId: number) {
   writeHideMap(map);
 }
 
-function writeSeen(seen: Set<string>) {
-  localStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(seen)));
+function writeSeenMap(map: Record<string, number>) {
+  const now = Date.now();
+  const pruned: Record<string, number> = {};
+  for (const [id, until] of Object.entries(map)) {
+    if (typeof until === "number" && until > now) pruned[id] = until;
+  }
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(pruned));
+    // Den gamla listan kan ha vuxit till tiotusentals rader; bli av med den.
+    localStorage.removeItem(LEGACY_SEEN_KEY);
+  } catch {
+    /* full quota e.d. — filtret är bara ett kapplöpningsskydd, inte kritiskt */
+  }
+}
+
+function readSeenMap(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw) as unknown;
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return {};
+    return obj as Record<string, number>;
+  } catch {
+    return {};
+  }
 }
 
 function isHidden(tmdbId: number): boolean {
@@ -119,16 +167,14 @@ function isHidden(tmdbId: number): boolean {
   return typeof until === "number" && Date.now() < until;
 }
 
+/** Icke-utgångna id:n. Den gamla `nw_seen_ids`-listan läses medvetet inte. */
 function readSeen(): Set<string> {
-  try {
-    const raw = localStorage.getItem(SEEN_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return new Set();
-    return new Set(arr.filter((x): x is string => typeof x === "string"));
-  } catch {
-    return new Set();
+  const now = Date.now();
+  const out = new Set<string>();
+  for (const [id, until] of Object.entries(readSeenMap())) {
+    if (typeof until === "number" && until > now) out.add(id);
   }
+  return out;
 }
 
 export function filterSwipeCards(cards: SwipeCard[]): SwipeCard[] {

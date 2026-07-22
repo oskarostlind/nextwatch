@@ -23,6 +23,13 @@ type GroupInfo = { code: string; strictProviders: boolean };
 export type SoloDeckState = {
   cards: SwipeCard[];
   page: number;
+  /**
+   * TMDB-sida nästa hämtning börjar på, från serverns `nextTmdbPage`. Behövs
+   * eftersom skanningsdjupet är rörligt: servern kan ha grävt 3 eller 40 sidor
+   * för att fylla den här leken, och `page + 1` skulle då antingen hoppa över
+   * titlar eller ge dubbletter.
+   */
+  nextTmdbPage: number;
   hasMore: boolean;
   loading: boolean;
   error: string | null;
@@ -43,6 +50,7 @@ export type GroupDeckState = {
 const emptySolo = (): SoloDeckState => ({
   cards: [],
   page: 1,
+  nextTmdbPage: 1,
   hasMore: true,
   loading: false,
   error: null,
@@ -105,8 +113,9 @@ export function applySoloMediaFilterChange(filter: SwipeMediaFilter) {
   void loadSoloPage(1, true);
 }
 
-function soloRecsUrl(page: number): string {
-  return `/api/recs/unified?page=${page}`;
+function soloRecsUrl(page: number, fromTmdbPage?: number): string {
+  const from = fromTmdbPage && fromTmdbPage > 1 ? `&from=${fromTmdbPage}` : "";
+  return `/api/recs/unified?page=${page}${from}`;
 }
 
 export function setSwipeBackgroundPrefetch(enabled: boolean) {
@@ -131,6 +140,8 @@ function setGroupDeck(code: string, patch: Partial<GroupDeckState>) {
 async function loadSoloPage(targetPage: number, replace: boolean) {
   if (soloLoadInFlight) return;
   soloLoadInFlight = true;
+  // replace = börja om från TMDB-sida 1; annars fortsätt där servern slutade.
+  const fromTmdbPage = replace ? undefined : soloState.nextTmdbPage;
   if (replace) {
     patchSolo({
       loading: soloState.cards.length === 0,
@@ -138,7 +149,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     });
   }
   try {
-    const res = await fetch(soloRecsUrl(targetPage), { cache: "no-store" });
+    const res = await fetch(soloRecsUrl(targetPage, fromTmdbPage), { cache: "no-store" });
     if (!res.ok) {
       if (replace) patchSolo({ error: "Kunde inte hämta förslag. Försök igen.", hasMore: false, loading: false });
       return;
@@ -149,6 +160,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
           mode: "group" | "individual";
           group: GroupInfo | null;
           mediaFilter?: SwipeMediaFilter;
+          nextTmdbPage?: number;
           items: Parameters<typeof mapUnifiedItems>[0];
         }
       | { ok: false; message?: string };
@@ -169,7 +181,10 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       ...soloState,
       cards: replace ? mapped : [...soloState.cards, ...mapped],
       page: targetPage,
-      hasMore: data.items.length > 0,
+      nextTmdbPage: data.nextTmdbPage ?? soloState.nextTmdbPage + 1,
+      // Servern gräver nu upp till 40 TMDB-sidor innan den ger upp, så en tom
+      // sida betyder att katalogen faktiskt är slut — inte att fönstret tog slut.
+      hasMore: data.items.length > 0 && (data.nextTmdbPage ?? 1) <= 500,
       loading: false,
       error: null,
       mode: data.mode,

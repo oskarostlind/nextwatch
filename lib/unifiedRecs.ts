@@ -77,6 +77,14 @@ export type UnifiedRecsOk = {
   usedProviderIds: number[];
   mediaFilter: SwipeMediaFilter;
   items: UnifiedItem[];
+  /**
+   * TMDB-sidan nästa hämtning ska börja på. Sedan skanningsdjupet blev rörligt
+   * (storswipare kan behöva gräva 40 sidor innan något osett dyker upp) går det
+   * inte längre att räkna ut startsidan av ett API-sidnummer — klienten skulle
+   * antingen hoppa över sidor eller visa dubbletter. Klienten skickar tillbaka
+   * värdet som `?from=`.
+   */
+  nextTmdbPage: number;
 };
 
 export type UnifiedRecsErr = { ok: false; message: string; status: number };
@@ -89,6 +97,12 @@ export type UnifiedRecsParams = {
   locale: string;
   groupCode: string | null;
   page?: number;
+  /**
+   * TMDB-sida att börja skanna på, från förra svarets `nextTmdbPage`. Vinner
+   * över `page` när den finns. `page` behålls för grupp-däcket och cron-jobbet,
+   * som alltid börjar om från början.
+   */
+  fromTmdbPage?: number;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -206,7 +220,7 @@ function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1 } = params;
+  const { uid, region, locale, groupCode, page = 1, fromTmdbPage } = params;
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
@@ -337,17 +351,38 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // (baseRaw = 0 → "Slut på förslag"). Vi skannar därför flera TMDB-sidor per
     // API-sida tills vi har tillräckligt med OSEDDA kandidater.
     const CANDIDATE_TARGET = 60;
+    /** Normalsteg: hur långt fram nästa API-sida börjar. */
     const PAGES_PER_REQUEST = 8;
-    const startTmdbPage = (pageNum - 1) * PAGES_PER_REQUEST + 1;
+    /**
+     * Hur djupt vi FÅR gräva när allt filtreras bort. Taket på 8 sidor var en
+     * hård gräns: har användaren betygsatt eller sparat de ~160 populäraste
+     * titlar som matchar hens tjänster och åldersgräns blev baseRaw tom, och
+     * eftersom klienten sätter `hasMore = items.length > 0` (lib/swipeDeckStore)
+     * frågade den aldrig efter sida 2. Resultatet blev ett permanent
+     * "Slut på förslag nu" trots tiotusentals kvarvarande titlar — värst för
+     * den som testat appen mycket, alltså precis tvärtom mot vad man vill.
+     *
+     * Vi bryter fortfarande så fort CANDIDATE_TARGET är nått, så vanliga
+     * anrop kostar lika mycket som förut (2–3 sidor). Djupet används bara när
+     * filtreringen faktiskt tömmer sidorna.
+     */
+    const MAX_PAGES_PER_REQUEST = 40;
+    const startTmdbPage =
+      fromTmdbPage && fromTmdbPage > 0
+        ? Math.min(fromTmdbPage, 500)
+        : (pageNum - 1) * PAGES_PER_REQUEST + 1;
 
     const baseRaw: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
     const seenCandidate = new Set<string>();
     let maxTmdbPages = 1;
 
-    for (let offset = 0; offset < PAGES_PER_REQUEST; offset++) {
-      const tmdbPage = startTmdbPage + offset;
-      if (tmdbPage > 500) break; // TMDB tillåter max 500 sidor.
+    // Sidorna hämtas i klumpar i stället för en i taget: djupet ovan behövs bara
+    // för storswipare, men om de 40 sidorna kördes sekventiellt skulle just de
+    // användarna få 40 round trips i följd. Med klumpar blir det som mest 10.
+    // Concurrency-taket i lib/tmdbClient håller trycket nere.
+    const PAGE_CHUNK = 4;
 
+    async function fetchDiscoverPage(tmdbPage: number) {
       // En trasig sida får inte fälla hela leken. Tidigare bubblade ett kastat
       // discover-anrop (t.ex. TMDB 429) till yttre catch → 500 → "Slut på
       // förslag nu", trots att tidigare sidor redan gett fullt användbara
@@ -355,7 +390,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       // anrop per varv. Ger ALLA sidor noll träffar landar vi i det befintliga
       // tomma läget nedan, vilket är rätt signal.
       const emptyPage = { page: tmdbPage, results: [] as TMDBListItem[], total_pages: 1 };
-      const [popMovie, popTv] = await Promise.all([
+      return Promise.all([
         wantMovie
           ? tmdbGet<TMDBPaged<TMDBListItem>>("/discover/movie", {
               language: locale,
@@ -387,26 +422,45 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
             })
           : Promise.resolve(emptyPage),
       ]);
+    }
 
-      maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
-
-      for (const r of popMovie.results) {
-        const key = `movie_${r.id}`;
-        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
-          seenCandidate.add(key);
-          baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
-        }
+    let scannedTo = startTmdbPage - 1;
+    outer: for (let offset = 0; offset < MAX_PAGES_PER_REQUEST; offset += PAGE_CHUNK) {
+      const pages: number[] = [];
+      for (let i = 0; i < PAGE_CHUNK && offset + i < MAX_PAGES_PER_REQUEST; i++) {
+        const p = startTmdbPage + offset + i;
+        if (p > 500) break; // TMDB tillåter max 500 sidor.
+        if (p > maxTmdbPages && offset > 0) break; // Inga fler TMDB-sidor att hämta.
+        pages.push(p);
       }
-      for (const r of popTv.results) {
-        const key = `tv_${r.id}`;
-        if (!watchKeys.has(key) && !seenCandidate.has(key)) {
-          seenCandidate.add(key);
-          baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+      if (pages.length === 0) break;
+
+      const chunk = await Promise.all(pages.map(fetchDiscoverPage));
+
+      for (let i = 0; i < chunk.length; i++) {
+        const [popMovie, popTv] = chunk[i];
+        scannedTo = pages[i];
+        maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
+
+        for (const r of popMovie.results) {
+          const key = `movie_${r.id}`;
+          if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+            seenCandidate.add(key);
+            baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
+          }
         }
+        for (const r of popTv.results) {
+          const key = `tv_${r.id}`;
+          if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+            seenCandidate.add(key);
+            baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+          }
+        }
+
+        if (baseRaw.length >= CANDIDATE_TARGET) break outer;
       }
 
-      if (baseRaw.length >= CANDIDATE_TARGET) break;
-      if (tmdbPage >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
+      if (scannedTo >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
     }
 
     const seeds = buildSeeds(tasteInput).filter(
@@ -593,6 +647,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       usedProviderIds,
       mediaFilter,
       items,
+      nextTmdbPage: Math.min(scannedTo + 1, 501),
     };
   } catch (err) {
     console.error("computeUnifiedRecs error:", err);

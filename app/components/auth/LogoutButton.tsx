@@ -3,6 +3,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { clearClientCache } from "@/lib/clientCache";
 
 type Props = { className?: string };
 
@@ -16,6 +17,9 @@ export default function LogoutButton({ className }: Props) {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
+      // Kortlek och listor är cachade lokalt — nästa person på samma enhet ska
+      // inte se föregående användares watchlist.
+      clearClientCache();
       r.push("/");
       r.refresh();
       setBusy(false);

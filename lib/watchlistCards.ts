@@ -56,7 +56,9 @@ async function tmdbGet<T>(path: string): Promise<T> {
   } else {
     throw new Error("TMDB credentials missing");
   }
-  const res = await fetch(url.toString(), { headers, cache: "no-store" });
+  // Titelmetadata (namn/år/poster) är i praktiken stabil — ett dygns cache tar
+  // bort merparten av anropen mot TMDB för återkommande listor.
+  const res = await fetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
@@ -89,21 +91,18 @@ export async function buildWatchlistCards(uid: string): Promise<WatchlistCard[]>
 
   if (rows.length === 0) return [];
 
-  const BATCH_SIZE = 10;
-  const items: WatchlistCard[] = [];
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async (r) => {
-        const mediaType = r.mediaType as "movie" | "tv";
-        const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
-        const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
-        if (!t) return null;
-        return normalize(t, mediaType, r.addedAt);
-      })
-    );
-    for (const it of batchResults) if (it) items.push(it);
-  }
+  // Alla berikningar parallellt — tidigare kördes batchar om 10 SEKVENTIELLT,
+  // vilket gjorde en 40-titlarslista till fyra vänteomgångar. Med cache ovanpå
+  // är även kall last hanterbar.
+  const results = await Promise.all(
+    rows.map(async (r) => {
+      const mediaType = r.mediaType as "movie" | "tv";
+      const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
+      const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
+      if (!t) return null;
+      return normalize(t, mediaType, r.addedAt);
+    })
+  );
 
-  return items;
+  return results.filter((it): it is WatchlistCard => it !== null);
 }

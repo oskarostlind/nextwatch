@@ -11,6 +11,7 @@ import { AVATARS } from "@/lib/avatars";
 import Avatar from "@/app/components/ui/Avatar";
 import Modal from "@/app/components/ui/Modal";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
+import { getBillingStatus } from "@/lib/billingStore";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import CompactGenrePicker from "./CompactGenrePicker";
@@ -713,25 +714,24 @@ function SettingsTab() {
     let ignore = false;
     void (async () => {
       try {
-        const [nRes, bRes] = await Promise.all([
+        const [nRes, bj] = await Promise.all([
           fetch("/api/profile/notifications", { cache: "no-store" }),
-          fetch("/api/billing/status", { cache: "no-store" }),
+          // Delad billing-store — men force: efter köp/återställning ska
+          // profilen visa färsk status, inte sessionens cache.
+          getBillingStatus(true),
         ]);
         if (nRes.ok) {
           const nj = (await nRes.json()) as { ok?: boolean; prefs?: NotifPrefs };
           if (!ignore && nj.ok && nj.prefs) setPrefs(nj.prefs);
         }
-        if (bRes.ok) {
-          const bj = (await bRes.json()) as { ok?: boolean } & BillingStatus;
-          if (!ignore && bj.ok) {
-            setBilling({
-              plan: bj.plan,
-              isPremium: bj.isPremium,
-              source: bj.source,
-              status: bj.status,
-              renewsAt: bj.renewsAt,
-            });
-          }
+        if (bj && !ignore && bj.ok) {
+          setBilling({
+            plan: bj.plan,
+            isPremium: bj.isPremium,
+            source: bj.source,
+            status: bj.status,
+            renewsAt: bj.renewsAt,
+          });
         }
       } catch {
         /* noop */

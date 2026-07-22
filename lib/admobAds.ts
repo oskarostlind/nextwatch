@@ -75,10 +75,8 @@ async function plugin() {
 
 async function fetchIsPremium(): Promise<boolean> {
   try {
-    const res = await fetch("/api/billing/status", { cache: "no-store" });
-    if (!res.ok) return false;
-    const j = (await res.json()) as { isPremium?: boolean };
-    return Boolean(j.isPremium);
+    const { getBillingStatus } = await import("@/lib/billingStore");
+    return Boolean((await getBillingStatus())?.isPremium);
   } catch {
     return false;
   }

@@ -3,37 +3,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { navItems } from "../lib/nav";
 import { motion } from "framer-motion";
 import { useSocial } from "../client/SocialProvider";
+import { useShareThreads } from "@/lib/threadsStore";
 
 export default function BottomTabs() {
   const pathname = usePathname();
 
   // Oläst-badge på Grupp-fliken: vänförfrågningar + gruppinbjudningar (från
-  // social-storens 5s-poll) + olästa filmchattar (egen gles poll — 30s räcker
-  // för en badge, chattytorna pollar tätare själva).
+  // social-storen) + olästa filmchattar (delade threads-storen — en poll för
+  // hela appen; tidigare hade den här komponenten en egen som dessutom
+  // resettade intervallet på varje route-byte).
   const social = useSocial();
-  const [unseenChats, setUnseenChats] = useState(0);
-  useEffect(() => {
-    let active = true;
-    const load = () => {
-      void fetch("/api/share/threads", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j: { ok?: boolean; threads?: { unseen: number }[] } | null) => {
-          if (!active || !j?.ok) return;
-          setUnseenChats((j.threads ?? []).reduce((sum, t) => sum + t.unseen, 0));
-        })
-        .catch(() => {});
-    };
-    load();
-    const t = setInterval(load, 30000);
-    return () => {
-      active = false;
-      clearInterval(t);
-    };
-  }, [pathname]); // sidbyte = naturligt tillfälle att fräscha upp badgen
+  const { threads } = useShareThreads();
+  const unseenChats = threads.reduce((sum, t) => sum + t.unseen, 0);
 
   const groupBadge =
     social.pendingIn.length + social.invitesIncoming.length + unseenChats;

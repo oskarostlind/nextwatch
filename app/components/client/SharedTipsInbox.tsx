@@ -5,41 +5,19 @@
 // till" och svaren sker i FilmChatModal — chatten är primärytan. Osynlig när
 // inget är oläst.
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { MessageCircle, ChevronRight } from "lucide-react";
 import Avatar from "@/app/components/ui/Avatar";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
-
-type Thread = {
-  friendId: string;
-  lastTitle: string;
-  lastAt: string;
-  unseen: number;
-  username: string | null;
-  displayName: string | null;
-  avatarId: string | null;
-};
-
-type ThreadsResp = { ok?: boolean; threads?: Thread[] };
+import { refreshThreads, useShareThreads, type ShareThread } from "@/lib/threadsStore";
 
 export default function SharedTipsInbox({ onAdded }: { onAdded?: () => void }) {
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [chatFriend, setChatFriend] = useState<Thread | null>(null);
+  // Delade threads-storen — samma poll som navbadgen och vänlistan.
+  const { threads: allThreads } = useShareThreads();
+  const threads = allThreads.filter((t) => t.unseen > 0);
+  const [chatFriend, setChatFriend] = useState<ShareThread | null>(null);
 
-  const load = useCallback(() => {
-    void fetch("/api/share/threads", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<ThreadsResp>) : null))
-      .then((j) => {
-        if (j?.ok) setThreads((j.threads ?? []).filter((t) => t.unseen > 0));
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const name = (t: Thread) => t.displayName ?? t.username ?? "En vän";
+  const name = (t: ShareThread) => t.displayName ?? t.username ?? "En vän";
 
   return (
     <>
@@ -72,7 +50,7 @@ export default function SharedTipsInbox({ onAdded }: { onAdded?: () => void }) {
         friendAvatarId={chatFriend?.avatarId ?? null}
         onClose={() => {
           setChatFriend(null);
-          load(); // tråd-GET:en har nollat olästa — uppdatera raderna
+          void refreshThreads(); // tråd-GET:en har nollat olästa — uppdatera raderna
         }}
         onWatchlistAdd={onAdded}
       />

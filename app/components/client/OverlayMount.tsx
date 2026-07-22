@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import MatchOverlay, { type GroupMatchItem } from "../ui/MatchOverlay";
 import RatingModal, { type RatingModalItem } from "./RatingModal";
 import { useGroupMatchPolling } from "../../../lib/useGroupMatch";
+import { GROUP_VOTED_EVENT } from "../../../lib/groupVoteEvent";
 
 /* ---------- Betygsätt tidigare gruppmatchningar (vid app-öppning) ---------- */
 
@@ -110,40 +111,13 @@ export default function OverlayMount() {
   }
   const shownItem = item ?? lastItemRef.current;
 
-  // Intercepta fetch → när /api/group/vote (POST) lyckas, trigga extra poll
+  // Explicit event från röst-flödena (emitGroupVoted i lib/groupVoteEvent).
+  // Tidigare monkeypatchades window.fetch globalt för att sniffa vote-POST:ar —
+  // en wrapper runt VARJE fetch i hela appen, och skör mot andra patchare.
   useEffect(() => {
-    const originalFetch: typeof window.fetch = window.fetch.bind(window);
-
-    function isVoteRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
-      const method =
-        init?.method?.toUpperCase() ?? (input instanceof Request ? input.method : "GET");
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-          ? input.toString()
-          : input instanceof Request
-          ? input.url
-          : "";
-      return method === "POST" && url.includes("/api/group/vote");
-    }
-
-    const patched: typeof window.fetch = async (input, init) => {
-      const res = await originalFetch(input, init);
-      try {
-        if (res.ok && isVoteRequest(input, init)) {
-          notifyVoted();
-        }
-      } catch {
-        // noop
-      }
-      return res;
-    };
-
-    (window as unknown as { fetch: typeof window.fetch }).fetch = patched;
-    return () => {
-      (window as unknown as { fetch: typeof window.fetch }).fetch = originalFetch;
-    };
+    const onVoted = () => notifyVoted();
+    window.addEventListener(GROUP_VOTED_EVENT, onVoted);
+    return () => window.removeEventListener(GROUP_VOTED_EVENT, onVoted);
   }, [notifyVoted]);
 
   return (

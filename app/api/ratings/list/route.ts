@@ -58,18 +58,46 @@ async function tmdbGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function POST() {
+/** Skydd mot orimligt långa query-strängar. */
+const MAX_IDS = 200;
+
+export async function POST(req: Request) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) return NextResponse.json({ ok: false, items: [], message: "Ingen session" }, { status: 401 });
 
-    const rows = await prisma.rating.findMany({
+    const allRows = await prisma.rating.findMany({
       where: { userId: uid, rating: { not: null } },
       select: { tmdbId: true, mediaType: true, rating: true },
       orderBy: { decidedAt: "desc" },
       take: 200,
     });
+
+    const url = new URL(req.url);
+
+    // ?meta=0 → bara raderna. Klienten har titelmetadatan i lib/titleCache och
+    // behöver bara veta VILKA titlar som är betygsatta, plus betyget.
+    if (url.searchParams.get("meta") === "0") {
+      return NextResponse.json({
+        ok: true,
+        rows: allRows.map((r) => ({
+          tmdbId: r.tmdbId,
+          mediaType: r.mediaType as "movie" | "tv",
+          userRating: r.rating as number,
+        })),
+      });
+    }
+
+    // ?ids=… → berika bara de titlar klientens cache saknar.
+    const idsParam = url.searchParams.get("ids");
+    const onlyIds = idsParam
+      ? new Set(idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, MAX_IDS))
+      : null;
+
+    const rows = onlyIds
+      ? allRows.filter((r) => onlyIds.has(`${r.mediaType}_${r.tmdbId}`))
+      : allRows;
 
     if (rows.length === 0) return NextResponse.json({ ok: true, items: [] });
 

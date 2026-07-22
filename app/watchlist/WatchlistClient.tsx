@@ -22,6 +22,7 @@ import {
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
 import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
 import { getCached, setCached } from '@/lib/clientCache';
+import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
 
 type WatchItem = {
   id: number;
@@ -90,18 +91,48 @@ function ratedToWatchItem(it: RatedItem): WatchItem {
   };
 }
 
-function mapWatchlistItem(raw: WatchlistApiItem): WatchItem {
+/** DB-rad utan TMDB-berikning, från `?meta=0`. */
+type WatchlistRowApi = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  addedAt: string;
+};
+
+/** Motsvarande för betyg. */
+type RatedRowApi = {
+  tmdbId: number;
+  mediaType: 'movie' | 'tv';
+  userRating: number;
+};
+
+function toCachedTitle(raw: WatchlistApiItem): CachedTitle {
   return {
-    id: raw.tmdbId,
-    tmdbType: raw.mediaType,
     title: raw.title,
-    year: raw.year ?? undefined,
-    rating: typeof raw.rating === 'number' ? raw.rating : undefined,
-    posterUrl: raw.poster ?? PLACEHOLDER_POSTER,
-    addedAt: raw.addedAt,
+    year: raw.year,
+    poster: raw.poster,
     voteAverage: raw.voteAverage ?? null,
     popularity: raw.popularity ?? null,
     genreIds: raw.genreIds ?? [],
+  };
+}
+
+/**
+ * Slår ihop en DB-rad med cachad metadata. Saknas metadatan visas titeln ändå,
+ * med platshållare — raden är sanningen om vad som ligger i listan, cachen är
+ * bara utsmyckning.
+ */
+function rowToWatchItem(row: WatchlistRowApi, meta: CachedTitle | undefined): WatchItem {
+  return {
+    id: row.tmdbId,
+    tmdbType: row.mediaType,
+    title: meta?.title ?? '…',
+    year: meta?.year ?? undefined,
+    rating: meta?.voteAverage ?? undefined,
+    posterUrl: meta?.poster ?? PLACEHOLDER_POSTER,
+    addedAt: row.addedAt,
+    voteAverage: meta?.voteAverage ?? null,
+    popularity: meta?.popularity ?? null,
+    genreIds: meta?.genreIds ?? [],
   };
 }
 
@@ -146,19 +177,51 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   const [rateWlSaving, setRateWlSaving] = useState(false);
 
   const refetchWatchlist = useCallback(() => {
-    void fetch('/api/watchlist/list', { method: 'POST', cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { ok?: boolean; items?: WatchlistApiItem[] } | null) => {
-        if (data?.ok && Array.isArray(data.items)) {
-          const mapped = data.items.map(mapWatchlistItem);
-          setItems(mapped);
-          setCached(WL_CACHE_KEY, mapped, LIST_TTL_MS);
+    void (async () => {
+      try {
+        // Steg 1: bara raderna. En Prisma-fråga server-side i stället för ett
+        // TMDB-uppslag per titel.
+        const rowsRes = await fetch('/api/watchlist/list?meta=0', { method: 'POST', cache: 'no-store' });
+        if (!rowsRes.ok) return;
+        const rowsData = (await rowsRes.json()) as { ok?: boolean; rows?: WatchlistRowApi[] };
+        if (!rowsData.ok || !Array.isArray(rowsData.rows)) return;
+        const rows = rowsData.rows;
+
+        // Steg 2: fyll i metadata från cachen, hämta bara det som saknas.
+        const cache = readTitleCache();
+        const missing = rows
+          .map((r) => titleKey(r.mediaType, r.tmdbId))
+          .filter((k) => !cache[k]);
+
+        if (missing.length > 0) {
+          const enrichRes = await fetch(
+            `/api/watchlist/list?ids=${encodeURIComponent(missing.join(','))}`,
+            { method: 'POST', cache: 'no-store' },
+          );
+          if (enrichRes.ok) {
+            const enriched = (await enrichRes.json()) as { ok?: boolean; items?: WatchlistApiItem[] };
+            if (enriched.ok && Array.isArray(enriched.items)) {
+              const add: Record<string, CachedTitle> = {};
+              for (const it of enriched.items) {
+                add[titleKey(it.mediaType, it.tmdbId)] = toCachedTitle(it);
+                cache[titleKey(it.mediaType, it.tmdbId)] = toCachedTitle(it);
+              }
+              putTitles(add);
+            }
+          }
         }
-      })
-      .catch(() => {
+
+        // Raderna bestämmer vilka titlar som finns; cachen dekorerar bara. En
+        // titel utan metadata visas hellre med platshållare än utelämnas.
+        const mapped = rows.map((r) => rowToWatchItem(r, cache[titleKey(r.mediaType, r.tmdbId)]));
+        setItems(mapped);
+        setCached(WL_CACHE_KEY, mapped, LIST_TTL_MS);
+      } catch {
         /* best-effort — ev. cachad lista står kvar */
-      })
-      .finally(() => setWlLoading(false));
+      } finally {
+        setWlLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -180,18 +243,67 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
 
   const refetchRated = useCallback(() => {
     setRatedLoading(true);
-    void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
-      .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
-      .then((data) => {
-        if (data && data.ok) {
-          setRated(data.items);
-          setCached(RATED_CACHE_KEY, data.items, LIST_TTL_MS);
-        } else {
-          setRated([]);
+    void (async () => {
+      try {
+        // Samma tvåstegsupplägg som watchlisten: rader först, metadata ur cachen.
+        const rowsRes = await fetch('/api/ratings/list?meta=0', { method: 'POST', cache: 'no-store' });
+        if (!rowsRes.ok) { setRated((prev) => prev ?? []); return; }
+        const rowsData = (await rowsRes.json()) as { ok?: boolean; rows?: RatedRowApi[] };
+        if (!rowsData.ok || !Array.isArray(rowsData.rows)) { setRated((prev) => prev ?? []); return; }
+        const rows = rowsData.rows;
+
+        const cache = readTitleCache();
+        const missing = rows
+          .map((r) => titleKey(r.mediaType, r.tmdbId))
+          .filter((k) => !cache[k]);
+
+        if (missing.length > 0) {
+          const enrichRes = await fetch(
+            `/api/ratings/list?ids=${encodeURIComponent(missing.join(','))}`,
+            { method: 'POST', cache: 'no-store' },
+          );
+          if (enrichRes.ok) {
+            const enriched = (await enrichRes.json()) as RatedListResp;
+            if (enriched.ok && Array.isArray(enriched.items)) {
+              const add: Record<string, CachedTitle> = {};
+              for (const it of enriched.items) {
+                const meta: CachedTitle = {
+                  title: it.title,
+                  year: it.year,
+                  poster: it.poster,
+                  // Betygsrouten returnerar inte de här fälten; watchlisten fyller
+                  // på dem för samma titel när den passerar.
+                  voteAverage: null,
+                  popularity: null,
+                  genreIds: [],
+                };
+                add[titleKey(it.mediaType, it.tmdbId)] = meta;
+                cache[titleKey(it.mediaType, it.tmdbId)] = meta;
+              }
+              putTitles(add);
+            }
+          }
         }
-      })
-      .catch(() => setRated((prev) => prev ?? []))
-      .finally(() => setRatedLoading(false));
+
+        const mapped: RatedItem[] = rows.map((r) => {
+          const meta = cache[titleKey(r.mediaType, r.tmdbId)];
+          return {
+            tmdbId: r.tmdbId,
+            mediaType: r.mediaType,
+            title: meta?.title ?? '…',
+            year: meta?.year ?? null,
+            poster: meta?.poster ?? null,
+            userRating: r.userRating,
+          };
+        });
+        setRated(mapped);
+        setCached(RATED_CACHE_KEY, mapped, LIST_TTL_MS);
+      } catch {
+        setRated((prev) => prev ?? []);
+      } finally {
+        setRatedLoading(false);
+      }
+    })();
   }, []);
 
   // Betyg hämtas första gången fliken öppnas — och även vid cache-träff, så

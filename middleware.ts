@@ -42,6 +42,14 @@ export async function middleware(req: NextRequest) {
   const rawUid = req.cookies.get("nw_uid")?.value ?? null;
   let uid = await verifyUid(rawUid);
   let signedToSet: string | null = null;
+  // Rullande förnyelse: en giltig cookie fick tidigare ALDRIG ny maxAge — dess
+  // klocka frystes vid inloggningen. Re-stampa samma signerade värde med färsk
+  // livslängd, throttlat via nw_last (5 min maxAge) så vi inte skickar
+  // Set-Cookie på varje request.
+  let renewValid = false;
+  if (uid && rawUid && !req.cookies.get("nw_last")) {
+    renewValid = true;
+  }
   if (!uid) {
     uid = makeUid();
     try {
@@ -75,6 +83,13 @@ export async function middleware(req: NextRequest) {
 
   if (signedToSet) {
     res.cookies.set("nw_uid", signedToSet, UID_COOKIE);
+  } else if (renewValid && rawUid) {
+    // Samma redan-signerade värde, bara färsk maxAge. UID_COOKIE:s
+    // httpOnly:false med flit (samma resonemang som för anonyma, rad 18-20):
+    // hasAuthCookie() behöver se att cookien finns, och signaturen — inte
+    // httpOnly — är förfalskningsskyddet.
+    res.cookies.set("nw_uid", rawUid, UID_COOKIE);
+    res.cookies.set("nw_last", String(Date.now()), { ...UID_COOKIE, httpOnly: true, maxAge: 60 * 5 });
   }
   if (mustSetRegion) {
     res.cookies.set("nw_region", region, FLAG_COOKIE);
@@ -86,4 +101,7 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ["/((?!_next/|api/session/init|favicon.ico).*)"] };
+// session/restore undantas likt session/init: när cookien är helt borta skulle
+// middleware annars mynta en anonym nw_uid på SAMMA svar som restore sätter den
+// återställda — två Set-Cookie för samma namn, och fel kan vinna.
+export const config = { matcher: ["/((?!_next/|api/session/init|api/session/restore|favicon.ico).*)"] };

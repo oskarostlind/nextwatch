@@ -8,6 +8,7 @@ import BottomTabs from "../navigation/BottomTabs";
 import InviteToasts from "../InviteToasts";
 import Toast from "../ui/Toast";
 import PushRegistration from "../client/PushRegistration";
+import SessionPersistence from "../client/SessionPersistence";
 import SplashScreenHide from "../client/SplashScreenHide";
 import GuideOverlay from "../client/GuideOverlay";
 import { NAV_GUIDE_STEPS } from "@/lib/guideSteps";
@@ -55,6 +56,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
         <SplashScreenHide />
         <PushRegistration />
+        {/* Måste köras även här: en ITP-raderad session dumpar användaren på
+            publika heron — det är precis DÄR räddningen behövs. */}
+        <SessionPersistence />
         <main className="min-h-[100dvh] pt-[env(safe-area-inset-top)]">{children}</main>
       </div>
     );
@@ -64,6 +68,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
       <SplashScreenHide />
       <PushRegistration />
+      <SessionPersistence />
       <SwipeDeckPreloader />
       <SocialPreloader />
       <SwipeSettingsPreloader />

@@ -181,6 +181,18 @@ export function getSoloDeckSnapshot(): SoloDeckState {
   return soloState;
 }
 
+/**
+ * Server-snapshot för useSyncExternalStore. Måste vara en STABIL referens och
+ * matcha det servern renderade — annars ser React hydreringen som en mismatch,
+ * eftersom klientens snapshot redan innehåller den cachade leken. React gör om
+ * renderingen med klientens snapshot direkt efter hydreringen, så korten dyker
+ * upp ändå: vinsten är att nätverket hoppas över, inte en bildruta.
+ */
+const SERVER_SOLO_SNAPSHOT: SoloDeckState = emptySolo();
+export function getSoloDeckServerSnapshot(): SoloDeckState {
+  return SERVER_SOLO_SNAPSHOT;
+}
+
 export function getGroupDeckSnapshot(code: string): GroupDeckState {
   return groupDecks[code.toUpperCase()] ?? EMPTY_GROUP;
 }

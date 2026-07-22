@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Send, Star } from 'lucide-react';
 import Modal from '@/app/components/ui/Modal';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/watchLinks';
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
 import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
+import { getCached, setCached } from '@/lib/clientCache';
 
 type WatchItem = {
   id: number;
@@ -68,6 +69,15 @@ type WatchlistApiItem = {
 
 const PLACEHOLDER_POSTER =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+// Listorna är användarens egen data och ändras sällan mellan appstarter, så de
+// ritas ur cache direkt och ersätts tyst när det färska svaret kommer. Utan det
+// mötte varje besök ett skelett medan servern satte ihop listan på nytt.
+// Cachen skrivs vid varje lyckad hämtning, så den självläker efter mutationer
+// (gilla i swipe, betygsätt, ta bort) utan separat invalidering.
+const WL_CACHE_KEY = 'watchlist_items';
+const RATED_CACHE_KEY = 'rated_items';
+const LIST_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Betyg-flikens kort öppnar samma detaljmodal som watchlisten — inte bara betyget. */
 function ratedToWatchItem(it: RatedItem): WatchItem {
@@ -140,17 +150,31 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { ok?: boolean; items?: WatchlistApiItem[] } | null) => {
         if (data?.ok && Array.isArray(data.items)) {
-          setItems(data.items.map(mapWatchlistItem));
+          const mapped = data.items.map(mapWatchlistItem);
+          setItems(mapped);
+          setCached(WL_CACHE_KEY, mapped, LIST_TTL_MS);
         }
       })
       .catch(() => {
-        /* best-effort */
+        /* best-effort — ev. cachad lista står kvar */
       })
       .finally(() => setWlLoading(false));
   }, []);
 
   useEffect(() => {
-    if (initial === undefined) refetchWatchlist();
+    if (initial !== undefined) return;
+    // Cachen läses efter mount, inte under render: servern har inget
+    // localStorage, så en läsning i render hade gett hydration-mismatch.
+    // Kostar en bildruta skelett — men tar bort de sekunder som annars gick åt
+    // till nätverket plus serverns hopsättning av listan.
+    const cached = getCached<WatchItem[]>(WL_CACHE_KEY);
+    if (cached && cached.length > 0) {
+      setItems(cached);
+      setWlLoading(false);
+    }
+    // Hämtar alltid färskt ändå: cachen är till för att slippa väntan, inte
+    // för att slippa hämta.
+    refetchWatchlist();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -159,27 +183,32 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
     void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
       .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
       .then((data) => {
-        setRated(data && data.ok ? data.items : []);
+        if (data && data.ok) {
+          setRated(data.items);
+          setCached(RATED_CACHE_KEY, data.items, LIST_TTL_MS);
+        } else {
+          setRated([]);
+        }
       })
-      .catch(() => setRated([]))
+      .catch(() => setRated((prev) => prev ?? []))
       .finally(() => setRatedLoading(false));
   }, []);
 
+  // Betyg hämtas första gången fliken öppnas — och även vid cache-träff, så
+  // listan revalideras. Tidigare låg en identisk kopia av hämtningen här.
+  const ratedFetchedRef = useRef(false);
   const openTab = useCallback(
     (next: Tab) => {
       setTab(next);
-      if (next === 'ratings' && rated === null && !ratedLoading) {
-        setRatedLoading(true);
-        void fetch('/api/ratings/list', { method: 'POST', cache: 'no-store' })
-          .then((res) => (res.ok ? (res.json() as Promise<RatedListResp>) : null))
-          .then((data) => {
-            setRated(data && data.ok ? data.items : []);
-          })
-          .catch(() => setRated([]))
-          .finally(() => setRatedLoading(false));
+      if (next === 'ratings' && !ratedFetchedRef.current && !ratedLoading) {
+        ratedFetchedRef.current = true;
+        // Visa cachat direkt så fliken inte står tom medan hämtningen pågår.
+        const cached = getCached<RatedItem[]>(RATED_CACHE_KEY);
+        if (cached && cached.length > 0) setRated(cached);
+        refetchRated();
       }
     },
-    [rated, ratedLoading]
+    [ratedLoading, refetchRated]
   );
 
   const saveEditedRating = useCallback(

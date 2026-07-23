@@ -100,7 +100,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, size, need, count, match: null, matches: [] }, { status: 200 });
     }
 
-    const details = await tmdbDetails(chosen.tmdbType, chosen.tmdbId, locale);
+    // Vilka medlemmar hade titeln sparad sedan innan? Sedan gruppleken tar med
+    // titlar som EN medlem sparat (lib/unifiedRecs) är det ofta förklaringen
+    // till varför matchen gick så fort. Under swipen märks ingenting ut — det
+    // skulle styra röstningen och avslöja andras watchlists i onödan — men när
+    // matchen väl är ett faktum är det en bättre berättelse än en anonym träff.
+    const [details, savers] = await Promise.all([
+      tmdbDetails(chosen.tmdbType, chosen.tmdbId, locale),
+      prisma.watchlist.findMany({
+        where: {
+          tmdbId: chosen.tmdbId,
+          mediaType: chosen.tmdbType,
+          user: { groupMembers: { some: { groupCode: code } } },
+        },
+        select: { user: { select: { profile: { select: { displayName: true } } } } },
+      }),
+    ]);
+
+    const savedBy = savers
+      .map((s) => s.user.profile?.displayName?.trim())
+      .filter((n): n is string => Boolean(n));
 
     return NextResponse.json(
       {
@@ -113,6 +132,7 @@ export async function GET(req: NextRequest) {
           tmdbType: chosen.tmdbType,
           title: "",
         },
+        savedBy,
         matches: [],
       },
       { status: 200 }

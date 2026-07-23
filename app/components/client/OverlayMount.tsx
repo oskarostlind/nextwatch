@@ -100,7 +100,7 @@ function usePendingMatchRatings(liveMatchOpen: boolean) {
 }
 
 export default function OverlayMount() {
-  const { open, item, dismiss, notifyVoted, groupCode } = useGroupMatchPolling();
+  const { open, item, savedBy, dismiss, notifyVoted, groupCode } = useGroupMatchPolling();
   const pending = usePendingMatchRatings(open);
 
   // Sticky-minne: om vi får ett item när overlayn inte hunnit mounta,
@@ -122,7 +122,7 @@ export default function OverlayMount() {
 
   return (
     <>
-      <MatchOverlay open={open} item={shownItem} onClose={dismiss} code={groupCode} />
+      <MatchOverlay open={open} item={shownItem} savedBy={savedBy} onClose={dismiss} code={groupCode} />
       <RatingModal
         open={pending.item !== null}
         item={pending.item}

@@ -217,6 +217,116 @@ function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
   return Date.now() - at.getTime() < ms;
 }
 
+/* -------- Watchlist-kandidater i gruppläge -------- */
+
+/** Hur många sparade titlar vi som mest slår upp mot TMDB per anrop. */
+const WATCHLIST_CANDIDATE_FETCH_MAX = 40;
+/** Hur många som som mest får plats i den färdiga leken. */
+const WATCHLIST_CANDIDATE_INJECT_MAX = 12;
+
+/** SE-certifikat i stigande ordning; "Btl" = barntillåten. */
+const SE_CERT_RANK: Record<string, number> = { Btl: 0, "0": 0, "7": 7, "11": 11, "15": 15 };
+
+type TmdbDetailsLite = TMDBListItem & {
+  genres?: { id: number }[];
+  "watch/providers"?: {
+    results?: Record<string, { flatrate?: { provider_id: number }[] }>;
+  };
+  release_dates?: {
+    results?: { iso_3166_1: string; release_dates?: { certification?: string }[] }[];
+  };
+};
+
+function seCertificationOf(d: TmdbDetailsLite): string | null {
+  const se = d.release_dates?.results?.find((r) => r.iso_3166_1 === "SE");
+  for (const rd of se?.release_dates ?? []) {
+    const c = rd.certification?.trim();
+    if (c) return c;
+  }
+  return null;
+}
+
+/**
+ * Slår upp titlar som EN gruppmedlem sparat och filtrerar dem mot gruppens
+ * kriterier, så de kan vävas in i gruppleken.
+ *
+ * Ett anrop per titel med append_to_response ger metadata, tillgänglighet och
+ * åldersgräns på samma gång i stället för tre. Anropen går genom
+ * concurrency-grinden i lib/tmdbClient och Next Data Cache (force-cache).
+ *
+ * Genrer hårdfiltreras INTE — ogillade genrer straffas redan av V1-scoringen,
+ * precis som för discover-kandidater.
+ */
+async function fetchGroupWatchlistCandidates(opts: {
+  saved: { tmdbId: number; mediaType: MediaType }[];
+  locale: string;
+  region: string;
+  usedProviderIds: number[];
+  certMax: string;
+  wantMovie: boolean;
+  wantTv: boolean;
+}): Promise<{ id: number; tmdbType: MediaType; item: TMDBListItem }[]> {
+  const { saved, locale, region, usedProviderIds, certMax, wantMovie, wantTv } = opts;
+
+  const wanted = saved
+    .filter((s) => (s.mediaType === "movie" ? wantMovie : wantTv))
+    .slice(0, WATCHLIST_CANDIDATE_FETCH_MAX);
+  if (wanted.length === 0) return [];
+
+  const providerSet = new Set(usedProviderIds);
+  const certCap = SE_CERT_RANK[certMax] ?? 15;
+
+  const results = await Promise.all(
+    wanted.map(async (s) => {
+      const path = s.mediaType === "movie" ? `/movie/${s.tmdbId}` : `/tv/${s.tmdbId}`;
+      const d = await tmdbGet<TmdbDetailsLite>(
+        path,
+        {
+          language: locale,
+          append_to_response: s.mediaType === "movie" ? "watch/providers,release_dates" : "watch/providers",
+        },
+        "force-cache",
+      ).catch(() => null);
+      if (!d) return null;
+
+      // Tillgänglighet: måste finnas på någon av gruppens tjänster i regionen.
+      // Samma krav som /discover ställer via with_watch_providers.
+      if (providerSet.size > 0) {
+        const flat = d["watch/providers"]?.results?.[region]?.flatrate ?? [];
+        if (!flat.some((p) => providerSet.has(p.provider_id))) return null;
+      }
+
+      // Åldersgräns. /discover/tv saknar certification-filter, så serier kan
+      // ändå bara filtreras på film — samma begränsning som i huvudflödet.
+      //
+      // Saknad SE-klassning: discover skulle ha uteslutit titeln (certification.lte
+      // kräver en klassning). Att göra likadant här hade tömt funktionen, eftersom
+      // de flesta titlar saknar SE-klassning. Kompromissen är att bara vara
+      // tillåtande när taket ändå är vuxenläget — har gruppen en yngre medlem
+      // krävs en känd klassning inom taket.
+      if (s.mediaType === "movie") {
+        const cert = seCertificationOf(d);
+        if (cert === null) {
+          if (certCap < 15) return null;
+        } else {
+          const rank = SE_CERT_RANK[cert];
+          if (rank === undefined || rank > certCap) return null;
+        }
+      }
+
+      // Detaljsvaret har `genres`, listsvaret `genre_ids` — normalisera så
+      // scoringen nedströms kan behandla dem likadant.
+      const item: TMDBListItem = {
+        ...d,
+        genre_ids: d.genre_ids ?? (d.genres ?? []).map((g) => g.id),
+      };
+      return { id: s.tmdbId, tmdbType: s.mediaType, item };
+    }),
+  );
+
+  return results.filter((r): r is { id: number; tmdbType: MediaType; item: TMDBListItem } => r !== null);
+}
+
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
@@ -329,10 +439,48 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         watchKeys.add(`${r.mediaType}_${r.tmdbId}`);
       }
     }
-    // Watchlist: alltid exkludera medan titeln ligger kvar (avsiktlig sparning).
-    for (const w of exclusionWatchlist) {
-      watchKeys.add(`${w.mediaType}_${w.tmdbId}`);
+    // Watchlist-exkludering.
+    //
+    // Solo: alltid exkludera medan titeln ligger kvar (avsiktlig sparning).
+    //
+    // Grupp: den gamla regeln exkluderade UNIONEN av allas watchlists. Med två
+    // medlemmar på ~300 sparade titlar var försvann upp till 600 titlar ur
+    // gruppleken — och den titel EN medlem redan sagt "den vill jag se" om är
+    // rimligen den bästa kandidaten som finns, inte den sämsta. Regeln skalade
+    // dessutom åt fel håll: ju mer engagerade medlemmarna var, desto mer av det
+    // bästa innehållet blev osynligt.
+    //
+    // Nu skiljs fallen åt:
+    //   ≥2 sparare → fortsatt exkluderad. Ni är redan överens, och titeln ägs av
+    //                "Gemensamt i era watchlists" (app/api/group/common-watchlist,
+    //                som kräver gte: 2 — samma gräns, med flit).
+    //   exakt 1    → med i leken, för ALLA medlemmar. Även spararen: räknas
+    //                sparningen inte som en röst (den gör den inte) måste
+    //                spararen kunna rösta, annars kan titeln aldrig nå
+    //                groupMatchNeed och skulle bli en återvändsgränd.
+    const watchlistSaverCount = new Map<string, number>();
+    if (isGroup) {
+      for (const w of exclusionWatchlist) {
+        const key = `${w.mediaType}_${w.tmdbId}`;
+        watchlistSaverCount.set(key, (watchlistSaverCount.get(key) ?? 0) + 1);
+      }
     }
+    /** Titlar exakt en medlem sparat — kandidater att väva in nedan. */
+    const soloSaved: { tmdbId: number; mediaType: MediaType; addedAt: Date }[] = [];
+    for (const w of exclusionWatchlist) {
+      const key = `${w.mediaType}_${w.tmdbId}`;
+      if (isGroup && watchlistSaverCount.get(key) === 1) {
+        soloSaved.push({
+          tmdbId: w.tmdbId,
+          mediaType: w.mediaType as MediaType,
+          addedAt: w.addedAt,
+        });
+        continue;
+      }
+      watchKeys.add(key);
+    }
+    // Nyast sparat först — färskast avsikt, och taket nedan ska träffa rätt.
+    soloSaved.sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
 
     // Genres
     const [movieGenres, tvGenres] = await Promise.all([
@@ -342,6 +490,21 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const movieIdToName = new Map(movieGenres.genres.map((g) => [g.id, g.name] as const));
     const tvIdToName = new Map(tvGenres.genres.map((g) => [g.id, g.name] as const));
     const { liked: likedGenres, disliked: dislikedGenres } = resolveGenreSets(tasteInput);
+
+    // Startas här och inväntas efter discover-loopen, så uppslagen löper
+    // parallellt med sidhämtningen i stället för att lägga sig ovanpå den.
+    const watchlistCandidatesPromise =
+      isGroup && soloSaved.length > 0
+        ? fetchGroupWatchlistCandidates({
+            saved: soloSaved,
+            locale,
+            region,
+            usedProviderIds,
+            certMax,
+            wantMovie,
+            wantTv,
+          })
+        : Promise.resolve([]);
 
     const pageNum = Math.max(1, page);
 
@@ -461,6 +624,22 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       }
 
       if (scannedTo >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
+    }
+
+    // Väv in de titlar exakt en medlem sparat. De läggs till baseRaw och går
+    // därmed genom samma V1/V2-scoring och MMR som discover-kandidaterna —
+    // ingen gräddfil, de ska förtjäna sin plats. Taket hindrar att en medlem
+    // med 300 sparade titlar tar över hela leken; utan det försvinner
+    // upptäckten, som är resten av produkten.
+    const watchlistCandidates = await watchlistCandidatesPromise;
+    let injected = 0;
+    for (const c of watchlistCandidates) {
+      if (injected >= WATCHLIST_CANDIDATE_INJECT_MAX) break;
+      const key = `${c.tmdbType}_${c.id}`;
+      if (seenCandidate.has(key)) continue; // discover hann före
+      seenCandidate.add(key);
+      baseRaw.push(c);
+      injected += 1;
     }
 
     const seeds = buildSeeds(tasteInput).filter(

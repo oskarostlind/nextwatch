@@ -27,6 +27,8 @@ type GroupMatchResponse =
       need: number; // threshold
       count: number; // current likes for top candidate
       match: GroupMatchItem | null;
+      /** Medlemmar som redan hade titeln sparad. Visas bara i matchrutan. */
+      savedBy?: string[];
       matches?: GroupMatchItem[];
     }
   | {
@@ -44,6 +46,7 @@ function getCookieValue(name: string): string | undefined {
 export function useGroupMatchPolling() {
   const [open, setOpen] = useState(false);
   const [item, setItem] = useState<GroupMatchItem | null>(null);
+  const [savedBy, setSavedBy] = useState<string[]>([]);
   const [groupCode, setGroupCode] = useState<string | undefined>(undefined);
 
   const timerRef = useRef<number | null>(null);
@@ -101,6 +104,7 @@ export function useGroupMatchPolling() {
       const data = (await res.json()) as GroupMatchResponse;
       if (data.ok && data.match) {
         setItem(data.match);
+        setSavedBy(data.savedBy ?? []);
         setOpen(true);
       }
     } catch {
@@ -142,6 +146,7 @@ export function useGroupMatchPolling() {
   const dismiss = useCallback(() => {
     setOpen(false);
     setItem(null);
+    setSavedBy([]);
   }, []);
 
   const notifyVoted = useCallback(() => {
@@ -160,11 +165,12 @@ export function useGroupMatchPolling() {
     () => ({
       open,
       item,
+      savedBy,
       dismiss,
       notifyVoted,
       hasGroup: Boolean(groupCode),
       groupCode: groupCode ?? undefined,
     }),
-    [dismiss, item, notifyVoted, open, groupCode]
+    [dismiss, item, savedBy, notifyVoted, open, groupCode]
   );
 }

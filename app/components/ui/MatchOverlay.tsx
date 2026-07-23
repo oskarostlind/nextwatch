@@ -41,6 +41,12 @@ type Props = {
   variant?: "group" | "solo";
   /** Solo: konkreta träffar bakom toppmatchen. Alltid icke-tom när satt. */
   evidence?: MatchEvidence[];
+  /**
+   * Grupp: medlemmar som redan hade titeln i sin watchlist. Visas först här,
+   * aldrig under swipen — där skulle det styra röstningen och avslöja andras
+   * listor i onödan.
+   */
+  savedBy?: string[];
 };
 
 function normalizePoster(src?: string): string | undefined {
@@ -117,6 +123,7 @@ export default function MatchOverlay({
   code,
   variant = "group",
   evidence,
+  savedBy,
 }: Props) {
   const [flipped, setFlipped] = useState(false);
 
@@ -160,6 +167,15 @@ export default function MatchOverlay({
     const phrases = evidence.slice(0, 2).map((e) => evidencePhrase(e, item.tmdbType));
     return `Du gillar ${joinSv(phrases)}.`;
   }, [variant, evidence, item]);
+
+  /** "Oskar hade den redan i sin watchlist." — förklarar den snabba matchen. */
+  const savedByLine = useMemo(() => {
+    if (variant !== "group" || !savedBy?.length) return null;
+    const namn = joinSv(savedBy.slice(0, 3));
+    return savedBy.length === 1
+      ? `${namn} hade den redan i sin watchlist.`
+      : `${namn} hade den redan i sina watchlists.`;
+  }, [variant, savedBy]);
 
   if (typeof document === "undefined") return null;
 
@@ -207,6 +223,17 @@ export default function MatchOverlay({
                 transition={{ delay: 0.22 }}
               >
                 {reasonLine}
+              </motion.div>
+            ) : null}
+
+            {savedByLine ? (
+              <motion.div
+                className="mb-2 text-center text-xs text-white/60"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.22 }}
+              >
+                {savedByLine}
               </motion.div>
             ) : null}
 

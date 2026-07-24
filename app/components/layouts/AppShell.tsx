@@ -12,7 +12,7 @@ import SessionPersistence from "../client/SessionPersistence";
 import SplashScreenHide from "../client/SplashScreenHide";
 import GuideOverlay from "../client/GuideOverlay";
 import { NAV_GUIDE_STEPS } from "@/lib/guideSteps";
-import { hasAuthCookie, hasSeenGuide } from "@/lib/userGuide";
+import { hasAuthCookie, hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 import { SocialPreloader } from "../client/SocialProvider";
 import { SwipeSettingsPreloader } from "../client/SwipeSettingsProvider";
@@ -47,7 +47,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!hasAuthCookie()) return;
     if (!hasSeenGuide("swipe")) return;
     if (hasSeenGuide("nav")) return;
-    const t = window.setTimeout(() => setNavGuideOpen(true), 600);
+    // Öppna bara om ingen annan guide är aktiv (t.ex. grupp-guiden på /group).
+    const t = window.setTimeout(() => {
+      if (tryAcquireGuide("nav")) setNavGuideOpen(true);
+    }, 600);
     return () => window.clearTimeout(t);
   }, [hideChrome, pathname]);
 
@@ -89,7 +92,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         guideId="nav"
         steps={NAV_GUIDE_STEPS}
         open={navGuideOpen}
-        onClose={() => setNavGuideOpen(false)}
+        onClose={() => {
+          setNavGuideOpen(false);
+          releaseGuide("nav");
+        }}
       />
     </div>
   );

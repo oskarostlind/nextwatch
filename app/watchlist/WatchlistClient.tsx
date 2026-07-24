@@ -10,7 +10,7 @@ import ImdbImportModal from '@/app/components/client/ImdbImportModal';
 import ShareTitleModal, { type ShareItem } from '@/app/components/client/ShareTitleModal';
 import SharedTipsInbox from '@/app/components/client/SharedTipsInbox';
 import MediaFilters, { type MediaTypeFilter } from '@/app/components/discover/MediaFilters';
-import { Button, SegmentedTabs } from '@/app/components/ui/kit';
+import { Button } from '@/app/components/ui/kit';
 import {
   bestWatchUrl,
   isPaidOnly,
@@ -44,6 +44,7 @@ type RatedItem = {
   title: string;
   year: string | null;
   poster: string | null;
+  genreIds: number[];
   userRating: number;
 };
 
@@ -184,6 +185,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   const [wlSort, setWlSort] = useState('addedAt');
   const [wlGenres, setWlGenres] = useState<string[]>([]);
   const [ratedType, setRatedType] = useState<MediaTypeFilter>('movie');
+  const [ratedSort, setRatedSort] = useState('userRating');
+  const [ratedGenres, setRatedGenres] = useState<string[]>([]);
 
   const [imdbOpen, setImdbOpen] = useState(false);
   const [shareItem, setShareItem] = useState<ShareItem | null>(null);
@@ -292,11 +295,12 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                   title: it.title,
                   year: it.year,
                   poster: it.poster,
-                  // Betygsrouten returnerar inte de här fälten; watchlisten fyller
-                  // på dem för samma titel när den passerar.
+                  // Betygsrouten returnerar inte betyg/popularitet; watchlisten
+                  // fyller på dem för samma titel när den passerar. Genrer ger
+                  // den däremot nu, för genrefiltret på Betyg-fliken.
                   voteAverage: null,
                   popularity: null,
-                  genreIds: [],
+                  genreIds: it.genreIds ?? [],
                 };
                 add[titleKey(it.mediaType, it.tmdbId)] = meta;
                 cache[titleKey(it.mediaType, it.tmdbId)] = meta;
@@ -314,6 +318,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
             title: meta?.title ?? '…',
             year: meta?.year ?? null,
             poster: meta?.poster ?? null,
+            genreIds: meta?.genreIds ?? [],
             userRating: r.userRating,
           };
         });
@@ -416,11 +421,27 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   }, [q, items, wlType, wlSort, wlGenres]);
 
   const filteredRated = useMemo(() => {
-    const list = (rated ?? []).filter((it) => it.mediaType === ratedType);
+    let list = (rated ?? []).filter((it) => it.mediaType === ratedType);
+    if (ratedGenres.length > 0) {
+      list = list.filter((it) =>
+        (it.genreIds ?? []).some((gid) => ratedGenres.includes(String(gid)))
+      );
+    }
     const needle = q.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter((it) => it.title.toLowerCase().includes(needle));
-  }, [q, rated, ratedType]);
+    if (needle) list = list.filter((it) => it.title.toLowerCase().includes(needle));
+
+    const sorted = [...list];
+    if (ratedSort === 'year') {
+      sorted.sort((a, b) => Number(b.year ?? 0) - Number(a.year ?? 0));
+    } else if (ratedSort === 'title') {
+      sorted.sort((a, b) => a.title.localeCompare(b.title, 'sv'));
+    } else {
+      // Standard: högst eget betyg först. Servern levererar redan i
+      // senast-betygsatt-ordning, så det är den naturliga fallbacken.
+      sorted.sort((a, b) => b.userRating - a.userRating);
+    }
+    return sorted;
+  }, [q, rated, ratedType, ratedSort, ratedGenres]);
 
   const userRatingFor = useCallback(
     (tmdbId: number, mediaType: 'movie' | 'tv') =>
@@ -443,12 +464,13 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           setRated((cur) => {
             const prev = cur ?? [];
             const idx = prev.findIndex((x) => x.tmdbId === it.id && x.mediaType === it.tmdbType);
-            const next = {
+            const next: RatedItem = {
               tmdbId: it.id,
               mediaType: it.tmdbType,
               title: it.title,
               year: it.year ?? null,
               poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
+              genreIds: it.genreIds ?? [],
               userRating: rating,
             };
             if (idx >= 0) {
@@ -565,17 +587,21 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           layoutId="watchlist-type"
         />
       ) : (
-        <div className="mb-4">
-          <SegmentedTabs
-            layoutId="ratings-type"
-            tabs={[
-              { id: 'movie' as MediaTypeFilter, label: 'Film' },
-              { id: 'tv' as MediaTypeFilter, label: 'Serier' },
-            ]}
-            value={ratedType}
-            onChange={setRatedType}
-          />
-        </div>
+        <MediaFilters
+          type={ratedType}
+          onTypeChange={(t) => {
+            setRatedType(t);
+            setRatedGenres([]);
+          }}
+          sort={ratedSort}
+          onSortChange={setRatedSort}
+          genres={ratedGenres}
+          onToggleGenre={(id) =>
+            setRatedGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+          }
+          mode="rated"
+          layoutId="ratings-type"
+        />
       )}
 
       <div className="mb-4">
@@ -809,6 +835,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                         title: active.title,
                         year: active.year ?? null,
                         poster: active.posterUrl.startsWith('data:') ? null : active.posterUrl,
+                        genreIds: active.genreIds ?? [],
                         userRating: current,
                       });
                     } else {

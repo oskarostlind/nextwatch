@@ -20,6 +20,8 @@ type RatedCard = {
   title: string;
   year: string | null;
   poster: string | null;
+  /** TMDB-genre-id:n, för genrefiltret på Betyg-fliken. */
+  genreIds: number[];
   /** Användarens eget betyg 1–10. */
   userRating: number;
 };
@@ -31,6 +33,7 @@ type TmdbTitle = {
   poster_path?: string | null;
   release_date?: string | null;
   first_air_date?: string | null;
+  genres?: { id: number }[];
 };
 
 const V4_TOKEN =
@@ -120,6 +123,7 @@ export async function POST(req: Request) {
           title,
           year: date && date.length >= 4 ? date.slice(0, 4) : null,
           poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
+          genreIds: (t.genres ?? []).map((g) => g.id),
           userRating: r.rating as number,
         };
       })

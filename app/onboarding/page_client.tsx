@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { sanitizeUsernameInput, usernameValidRequired } from "@/lib/usernameClient";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -361,34 +362,37 @@ export default function Client() {
   const progress = ((step + 1) / STEPS.length) * 100;
 
   return (
-    <div className="mx-auto min-h-[100dvh] max-w-lg px-4 py-8">
+    <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-4 py-10">
       {/* Header */}
-      <div className="mb-8 text-center">
-        <p className="text-xs font-medium uppercase tracking-widest text-cyan-400/80">
+      <div className="mb-7 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400/80">
           Välkommen till NextWatch
         </p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">{STEPS[step].title}</h1>
-        <p className="mt-1 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
+        <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{STEPS[step].title}</h1>
+        <p className="mt-1.5 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
       </div>
 
       {/* Progress */}
       <div className="mb-6">
-        <div className="mb-2 flex justify-between text-xs text-neutral-500">
+        <div className="mb-2 flex justify-between text-[11px] font-medium">
           {STEPS.map((s, i) => (
-            <span key={s.id} className={i <= step ? "text-cyan-400" : ""}>
+            <span
+              key={s.id}
+              className={i < step ? "text-cyan-400/70" : i === step ? "text-cyan-300" : "text-neutral-600"}
+            >
               {s.title}
             </span>
           ))}
         </div>
-        <div className="h-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
+            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-500 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-neutral-900/60 p-5 shadow-xl backdrop-blur sm:p-6">
+      <div className="rounded-2xl border border-white/[0.08] bg-neutral-900/70 p-5 shadow-2xl shadow-black/40 ring-1 ring-white/5 backdrop-blur-md sm:p-6">
         {err && (
           <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {err}
@@ -404,6 +408,17 @@ export default function Client() {
           }}
           className="space-y-5"
         >
+          {/* Mjuk övergång mellan stegen. En keyad motion.div per steg gör att
+              AnimatePresence tonar in det nya steget — mjukare än ett hårt hopp. */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="space-y-5"
+            >
           {/* Steg 1: Om dig */}
           {step === 0 && (
             <div className="space-y-4">
@@ -620,6 +635,8 @@ export default function Client() {
               </button>
             </div>
           )}
+            </motion.div>
+          </AnimatePresence>
 
           {/* Navigation */}
           {step < 3 && (
@@ -632,7 +649,7 @@ export default function Client() {
                 <button
                   type="button"
                   onClick={goBack}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10"
+                  className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
                 >
                   ← Föregående
                 </button>
@@ -641,7 +658,7 @@ export default function Client() {
               <button
                 type="button"
                 onClick={goNext}
-                className="rounded-xl bg-cyan-500 px-5 py-2 text-sm font-medium text-black hover:bg-cyan-400"
+                className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
               >
                 Nästa →
               </button>

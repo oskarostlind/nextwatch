@@ -11,7 +11,7 @@ import {
   clearLegacySoloSwipeMediaFilter,
   type SwipeMediaFilter,
 } from "@/lib/swipeMediaFilter";
-import { applySoloMediaFilterChange } from "@/lib/swipeDeckStore";
+import { setSoloDisplayFilter } from "@/lib/swipeDeckStore";
 
 export type SwipeSettingsState = {
   /** Visa hyr-/köpalternativ på titelkort. */
@@ -101,6 +101,13 @@ export async function saveSwipeSettings(patch: Partial<Omit<SwipeSettingsState, 
   const prev = state;
   setState(patch);
 
+  // Filtra leken direkt (optimistiskt) så pill-bytet känns omedelbart, inte
+  // efter round-trippen till /swipe-settings. Rullas tillbaka nedan om servern
+  // nekar. Leken hämtas alltid som "båda", så det här är bara en omfiltrering.
+  if (patch.mediaFilter && patch.mediaFilter !== prev.mediaFilter) {
+    setSoloDisplayFilter(patch.mediaFilter);
+  }
+
   try {
     const res = await fetch("/api/profile/swipe-settings", {
       method: "PUT",
@@ -110,21 +117,25 @@ export async function saveSwipeSettings(patch: Partial<Omit<SwipeSettingsState, 
     });
     if (!res.ok) {
       setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+      setSoloDisplayFilter(prev.mediaFilter);
       return false;
     }
     const j = (await res.json()) as SettingsResp;
     if (!j.ok || !j.settings) {
       setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+      setSoloDisplayFilter(prev.mediaFilter);
       return false;
     }
     const nextFilter = normalizeSwipeMediaFilter(j.settings.mediaFilter);
     setState({ showPaidOptions: j.settings.showPaidOptions, mediaFilter: nextFilter });
 
-    // Filtret ägs server-side, så redan hämtade kort kan vara fel typ nu.
-    if (nextFilter !== prev.mediaFilter) applySoloMediaFilterChange(nextFilter);
+    // Servern kan ha normaliserat filtret till något annat än vi antog optimistiskt
+    // — synka vyn med det bekräftade värdet.
+    if (nextFilter !== state.mediaFilter) setSoloDisplayFilter(nextFilter);
     return true;
   } catch {
     setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+    setSoloDisplayFilter(prev.mediaFilter); // rulla tillbaka den optimistiska vyn
     return false;
   }
 }

@@ -36,8 +36,10 @@ function persistSoloDeckSoon() {
   deckWriteTimer = setTimeout(() => {
     deckWriteTimer = null;
     const s = soloState;
-    // Annonskort hör till en session och ska inte återuppstå ur cachen.
-    const cards = s.cards.filter((c) => c.kind !== "ad");
+    // Spara HELA leken (båda medietyperna), inte den filtrerade vyn — annars
+    // tappas den dolda typen vid omstart. Annonskort hör till en session och
+    // ska inte återuppstå ur cachen.
+    const cards = s.allCards.filter((c) => c.kind !== "ad");
     if (cards.length === 0) {
       removeCached(DECK_CACHE_KEY);
       return;
@@ -73,14 +75,16 @@ function hydrateSoloDeck(): SoloDeckState {
   // Allt som swipats sedan leken sparades faller bort här (seen-listan har
   // 24 h TTL sedan regressionsfixen), så ett kort man just gjort sig av med
   // kan inte komma tillbaka.
-  const cards = filterSwipeCards(saved.cards);
-  if (cards.length === 0) return base;
+  const allCards = filterSwipeCards(saved.cards);
+  if (allCards.length === 0) return base;
 
+  const mediaFilter = saved.mediaFilter ?? base.mediaFilter;
   return {
     ...base,
-    cards,
+    allCards,
+    cards: visibleCards(allCards, mediaFilter),
     nextTmdbPage: saved.nextTmdbPage > 0 ? saved.nextTmdbPage : 1,
-    mediaFilter: saved.mediaFilter ?? base.mediaFilter,
+    mediaFilter,
     ready: true,
   };
 }
@@ -90,6 +94,25 @@ function appendUnique(existing: SwipeCard[], incoming: SwipeCard[]): SwipeCard[]
   const seen = new Set(existing.map((c) => c.id));
   const extra = incoming.filter((c) => !seen.has(c.id));
   return extra.length === 0 ? existing : [...existing, ...extra];
+}
+
+/**
+ * Synlig lek = hela leken filtrerad på visningsfiltret. Annonskort visas alltid
+ * (de hör inte till en medietyp). Det här är enda stället film/serie-filtret
+ * appliceras — därför slipper varje byte en omhämtning.
+ */
+function visibleCards(all: SwipeCard[], filter: SwipeMediaFilter): SwipeCard[] {
+  if (filter === "both") return all;
+  return all.filter((c) => c.kind === "ad" || c.mediaType === filter);
+}
+
+/**
+ * Bygger nästa solo-state och håller `cards` i synk med `allCards`+`mediaFilter`.
+ * All mutation går genom den här så den synliga vyn aldrig kan bli inaktuell.
+ */
+function nextSolo(patch: Partial<SoloDeckState>): SoloDeckState {
+  const merged = { ...soloState, ...patch };
+  return { ...merged, cards: visibleCards(merged.allCards, merged.mediaFilter) };
 }
 
 // Sätts av klienten (SwipeDeckPreloader) efter att premium-status hämtats.
@@ -105,6 +128,16 @@ function withAdsMaybe(titles: SwipeCard[], pageKey: string | number): SwipeCard[
 type GroupInfo = { code: string; strictProviders: boolean };
 
 export type SoloDeckState = {
+  /**
+   * Hela leken, alltid både film och serier (servern hämtar `?all=1`). Detta är
+   * det som sparas, prefetchas och muteras.
+   */
+  allCards: SwipeCard[];
+  /**
+   * Den synliga leken = `allCards` filtrerad på `mediaFilter`. Det är den här
+   * användaren swipar; annonskort visas oavsett filter. Håller page_client
+   * oförändrat — det läser bara `cards`.
+   */
   cards: SwipeCard[];
   page: number;
   /**
@@ -119,6 +152,7 @@ export type SoloDeckState = {
   error: string | null;
   mode: "group" | "individual";
   group: GroupInfo | null;
+  /** Visningsfilter (film/serie/båda). Ändras lokalt utan omhämtning. */
   mediaFilter: SwipeMediaFilter;
   ready: boolean;
 };
@@ -132,6 +166,7 @@ export type GroupDeckState = {
 };
 
 const emptySolo = (): SoloDeckState => ({
+  allCards: [],
   cards: [],
   page: 1,
   nextTmdbPage: 1,
@@ -198,21 +233,25 @@ export function getGroupDeckSnapshot(code: string): GroupDeckState {
 }
 
 /**
- * Kastar kortleken och hämtar om den. Anropas när film/serie-filtret ändrats i
- * profilen — filtret ägs server-side (Profile.swipeMediaFilter), så däcket kan
- * inte längre lita på sina redan hämtade kort.
+ * Byter visningsfilter (film/serie/båda) UTAN omhämtning. Leken hämtas alltid
+ * som "båda" (soloRecsUrl ?all=1), så ett byte är bara en omfiltrering av det
+ * som redan finns. Tidigare kastade det här hela leken och körde om ~4 s
+ * recs-pipeline vid varje pill-tryck.
  */
-export function applySoloMediaFilterChange(filter: SwipeMediaFilter) {
-  if (filter === soloState.mediaFilter && soloState.ready) return;
-  clearPersistedSoloDeck(); // sparad lek har fel medietyp nu
-  soloState = { ...emptySolo(), mediaFilter: filter };
+export function setSoloDisplayFilter(filter: SwipeMediaFilter) {
+  if (filter === soloState.mediaFilter) return;
+  soloState = nextSolo({ mediaFilter: filter });
   emit();
-  void loadSoloPage(1, true);
+  persistSoloDeckSoon(); // spara vyn så nästa öppning börjar rätt
+  // Bytet kan blotta att den valda typen har få kort kvar — fyll på.
+  if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
 }
 
 function soloRecsUrl(page: number, fromTmdbPage?: number): string {
   const from = fromTmdbPage && fromTmdbPage > 1 ? `&from=${fromTmdbPage}` : "";
-  return `/api/recs/unified?page=${page}${from}`;
+  // all=1: hämta alltid båda medietyperna. Film/serie-filtret appliceras lokalt
+  // (visibleCards), så pill-bytet aldrig kastar leken eller kör om pipelinen.
+  return `/api/recs/unified?page=${page}&all=1${from}`;
 }
 
 export function setSwipeBackgroundPrefetch(enabled: boolean) {
@@ -221,7 +260,7 @@ export function setSwipeBackgroundPrefetch(enabled: boolean) {
 }
 
 function patchSolo(patch: Partial<SoloDeckState>) {
-  soloState = { ...soloState, ...patch };
+  soloState = nextSolo(patch);
   emit();
 }
 
@@ -274,9 +313,8 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     }
 
     const mapped = withAdsMaybe(mapUnifiedItems(data.items), targetPage);
-    soloState = {
-      ...soloState,
-      cards: replace ? mapped : appendUnique(soloState.cards, mapped),
+    soloState = nextSolo({
+      allCards: replace ? mapped : appendUnique(soloState.allCards, mapped),
       page: targetPage,
       nextTmdbPage: data.nextTmdbPage ?? soloState.nextTmdbPage + 1,
       // Servern gräver nu upp till 40 TMDB-sidor innan den ger upp, så en tom
@@ -286,10 +324,11 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       error: null,
       mode: data.mode,
       group: data.group,
-      // Servern rapporterar vilket filter den faktiskt använde (från profilen).
-      mediaFilter: data.mediaFilter ?? soloState.mediaFilter,
+      // Bara vid replace (första laddning) tas profilens filter som default-vy.
+      // En bakgrundsrevalidering ska INTE nollställa användarens pill-val.
+      mediaFilter: replace ? data.mediaFilter ?? soloState.mediaFilter : soloState.mediaFilter,
       ready: true,
-    };
+    });
     emit();
     persistSoloDeckSoon();
     if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
@@ -338,26 +377,34 @@ export async function ensureSoloDeck(opts?: { force?: boolean }) {
 export async function retrySoloDeck() {
   clearPersistedSoloDeck();
   hydratedNeedsRevalidate = false;
-  soloState = { ...emptySolo(), mediaFilter: soloState.mediaFilter };
+  soloState = nextSolo({ ...emptySolo(), mediaFilter: soloState.mediaFilter });
   emit();
   await loadSoloPage(1, true);
 }
 
 export function popSoloCard() {
-  soloState = { ...soloState, cards: soloState.cards.slice(1) };
+  // Swipen agerar alltid på översta SYNLIGA kortet. Ta bort just det ur hela
+  // leken (id är unikt) — inte allCards[0], som kan vara av den dolda typen.
+  const top = soloState.cards[0];
+  if (!top) return;
+  soloState = nextSolo({ allCards: soloState.allCards.filter((c) => c.id !== top.id) });
   emit();
   persistSoloDeckSoon();
   if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
 }
 
 export function unshiftSoloCard(card: SwipeCard) {
-  soloState = { ...soloState, cards: [card, ...soloState.cards] };
+  // Ångra: lägg tillbaka främst. Matchar kortet det aktiva filtret dyker det upp
+  // som topp igen; annars ligger det kvar i leken tills filtret släpper fram det.
+  soloState = nextSolo({ allCards: [card, ...soloState.allCards.filter((c) => c.id !== card.id)] });
   emit();
   persistSoloDeckSoon();
 }
 
 export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
-  soloState = { ...soloState, cards: fn(soloState.cards) };
+  // Berikningen (details/providers) matchar per id, så den körs mot HELA leken —
+  // annars skulle ett kort av den dolda typen tappa sin berikning.
+  soloState = nextSolo({ allCards: fn(soloState.allCards) });
   emit();
   persistSoloDeckSoon();
 }

@@ -103,6 +103,14 @@ export type UnifiedRecsParams = {
    * som alltid börjar om från början.
    */
   fromTmdbPage?: number;
+  /**
+   * Solo-däcket: hämta ALLTID både film och serier oavsett profilens
+   * swipeMediaFilter, så klienten kan filtrera lokalt utan att kasta leken och
+   * köra om pipelinen vid varje film/serie-byte. Det rapporterade `mediaFilter`
+   * är fortfarande profilens värde (klientens default-vy). Cron och grupp sätter
+   * INTE detta — de ska respektera sitt filter.
+   */
+  forceAllMedia?: boolean;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -330,7 +338,7 @@ async function fetchGroupWatchlistCandidates(opts: {
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1, fromTmdbPage } = params;
+  const { uid, region, locale, groupCode, page = 1, fromTmdbPage, forceAllMedia = false } = params;
 
   try {
     // 1. Hämta data från databasen direkt via Prisma
@@ -369,8 +377,12 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const mediaFilter: SwipeMediaFilter = isGroup
       ? normalizeSwipeMediaFilter(groupRow?.mediaFilter)
       : normalizeSwipeMediaFilter(profile.swipeMediaFilter);
-    const wantMovie = mediaFilter === "both" || mediaFilter === "movie";
-    const wantTv = mediaFilter === "both" || mediaFilter === "tv";
+    // forceAllMedia (solo-däcket): hämta båda oavsett filter så klienten kan
+    // filtrera lokalt. `mediaFilter` ovan rapporteras ändå som profilens värde,
+    // så klientens default-vy stämmer. Grupp/cron sätter inte flaggan.
+    const effectiveFilter: SwipeMediaFilter = forceAllMedia && !isGroup ? "both" : mediaFilter;
+    const wantMovie = effectiveFilter === "both" || effectiveFilter === "movie";
+    const wantTv = effectiveFilter === "both" || effectiveFilter === "tv";
     // Alla medlemsprofiler (för providers, genrer, ålder och seeds).
     const memberProfiles = isGroup
       ? groupMembers
@@ -643,7 +655,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     }
 
     const seeds = buildSeeds(tasteInput).filter(
-      (s) => mediaFilter === "both" || s.type === mediaFilter,
+      (s) => effectiveFilter === "both" || s.type === effectiveFilter,
     );
 
     // Dedupe + index

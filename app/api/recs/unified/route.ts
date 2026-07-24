@@ -33,8 +33,13 @@ export async function GET(req: Request) {
   const fromRaw = Number(reqUrl.searchParams.get("from") || "0");
   const fromTmdbPage = Number.isFinite(fromRaw) && fromRaw > 0 ? Math.floor(fromRaw) : undefined;
 
-  // Film/serie-filtret läses server-side: solo från Profile.swipeMediaFilter,
-  // grupp från Group.mediaFilter. Klienten skickar det inte längre.
+  // Solo-däcket skickar ?all=1: hämta båda medietyperna oavsett profilens
+  // filter, så film/serie-bytet blir en lokal filtrering utan omhämtning.
+  // Grupp ignorerar flaggan (den har sitt eget filter).
+  const forceAllMedia = reqUrl.searchParams.get("all") === "1";
+
+  // Film/serie-filtret läses annars server-side: solo från
+  // Profile.swipeMediaFilter, grupp från Group.mediaFilter.
   const result = await computeUnifiedRecs({
     uid,
     region,
@@ -42,6 +47,7 @@ export async function GET(req: Request) {
     groupCode,
     page: pageNum,
     fromTmdbPage,
+    forceAllMedia,
   });
   if (!result.ok) return fail(result.message, result.status);
   return NextResponse.json(result);

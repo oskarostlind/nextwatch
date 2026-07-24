@@ -5,6 +5,7 @@ import MatchOverlay, { type GroupMatchItem } from "../ui/MatchOverlay";
 import RatingModal, { type RatingModalItem } from "./RatingModal";
 import { useGroupMatchPolling } from "../../../lib/useGroupMatch";
 import { GROUP_VOTED_EVENT } from "../../../lib/groupVoteEvent";
+import { markTitleRated } from "../../../lib/swipeDeckStore";
 
 /* ---------- Betygsätt tidigare gruppmatchningar (vid app-öppning) ---------- */
 
@@ -54,6 +55,7 @@ function usePendingMatchRatings(liveMatchOpen: boolean) {
   function rate(rating: number) {
     if (!current) return;
     setSaving(true);
+    markTitleRated(current.tmdbId, current.tmdbType);
     void fetch("/api/ratings/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

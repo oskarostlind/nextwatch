@@ -18,6 +18,7 @@ import {
   type WatchProviders as Providers,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
+import { markTitleRated } from "@/lib/swipeDeckStore";
 
 type Item = {
   id: number;
@@ -219,6 +220,8 @@ export default function DiscoverPage() {
     const it = rateTarget;
     if (!it) return;
     setRateSaving(true);
+    // Betygsatt titel ska aldrig tillbaka i swipen — rensa ur ev. cachad lek.
+    markTitleRated(it.id, it.mediaType);
     void fetch("/api/ratings/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

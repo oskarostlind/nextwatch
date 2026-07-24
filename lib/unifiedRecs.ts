@@ -446,9 +446,18 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     const watchKeys = new Set<string>();
     for (const r of exclusionRatings) {
+      const key = `${r.mediaType}_${r.tmdbId}`;
+      // Explicit betyg (1–10) = titeln är sedd OCH bedömd → aldrig tillbaka i
+      // swipen. Recycle-fönstret är till för rena förbi-svepningar (nope/like
+      // utan betyg) som får en ny chans efter ett tag — inte för något man satt
+      // en siffra på. Utan det här dök betygsatta filmer upp igen efter 14 dagar.
+      if (r.rating != null) {
+        watchKeys.add(key);
+        continue;
+      }
       const recycle = recycleByUser.get(r.userId) ?? 14;
       if (isExcludedByRecycle(r.decidedAt, recycle)) {
-        watchKeys.add(`${r.mediaType}_${r.tmdbId}`);
+        watchKeys.add(key);
       }
     }
     // Watchlist-exkludering.

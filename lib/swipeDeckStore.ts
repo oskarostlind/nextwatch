@@ -1,6 +1,7 @@
 import {
   filterSwipeCards,
   mapUnifiedItems,
+  markSeen,
   readGroupCodeFromCookie,
   type SwipeCard,
 } from "@/lib/swipeDeck";
@@ -407,6 +408,31 @@ export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
   soloState = nextSolo({ allCards: fn(soloState.allCards) });
   emit();
   persistSoloDeckSoon();
+}
+
+/**
+ * Tar bort en titel ur solo-leken (och cachen) direkt. Anropas när en titel
+ * betygsätts från en ANNAN yta än swipen (Betyg-fliken, watchlist, discover):
+ * servern exkluderar den vid nästa färska hämtning, men den cachade leken kan
+ * fortfarande innehålla den — det var därför nyss betygsatta filmer dök upp i
+ * swipe-flödet. No-op om kortet inte finns i leken.
+ */
+export function dropSoloCard(tmdbId: number, mediaType: SwipeCard["mediaType"]) {
+  const id = `${mediaType}_${tmdbId}`;
+  if (!soloState.allCards.some((c) => c.id === id)) return;
+  soloState = nextSolo({ allCards: soloState.allCards.filter((c) => c.id !== id) });
+  emit();
+  persistSoloDeckSoon();
+}
+
+/**
+ * Anropas när en titel betygsätts utanför swipen. Markerar den sedd (så en
+ * hydrerad lek filtrerar bort den, 24h TTL — räcker tills en färsk hämtning som
+ * exkluderar betygsatta permanent) OCH tar bort den ur den nuvarande leken.
+ */
+export function markTitleRated(tmdbId: number, mediaType: SwipeCard["mediaType"]) {
+  markSeen(`${mediaType}_${tmdbId}`);
+  dropSoloCard(tmdbId, mediaType);
 }
 
 export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) {

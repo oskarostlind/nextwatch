@@ -30,6 +30,15 @@ const GROUP_IDLE_HOURS = 24;
  */
 const VERIFICATION_GRACE_DAYS = 7;
 
+/**
+ * Övergivna gäster rensas efter så här länge utan aktivitet. En gäst blir en
+ * User+Profile först vid "Hoppa in som gäst" (app/api/profile/guest); utan
+ * rensning hopar sig raderna. 30 dagar = en gäst som återkommer inom en månad
+ * behåller sin swipe-historik, resten städas. Cascade i schemat tar med
+ * ratings, watchlist m.m.
+ */
+const GUEST_IDLE_DAYS = 30;
+
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET ?? "";
   if (!secret) return false;
@@ -48,6 +57,7 @@ export async function GET(req: Request) {
   const now = new Date();
   const groupCutoff = new Date(now.getTime() - GROUP_IDLE_HOURS * 60 * 60 * 1000);
   const verificationCutoff = new Date(now.getTime() - VERIFICATION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+  const guestCutoff = new Date(now.getTime() - GUEST_IDLE_DAYS * 24 * 60 * 60 * 1000);
 
   try {
     // Grupper: senaste aktivitet = senaste rösten, annars senaste medlem som
@@ -81,6 +91,36 @@ export async function GET(req: Request) {
       where: { expiresAt: { lt: verificationCutoff } },
     });
 
+    // Övergivna gäster. Signaturen är medvetet konservativ:
+    //   - varken e-post eller Apple → inget riktigt konto
+    //   - profilens displayName = 'Gäst' → har INTE gått igenom onboardingen
+    //     (som sätter ett riktigt namn). Utan detta skulle en fullt onboardad
+    //     användare utan registrerad e-post råka flaggas.
+    //   - inaktiv > 30 dagar (last_active_at, annars created_at)
+    //   - inga sociala band: inte med i någon grupp, inga vänner eller
+    //     vänförfrågningar. En gäst mitt i något ska inte försvinna.
+    // Räkna och logga FÖRST — aldrig en tyst massradering (samma princip som
+    // resten av appen). Cascade i schemat städar ratings/watchlist/tokens.
+    const guestWhere = `
+      u."email" IS NULL
+      AND u."apple_sub" IS NULL
+      AND EXISTS (SELECT 1 FROM "profiles" p WHERE p."user_id" = u."id" AND p."display_name" = 'Gäst')
+      AND COALESCE(u."last_active_at", u."created_at") < $1
+      AND NOT EXISTS (SELECT 1 FROM "group_members" gm WHERE gm."user_id" = u."id")
+      AND NOT EXISTS (SELECT 1 FROM "friendships" f WHERE f."user_id" = u."id" OR f."friend_id" = u."id")
+      AND NOT EXISTS (SELECT 1 FROM "friend_requests" fr WHERE fr."from_user_id" = u."id" OR fr."to_user_id" = u."id")
+    `;
+    const guestPreview = await prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT COUNT(*)::bigint AS count FROM "users" u WHERE ${guestWhere}`,
+      guestCutoff,
+    );
+    const guestCount = Number(guestPreview[0]?.count ?? 0);
+    console.log(`[cron/cleanup] rensar ${guestCount} övergivna gäster (inaktiva > ${GUEST_IDLE_DAYS} dagar).`);
+    const guestsDeleted =
+      guestCount > 0
+        ? await prisma.$executeRawUnsafe(`DELETE FROM "users" u WHERE ${guestWhere}`, guestCutoff)
+        : 0;
+
     // PushToken städas inte här: lib/push.ts raderar tokens redan när Apple
     // svarar 410/BadDeviceToken, vilket är den enda pålitliga signalen om att
     // en enhet är borta.
@@ -92,6 +132,7 @@ export async function GET(req: Request) {
         expiredInvites: expiredInvites.count,
         respondedInvites: respondedInvites.count,
         verifications: verifications.count,
+        guests: guestsDeleted,
       },
     });
   } catch (e) {

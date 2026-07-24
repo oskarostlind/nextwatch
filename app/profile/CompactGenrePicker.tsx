@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Chip } from "@/app/components/ui/kit";
 import { ALL_GENRES_SV } from "./profileGenres";
 
@@ -36,6 +37,16 @@ export default function CompactGenrePicker({
     onChange(selected.filter((g) => g !== genre));
   };
 
+  // Esc stänger arket.
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [open]);
+
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -56,29 +67,65 @@ export default function CompactGenrePicker({
       )}
 
       {available.length > 0 ? (
-        <div className="relative">
+        <>
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => setOpen(true)}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/10"
           >
             + Lägg till genre
           </button>
-          {open ? (
-            <div className="absolute z-20 mt-1 max-h-48 w-full min-w-[12rem] overflow-auto rounded-xl border border-white/10 bg-neutral-950/95 p-1 shadow-lg backdrop-blur">
-              {available.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  className="block w-full rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10"
-                  onClick={() => add(g)}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+
+          {/*
+            Tidigare en absolut-positionerad meny: klipptes av föräldern på
+            mobil och hade små tryckytor. Nu ett ark via portal (fixed → fångas
+            inte av overflow), förankrat i botten på mobil och centrerat på
+            större skärmar, med stora rader.
+          */}
+          {open && typeof document !== "undefined"
+            ? createPortal(
+                <div className="fixed inset-0 z-[1000] flex items-end justify-center sm:items-center">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => setOpen(false)}
+                  />
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Lägg till genre — ${label}`}
+                    className="relative flex max-h-[70vh] w-full flex-col rounded-t-2xl border border-white/10 bg-neutral-900 pb-[env(safe-area-inset-bottom)] shadow-xl sm:w-[min(28rem,94vw)] sm:rounded-2xl"
+                  >
+                    <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                      <span className="text-sm font-semibold text-white/90">Lägg till genre</span>
+                      <button
+                        type="button"
+                        aria-label="Stäng"
+                        onClick={() => setOpen(false)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-neutral-400 transition hover:bg-white/10 hover:text-white"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 overflow-auto p-3">
+                      {available.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-sm text-white/85 transition hover:bg-white/10 active:bg-white/15"
+                          onClick={() => add(g)}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+        </>
       ) : null}
     </div>
   );

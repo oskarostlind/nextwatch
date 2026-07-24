@@ -16,6 +16,7 @@ import { clearClientCache } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import CompactGenrePicker from "./CompactGenrePicker";
+import GenreSuggestions from "./GenreSuggestions";
 import TasteProfilePanel from "./TasteProfilePanel";
 import { toSvGenres } from "./profileGenres";
 
@@ -575,6 +576,15 @@ export default function ProfileClient({ initial }: Props) {
                   <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
                   <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
                 </div>
+                <GenreSuggestions
+                  favoriteGenres={favoriteGenres}
+                  dislikedGenres={dislikedGenres}
+                  onAddLike={(g) => {
+                    setFavoriteGenres((old) => (old.includes(g) ? old : [...old, g]));
+                    setDislikedGenres((old) => old.filter((x) => x !== g));
+                  }}
+                  onRemoveDislike={(g) => setDislikedGenres((old) => old.filter((x) => x !== g))}
+                />
                 <CompactGenrePicker
                   label="Gillar"
                   tone="like"

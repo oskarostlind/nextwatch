@@ -36,7 +36,7 @@ import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/clien
 import RatingModal from "@/app/components/client/RatingModal";
 import GuideOverlay from "@/app/components/client/GuideOverlay";
 import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
-import { hasSeenGuide } from "@/lib/userGuide";
+import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 
 /* ---------- types ---------- */
 
@@ -396,9 +396,15 @@ export default function SwipePageClient() {
     const top = cards[0];
     if (!top || top.kind === "ad") return;
     if (hasSeenGuide("swipe")) return;
-    const t = window.setTimeout(() => setSwipeGuideOpen(true), 700);
+    const t = window.setTimeout(() => {
+      if (tryAcquireGuide("swipe")) setSwipeGuideOpen(true);
+    }, 700);
     return () => window.clearTimeout(t);
   }, [feedLoading, cards, ratePrompt]);
+
+  // Släpp låset om sidan lämnas medan guiden är öppen (egen unmount-effekt, inte
+  // kopplad till öppna-villkorets täta deps).
+  useEffect(() => () => releaseGuide("swipe"), []);
 
   useEffect(() => {
     if (mode === "group" && group?.code && !groupRefreshAttempted) {
@@ -788,7 +794,10 @@ export default function SwipePageClient() {
         guideId="swipe"
         steps={SWIPE_GUIDE_STEPS}
         open={swipeGuideOpen}
-        onClose={() => setSwipeGuideOpen(false)}
+        onClose={() => {
+          setSwipeGuideOpen(false);
+          releaseGuide("swipe");
+        }}
       />
     </div>
   );

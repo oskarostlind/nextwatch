@@ -22,6 +22,7 @@ import {
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
 import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
 import { getCached, setCached } from '@/lib/clientCache';
+import { markTitleRated } from '@/lib/swipeDeckStore';
 import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
 
 type WatchItem = {
@@ -354,6 +355,9 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       const it = editing;
       if (!it) return;
       setEditSaving(true);
+      // Betygsatt titel ska aldrig tillbaka i swipen — ta bort ur den ev. cachade
+      // leken direkt (servern exkluderar den vid nästa hämtning).
+      markTitleRated(it.tmdbId, it.mediaType);
       void fetch('/api/ratings/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -453,6 +457,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
     const it = rateFromWl;
     if (!it) return;
     setRateWlSaving(true);
+    markTitleRated(it.id, it.tmdbType);
     void fetch('/api/ratings/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

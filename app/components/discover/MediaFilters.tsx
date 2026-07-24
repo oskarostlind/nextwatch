@@ -30,6 +30,14 @@ export const WATCHLIST_SORT_OPTIONS = [
   { value: "year", label: "Nyast" },
 ] as const;
 
+/** Sortering för Betyg-fliken. Betygsraderna saknar popularitet/röstsnitt,
+ *  men bär användarens EGET betyg — det är den intressanta sorteringen här. */
+export const RATED_SORT_OPTIONS = [
+  { value: "userRating", label: "Högst betyg" },
+  { value: "year", label: "Nyast" },
+  { value: "title", label: "Titel A–Ö" },
+] as const;
+
 export type MediaTypeFilter = "movie" | "tv";
 
 type Props = {
@@ -39,8 +47,8 @@ type Props = {
   onSortChange: (s: string) => void;
   genres: string[];
   onToggleGenre: (id: string) => void;
-  /** discover = TMDB sort keys; watchlist = client sort keys */
-  mode?: "discover" | "watchlist";
+  /** discover = TMDB sort keys; watchlist/rated = client sort keys */
+  mode?: "discover" | "watchlist" | "rated";
   layoutId?: string;
 };
 
@@ -58,6 +66,8 @@ export default function MediaFilters({
   const sortOptions =
     mode === "watchlist"
       ? WATCHLIST_SORT_OPTIONS
+      : mode === "rated"
+      ? RATED_SORT_OPTIONS
       : DISCOVER_SORT_OPTIONS.filter((o) => {
           if (type === "movie") return o.value !== "first_air_date.desc";
           return o.value !== "primary_release_date.desc";

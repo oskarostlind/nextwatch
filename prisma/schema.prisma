@@ -120,6 +120,9 @@ model Profile {
   /// movie | tv | both — vilken typ av titlar solo-swipen visar (standard: both).
   /// Grupper har sitt eget filter på Group.mediaFilter.
   swipeMediaFilter String @default("both") @map("swipe_media_filter")
+  /// Visa barn-/familjeinnehåll (TV-Kids-genren) i förslagen. Av som standard:
+  /// vuxna vill sällan ha t.ex. My Little Pony i flödet. Se lib/unifiedRecs.ts.
+  showKidsContent Boolean @default(false) @map("show_kids_content")
 
   // Notisinställningar (per användare). Default: allt på.
   notifyDailyRecs      Boolean @default(true) @map("notify_daily_recs")

@@ -18,6 +18,7 @@
 // Webben: no-op.
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 
 const STORE_KEY = "nw_session_token";
@@ -36,6 +37,7 @@ function diag(...args: unknown[]) {
 }
 
 export default function SessionPersistence() {
+  const router = useRouter();
   useEffect(() => {
     const native = Capacitor.isNativePlatform();
     diag("mount, isNativePlatform =", native);
@@ -54,16 +56,19 @@ export default function SessionPersistence() {
         const path = window.location.pathname;
         const onLoggedOutView = path === "/" || path.startsWith("/auth");
         const alreadyReloaded = sessionStorage.getItem(RELOAD_GUARD) === "1";
-        const reloadOnce = (why: string) => {
+        const goToApp = (why: string) => {
           if (alreadyReloaded) {
-            diag("reload redan gjord denna kallstart — hoppar", why);
+            diag("navigering redan gjord denna kallstart — hoppar", why);
             return;
           }
           sessionStorage.setItem(RELOAD_GUARD, "1");
-          diag("laddar om:", why);
-          // Kort fördröjning så WKWebView hinner spegla den (åter)satta cookien
-          // till sin store innan omladdningens första request går ut.
-          setTimeout(() => window.location.reload(), 300);
+          diag("navigerar till /swipe (klientnav):", why);
+          // KLIENTNAV, inte window.location.reload(): WKWebView skickar INTE
+          // cookien på top-level-dokumentnavigering ens när den finns i storen
+          // — bevisat av loggarna (authed=true men reload landade ändå på
+          // login). En RSC-fetch via routern bär däremot cookien (samma som
+          // /api/profile/exists), så servern renderar /swipe inloggat.
+          router.replace("/swipe");
         };
 
         const existsRes = await fetch("/api/profile/exists", { cache: "no-store" });
@@ -92,7 +97,7 @@ export default function SessionPersistence() {
           // Fullt inloggad men SSR visade ändå landningen → cookie-racet ovan.
           // Ladda om: nu är cookien synkad, så SSR redirectar in i appen (/swipe).
           if (exists.authed && onLoggedOutView && !cancelled) {
-            reloadOnce("inloggad men fast på landningen (SSR-race)");
+            goToApp("inloggad men fast på landningen (SSR-race)");
           }
           return;
         }
@@ -113,7 +118,7 @@ export default function SessionPersistence() {
         diag("session/restore →", restoreRes.status);
 
         if (restoreRes.ok) {
-          reloadOnce("session återställd från spegling");
+          goToApp("session återställd från spegling");
         } else if (restoreRes.status === 410) {
           // Kontot raderat — släng speglingen så vi inte försöker igen.
           await Preferences.remove({ key: STORE_KEY });
@@ -128,7 +133,7 @@ export default function SessionPersistence() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   return null;
 }

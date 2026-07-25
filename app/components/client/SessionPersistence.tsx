@@ -21,6 +21,9 @@ import { useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 
 const STORE_KEY = "nw_session_token";
+// Per WebView-process (sessionStorage nollställs vid ny kallstart): högst en
+// omladdning per appstart så en envis race aldrig blir en reload-loop.
+const RELOAD_GUARD = "nw_sp_reloaded";
 
 // Tillfällig diagnostik (869e8huma: "tvingas logga in varje öppning"). Flödet
 // ser korrekt ut i kod och Vercel-loggarna visar att /api/session/restore ALDRIG
@@ -43,30 +46,60 @@ export default function SessionPersistence() {
       try {
         const { Preferences } = await import("@capacitor/preferences");
 
-        const existsRes = await fetch("/api/profile/exists", { cache: "no-store" });
-        const exists = (await existsRes.json().catch(() => ({}))) as { hasProfile?: boolean };
-        if (cancelled) return;
-        diag("profile/exists →", existsRes.status, "hasProfile =", exists.hasProfile);
-
-        if (exists.hasProfile) {
-          // Inloggad/gäst med profil: håll speglingen färsk.
-          const tokenRes = await fetch("/api/session/token", { cache: "no-store" });
-          if (!tokenRes.ok) {
-            diag("session/token misslyckades:", tokenRes.status);
+        // Är vi på en utloggad vy (landning/auth)? WKWebView:ns kallstart hinner
+        // ladda sidan innan cookie-storen synkats från disk, så SSR-requesten kan
+        // sakna nw_uid och rendera landningen fast användaren egentligen är
+        // inloggad. Reload-guarden (sessionStorage, nollställs vid ny WebView-
+        // process) håller det till ETT omladdningsförsök per kallstart.
+        const path = window.location.pathname;
+        const onLoggedOutView = path === "/" || path.startsWith("/auth");
+        const alreadyReloaded = sessionStorage.getItem(RELOAD_GUARD) === "1";
+        const reloadOnce = (why: string) => {
+          if (alreadyReloaded) {
+            diag("reload redan gjord denna kallstart — hoppar", why);
             return;
           }
-          const j = (await tokenRes.json()) as { ok?: boolean; token?: string };
-          if (j.ok && j.token) {
-            await Preferences.set({ key: STORE_KEY, value: j.token });
-            diag("token speglad i Preferences (len", j.token.length, ")");
+          sessionStorage.setItem(RELOAD_GUARD, "1");
+          diag("laddar om:", why);
+          // Kort fördröjning så WKWebView hinner spegla den (åter)satta cookien
+          // till sin store innan omladdningens första request går ut.
+          setTimeout(() => window.location.reload(), 300);
+        };
+
+        const existsRes = await fetch("/api/profile/exists", { cache: "no-store" });
+        const exists = (await existsRes.json().catch(() => ({}))) as {
+          hasProfile?: boolean;
+          authed?: boolean;
+        };
+        if (cancelled) return;
+        diag("profile/exists →", existsRes.status, "hasProfile =", exists.hasProfile, "authed =", exists.authed);
+
+        if (exists.hasProfile) {
+          // Cookien är giltig NU. Håll speglingen färsk.
+          const tokenRes = await fetch("/api/session/token", { cache: "no-store" });
+          if (tokenRes.ok) {
+            const j = (await tokenRes.json()) as { ok?: boolean; token?: string };
+            if (j.ok && j.token) {
+              await Preferences.set({ key: STORE_KEY, value: j.token });
+              diag("token speglad i Preferences (len", j.token.length, ")");
+            } else {
+              diag("token-svar utan token:", j.ok);
+            }
           } else {
-            diag("token-svar utan token:", j.ok);
+            diag("session/token misslyckades:", tokenRes.status);
+          }
+
+          // Fullt inloggad men SSR visade ändå landningen → cookie-racet ovan.
+          // Ladda om: nu är cookien synkad, så SSR redirectar in i appen (/swipe).
+          if (exists.authed && onLoggedOutView && !cancelled) {
+            reloadOnce("inloggad men fast på landningen (SSR-race)");
           }
           return;
         }
 
-        // Ingen profil på cookien — antingen ny användare eller ITP-raderad
-        // session. Finns en spegling: försök återställa.
+        // Ingen profil på cookien — antingen ny användare eller så klobbrade
+        // middleware sessionen med en anonym uid när cookien saknades vid
+        // kallstart. Finns en spegling: återställ den riktiga sessionen.
         const stored = await Preferences.get({ key: STORE_KEY });
         diag("ingen profil på cookien; Preferences-token finns =", Boolean(stored.value));
         if (cancelled || !stored.value) return;
@@ -80,9 +113,7 @@ export default function SessionPersistence() {
         diag("session/restore →", restoreRes.status);
 
         if (restoreRes.ok) {
-          // Full reload så server-gates (/, /swipe) ser den återställda cookien.
-          diag("återställd, laddar om");
-          window.location.reload();
+          reloadOnce("session återställd från spegling");
         } else if (restoreRes.status === 410) {
           // Kontot raderat — släng speglingen så vi inte försöker igen.
           await Preferences.remove({ key: STORE_KEY });

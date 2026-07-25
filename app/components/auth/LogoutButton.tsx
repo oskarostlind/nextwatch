@@ -3,6 +3,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
 import { clearClientCache } from "@/lib/clientCache";
 
 type Props = { className?: string };
@@ -16,6 +17,17 @@ export default function LogoutButton({ className }: Props) {
     setBusy(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      // Native: släng den speglade sessionstoken, annars återställer
+      // SessionPersistence sessionen vid nästa mount och utloggningen "studsar
+      // tillbaka".
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { Preferences } = await import("@capacitor/preferences");
+          await Preferences.remove({ key: "nw_session_token" });
+        } catch {
+          /* best-effort */
+        }
+      }
     } finally {
       // Kortlek och listor är cachade lokalt — nästa person på samma enhet ska
       // inte se föregående användares watchlist.

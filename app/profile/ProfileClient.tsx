@@ -15,6 +15,7 @@ import { getBillingStatus } from "@/lib/billingStore";
 import { clearClientCache } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
+import { retrySoloDeck } from "@/lib/swipeDeckStore";
 import CompactGenrePicker from "./CompactGenrePicker";
 import GenreSuggestions from "./GenreSuggestions";
 import TasteProfilePanel from "./TasteProfilePanel";
@@ -408,6 +409,14 @@ export default function ProfileClient({ initial }: Props) {
         return;
       }
       const message = "Sparat.";
+
+      // Tjänster/genrer/favoriter påverkar rekommendationerna. Den cachade
+      // solo-kortleken (24h TTL) byggdes med de GAMLA värdena, så den måste
+      // slängas och hämtas om — annars låg t.ex. titlar för en nyss avmarkerad
+      // tjänst kvar i swipe-flödet i upp till ett dygn (det var därför Disney+
+      // dök upp fast tjänsten tagits bort). retrySoloDeck rensar cachen och
+      // förladdar en färsk lek med de nya inställningarna.
+      void retrySoloDeck();
 
       const unamePayload = username.trim() === "" ? null : username.trim();
       const ures = await fetch("/api/user/username/update", {

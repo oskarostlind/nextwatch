@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Send, Star } from "lucide-react";
 import { PageHeader, Button, Note } from "../components/ui/kit";
@@ -92,6 +92,11 @@ export default function DiscoverPage() {
   const [sort, setSort] = useState("popularity.desc");
   const [genres, setGenres] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  // Sentinel högst upp i listan. scrollIntoView scrollar den container som
+  // faktiskt scrollar (discover-mainen har egen overflow-y-auto) — så ett
+  // sidbyte tar dig till toppen i stället för att lämna dig kvar på botten.
+  const topRef = useRef<HTMLDivElement>(null);
+  const scrollToTop = () => topRef.current?.scrollIntoView({ block: "start" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -308,6 +313,7 @@ export default function DiscoverPage() {
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
+      <div ref={topRef} />
       <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
 
       <MediaFilters
@@ -354,11 +360,24 @@ export default function DiscoverPage() {
 
       {!isSearching && (
         <div className="mt-4 flex items-center justify-center gap-2">
-          <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setPage((p) => Math.max(1, p - 1));
+              scrollToTop();
+            }}
+            disabled={page === 1}
+          >
             ← Föregående
           </Button>
           <span className="text-sm text-neutral-400">Sida {page}</span>
-          <Button variant="secondary" onClick={() => setPage((p) => p + 1)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setPage((p) => p + 1);
+              scrollToTop();
+            }}
+          >
             Nästa →
           </Button>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings, Sparkles } from "lucide-react";
+import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings, Sparkles, X } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
 import GroupSettingsModal from "./GroupSettingsModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
@@ -138,6 +138,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     setCode(initialCode);
   }, [initialCode]);
 
+  // "Inbjuden"-chippen lever i lokalt state. Utan den här nollställningen låg
+  // den kvar när man lämnade en grupp och skapade/gick med i en ny (samma
+  // komponentinstans återanvänds vid router.refresh) — då såg det ut som att
+  // vännerna redan var inbjudna i den nya gruppen fast de inte var det.
+  useEffect(() => {
+    setInvitedIds(new Set());
+  }, [code]);
+
   const members: PublicMember[] =
     social.membersReady && social.groupCode === code
       ? social.members.map((m) => ({
@@ -255,6 +263,20 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     void refreshSocial();
   };
 
+  const removeMember = async (userId: string) => {
+    setError(null);
+    const result = await apiCall<{ ok?: boolean; message?: string }>("/api/group/remove", { userId });
+    if (result && "error" in result) {
+      setError(result.error);
+      return;
+    }
+    if (result && "ok" in result && result.ok === false) {
+      setError(result.message ?? "Kunde inte ta bort medlemmen.");
+      return;
+    }
+    void refreshSocial();
+  };
+
   if (code) {
     return (
       <div className="space-y-4">
@@ -324,9 +346,19 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
               >
                 <span className="font-medium text-white/90">{m.displayName ?? m.username ?? "Okänd"}</span>
-                {meUserId === m.userId && (
+                {meUserId === m.userId ? (
                   <span className="text-xs text-white/40">Du</span>
-                )}
+                ) : isCreator ? (
+                  <button
+                    type="button"
+                    aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
+                    title="Ta bort ur gruppen"
+                    onClick={() => void removeMember(m.userId)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -336,9 +336,14 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   // Betyg hämtas första gången fliken öppnas — och även vid cache-träff, så
   // listan revalideras. Tidigare låg en identisk kopia av hämtningen här.
   const ratedFetchedRef = useRef(false);
+  // Sentinel högst upp — scrollIntoView scrollar den container som faktiskt
+  // scrollar (sidans main), så ett flikbyte tar dig till toppen av den nya
+  // listan i stället för att lämna dig kvar där du stod i den förra.
+  const topRef = useRef<HTMLDivElement>(null);
   const openTab = useCallback(
     (next: Tab) => {
       setTab(next);
+      topRef.current?.scrollIntoView({ block: "start" });
       if (next === 'ratings' && !ratedFetchedRef.current && !ratedLoading) {
         ratedFetchedRef.current = true;
         // Visa cachat direkt så fliken inte står tom medan hämtningen pågår.
@@ -543,6 +548,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
 
   return (
     <>
+      <div ref={topRef} />
       {/* Filmtips från vänner — visas bara när det finns några. */}
       <SharedTipsInbox onAdded={refetchWatchlist} />
 

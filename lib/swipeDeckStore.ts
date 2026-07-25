@@ -160,6 +160,10 @@ export type SoloDeckState = {
 
 export type GroupDeckState = {
   cards: SwipeCard[];
+  page: number;
+  /** TMDB-sida nästa hämtning börjar på (serverns nextTmdbPage). Se solo-motsvarigheten. */
+  nextTmdbPage: number;
+  hasMore: boolean;
   loading: boolean;
   error: string | null;
   mediaFilter: SwipeMediaFilter;
@@ -182,6 +186,9 @@ const emptySolo = (): SoloDeckState => ({
 
 const emptyGroup = (): GroupDeckState => ({
   cards: [],
+  page: 1,
+  nextTmdbPage: 1,
+  hasMore: true,
   loading: false,
   error: null,
   mediaFilter: "both",
@@ -190,6 +197,9 @@ const emptyGroup = (): GroupDeckState => ({
 
 const EMPTY_GROUP: GroupDeckState = {
   cards: [],
+  page: 1,
+  nextTmdbPage: 1,
+  hasMore: true,
   loading: false,
   error: null,
   mediaFilter: "both",
@@ -435,50 +445,76 @@ export function markTitleRated(tmdbId: number, mediaType: SwipeCard["mediaType"]
   dropSoloCard(tmdbId, mediaType);
 }
 
+async function loadGroupPage(key: string, targetPage: number, replace: boolean) {
+  if (groupLoadInFlight.has(key)) return;
+  groupLoadInFlight.add(key);
+
+  const cur = groupDecks[key] ?? emptyGroup();
+  // replace = börja om från TMDB-sida 1; annars fortsätt där servern slutade.
+  const fromTmdbPage = replace ? undefined : cur.nextTmdbPage;
+  const from = fromTmdbPage && fromTmdbPage > 1 ? `&from=${fromTmdbPage}` : "";
+  if (replace) setGroupDeck(key, { loading: cur.cards.length === 0, error: null });
+
+  try {
+    // Gruppdäcket kör samma recommender som solo, men i gruppläge (?group=CODE):
+    // providers unioneras och smakmodellen aggregeras över alla medlemmar.
+    const res = await fetch(
+      `/api/recs/unified?group=${encodeURIComponent(key)}&page=${targetPage}${from}`,
+      { cache: "no-store" }
+    );
+    const data = (await res.json()) as
+      | {
+          ok: true;
+          mediaFilter?: SwipeMediaFilter;
+          nextTmdbPage?: number;
+          items: Parameters<typeof mapUnifiedItems>[0];
+        }
+      | { ok: false; message?: string };
+
+    if (!("ok" in data) || !data.ok) {
+      if (replace) {
+        setGroupDeck(key, {
+          loading: false,
+          error: ("message" in data && data.message) || "Kunde inte hämta gruppförslag.",
+          ready: true,
+        });
+      }
+      return;
+    }
+
+    const mapped = mapUnifiedItems(data.items);
+    const prev = groupDecks[key] ?? emptyGroup();
+    setGroupDeck(key, {
+      cards: replace ? mapped : appendUnique(prev.cards, mapped),
+      page: targetPage,
+      nextTmdbPage: data.nextTmdbPage ?? prev.nextTmdbPage + 1,
+      hasMore: data.items.length > 0 && (data.nextTmdbPage ?? 1) <= 500,
+      loading: false,
+      error: null,
+      mediaFilter: replace ? data.mediaFilter ?? prev.mediaFilter : prev.mediaFilter,
+      ready: true,
+    });
+  } catch {
+    if (replace) setGroupDeck(key, { loading: false, error: "Nätverksfel.", ready: true });
+  } finally {
+    groupLoadInFlight.delete(key);
+  }
+}
+
 export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) {
   const key = code.toUpperCase();
   if (!key) return;
   const existing = groupDecks[key];
   if (!opts?.force && existing?.ready && existing.cards.length > 0) return;
-  if (groupLoadInFlight.has(key)) return;
+  await loadGroupPage(key, 1, true);
+}
 
-  groupLoadInFlight.add(key);
-  setGroupDeck(key, { loading: !(existing?.cards.length), error: null });
-
-  try {
-    // Gruppdäcket kör samma recommender som solo, men i gruppläge (?group=CODE):
-    // providers unioneras och smakmodellen aggregeras över alla medlemmar.
-    const res = await fetch(`/api/recs/unified?group=${encodeURIComponent(key)}&page=1`, {
-      cache: "no-store",
-    });
-    const data = (await res.json()) as
-      | { ok: true; mediaFilter?: SwipeMediaFilter; items: Parameters<typeof mapUnifiedItems>[0] }
-      | { ok: false; message?: string };
-
-    if (!("ok" in data) || !data.ok) {
-      setGroupDeck(key, {
-        loading: false,
-        error: ("message" in data && data.message) || "Kunde inte hämta gruppförslag.",
-        ready: true,
-      });
-      return;
-    }
-
-    setGroupDeck(key, {
-      cards: mapUnifiedItems(data.items),
-      loading: false,
-      error: null,
-      mediaFilter: data.mediaFilter ?? "both",
-      ready: true,
-    });
-  } catch {
-    setGroupDeck(key, {
-      loading: false,
-      error: "Nätverksfel.",
-      ready: true,
-    });
-  } finally {
-    groupLoadInFlight.delete(key);
+/** Fyll på gruppdäcket underifrån när det börjar ta slut (samma tröskel som solo). */
+function maybePrefetchGroupPages(key: string) {
+  const s = groupDecks[key];
+  if (!s || !s.ready || s.loading || groupLoadInFlight.has(key)) return;
+  if (s.cards.length < PREFETCH_MIN_CARDS && s.hasMore) {
+    void loadGroupPage(key, s.page + 1, false);
   }
 }
 
@@ -486,6 +522,8 @@ export function popGroupCard(code: string) {
   const key = code.toUpperCase();
   const cur = groupDecks[key] ?? emptyGroup();
   setGroupDeck(key, { cards: cur.cards.slice(1) });
+  // Toppkortet lämnade — fyll på i bakgrunden så leken inte tar slut mitt i.
+  maybePrefetchGroupPages(key);
 }
 
 export function unshiftGroupCard(code: string, card: SwipeCard) {

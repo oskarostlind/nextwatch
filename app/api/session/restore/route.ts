@@ -16,12 +16,8 @@ export async function POST(req: NextRequest) {
   const token = typeof body.token === "string" ? body.token : null;
   if (!token) return NextResponse.json({ ok: false, message: "Token saknas." }, { status: 400 });
 
-  // Tillfällig diagnostik (869e8huma) — se SessionPersistence.tsx. TA BORT sen.
-  console.log("[session-diag] restore ANROPAD, token-len =", token.length);
-
   const uid = await verifyUid(token);
   if (!uid) {
-    console.log("[session-diag] restore: token ogiltigt (HMAC)");
     return NextResponse.json({ ok: false, message: "Ogiltigt token." }, { status: 401 });
   }
 

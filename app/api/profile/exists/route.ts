@@ -5,9 +5,7 @@ import prisma from "../../../../lib/prisma";
 
 export async function GET() {
   const uid = (await cookies()).get("nw_uid")?.value || null;
-  // Tillfällig diagnostik (869e8huma) — se SessionPersistence.tsx. TA BORT sen.
   if (!uid) {
-    console.log("[session-diag] profile/exists: ingen cookie → hasProfile=false");
     return NextResponse.json({ ok: true, hasProfile: false, authed: false });
   }
   // authed speglar EXAKT landningens redirect-villkor (app/page.tsx): verifierat
@@ -25,6 +23,5 @@ export async function GET() {
   });
   const hasProfile = Boolean(user?.profile);
   const authed = Boolean(user?.emailVerified && (user?.passwordHash || user?.appleSub) && user?.profile);
-  console.log(`[session-diag] profile/exists: uid=...${uid.slice(-6)} hasProfile=${hasProfile} authed=${authed}`);
   return NextResponse.json({ ok: true, hasProfile, authed });
 }

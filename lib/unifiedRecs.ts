@@ -610,6 +610,12 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               region,
               watch_region: region,
               with_watch_providers: tmdbProviderString,
+              // Familjefilmer (Vaiana, Kung Fu Panda m.fl.) exkluderas när
+              // barn-/familjefiltret är av. TMDB saknar en ren "Kids"-genre för
+              // FILM (10762 är TV-only), så Family (10751) är närmaste signal.
+              // Träffar även Pixar/Ghibli-familjefilmer — de kommer tillbaka när
+              // toggeln slås på.
+              without_genres: showKidsContent ? undefined : "10751",
               certification_country: "SE",
               "certification.lte": certMax,
               sort_by: "popularity.desc",

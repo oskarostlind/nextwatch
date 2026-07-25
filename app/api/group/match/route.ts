@@ -43,6 +43,18 @@ export async function GET(req: NextRequest) {
     ]);
     const need = groupMatchNeed(size, groupRow?.matchThreshold);
 
+    // En ensam kvarvarande medlem ska aldrig kunna "matcha" med sig själv.
+    // Golvtröskeln är need = max(2, …), så två gamla LIKE-röster från medlemmar
+    // som redan lämnat gruppen (leave städar dem numera, men äldre skräpdata kan
+    // ligga kvar) räckte annars för en spökmatch direkt vid start. Den här
+    // spärren är det robusta sista skyddet oavsett vilka röster som finns.
+    if (size < 2) {
+      return NextResponse.json(
+        { ok: true, size, need, count: 0, match: null, matches: [] },
+        { status: 200 }
+      );
+    }
+
     // Ranka kandidater på antal LIKE
     const [top, seenRows] = await Promise.all([
       prisma.groupVote.groupBy({

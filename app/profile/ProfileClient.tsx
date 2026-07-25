@@ -906,6 +906,19 @@ function SettingsTab() {
             onChange={(v) => void saveSwipeSettings({ showPaidOptions: v })}
           />
         </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Visa barn- och familjeinnehåll</div>
+            <div className="text-xs text-white/45">
+              Av som standard. På tar med barnserier (t.ex. My Little Pony) i förslagen.
+            </div>
+          </div>
+          <Toggle
+            checked={swipeSettings.showKidsContent}
+            onChange={(v) => void saveSwipeSettings({ showKidsContent: v })}
+          />
+        </div>
       </section>
 
       {/* Notiser */}

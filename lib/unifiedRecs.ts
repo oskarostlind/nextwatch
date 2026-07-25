@@ -444,6 +444,35 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const exclusionRatings = isGroup ? groupRatings : ratings;
     const exclusionWatchlist = isGroup ? groupWatchlist : watchlist;
 
+    // Barn-/familjeinnehåll (TV-Kids-genren) döljs som standard. Solo: användarens
+    // egen profilinställning. Grupp: bara PÅ om ALLA medlemmar har det på — annars
+    // ska ingen barnkanal slippa in i ett vuxet sällskap.
+    const showKidsContent = isGroup
+      ? memberProfiles.length > 0 && memberProfiles.every((p) => p.showKidsContent === true)
+      : profile.showKidsContent === true;
+
+    // Smak-konfidens: ju mer signaler (betyg, sparade, deklarerade favoriter),
+    // desto mer väger smakmodellen och desto mindre väger ren popularitet. Nya
+    // användare får populära titlar (ingen tom lek); veteraner får skarp
+    // personalisering. Mättar mjukt mot ~1.0 (TAU=12 → ~0.87 vid 25 signaler).
+    const declaredFavCount = isGroup
+      ? memberProfiles.reduce(
+          (n, p) =>
+            n + (p.favoriteGenres?.length ?? 0) + (p.favoriteMovie ? 1 : 0) + (p.favoriteShow ? 1 : 0),
+          0,
+        )
+      : (profile.favoriteGenres?.length ?? 0) +
+        (profile.favoriteMovie ? 1 : 0) +
+        (profile.favoriteShow ? 1 : 0);
+    const tasteSignals = exclusionRatings.length + exclusionWatchlist.length + declaredFavCount;
+    const TASTE_TAU = 12;
+    const tasteConfidence = 1 - Math.exp(-tasteSignals / TASTE_TAU);
+    // Popularitet tonas ned för veteraner (kvalitetsvikt 0.60 → 0.15), smaken
+    // skruvas upp (1.0 → 2.5). Ett golv (0.75-kapet) gör att kvalitet aldrig helt
+    // försvinner, så veteraner slipper obskyra lågkvaltitlar. Trimmas i mät-passet.
+    const qualityWeight = 0.6 * (1 - 0.75 * tasteConfidence);
+    const tasteWeight = 1 + 1.5 * tasteConfidence;
+
     const watchKeys = new Set<string>();
     for (const r of exclusionRatings) {
       const key = `${r.mediaType}_${r.tmdbId}`;
@@ -598,6 +627,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               region,
               watch_region: region,
               with_watch_providers: tmdbProviderString,
+              // Barn-tv (My Little Pony m.fl.) exkluderas om barnfiltret är av.
+              without_genres: showKidsContent ? undefined : "10762",
               sort_by: "popularity.desc",
               page: tmdbPage,
             }, "force-cache").catch((err) => {
@@ -681,7 +712,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         key: `${u.tmdbType}_${u.id}`,
         id: u.id,
         type: u.tmdbType,
-        scoreV1: 1.6 * gScore + 0.6 * qScore + 0.2 * rBonus,
+        scoreV1: 1.6 * gScore + qualityWeight * qScore + 0.2 * rBonus,
         base: u.item
       });
     }
@@ -767,7 +798,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         id: s.id,
         type: s.type,
         base: s.base,
-        scoreFinal: s.scoreV1 + tasteOnly + styleAdjustment(s.base, f),
+        scoreFinal: s.scoreV1 + tasteWeight * tasteOnly + styleAdjustment(s.base, f),
         scoreTasteOnly: tasteOnly,
         kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),

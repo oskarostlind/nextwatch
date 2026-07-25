@@ -18,7 +18,10 @@ export const PREFETCH_MIN_CARDS = 10;
  * förra gången. I native-appen är varje öppning en kallstart, så det var den
  * enskilt dyraste väntan i appen.
  */
-const DECK_CACHE_KEY = "solo_deck";
+// _v2: bumpad när recs-logiken ändrades (barn-/familjefilter + adaptiv smakvikt).
+// En ny nyckel gör att gamla cachade lekar (byggda med den gamla logiken, t.ex.
+// med barnserier i) inte läses in — klienten hämtar en färsk lek med nya urvalet.
+const DECK_CACHE_KEY = "solo_deck_v2";
 const DECK_TTL_MS = 24 * 60 * 60 * 1000;
 /** Skrivningen debouncas så snabb swipning inte hamrar localStorage. */
 const DECK_WRITE_DEBOUNCE_MS = 500;

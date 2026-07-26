@@ -780,6 +780,11 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // vända ordningen mellan två animerade titlar — men inte begrava kvalitet.
     const ANIME_STYLE_WEIGHT = 1.5;
     const WESTERN_COUNTERWEIGHT = -0.6;
+    // Vikt för härledda genrer (från betyg). Något under V1:s deklarerade
+    // genreterm (1.6) — ett aktivt profilval väger tyngre än en härledd signal —
+    // men tydligt nog att "du sätter alltid 9 på thrillers" märks utan att du
+    // kryssat i genren.
+    const DERIVED_GENRE_WEIGHT = 1.2;
     function styleAdjustment(base: TMDBListItem, f: CachedFeatures): number {
       if (taste.animeAffinity === 0) return 0;
       const animated =
@@ -804,7 +809,16 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         id: s.id,
         type: s.type,
         base: s.base,
-        scoreFinal: s.scoreV1 + tasteWeight * tasteOnly + styleAdjustment(s.base, f),
+        scoreFinal:
+          s.scoreV1 +
+          tasteWeight * tasteOnly +
+          styleAdjustment(s.base, f) +
+          // Genrer HÄRLEDDA ur betyg (utöver profilens deklarerade). Rent additivt:
+          // taste.genreW är tom utan seeds → 0, så nya användare påverkas inte.
+          // Skalas med smak-konfidensen så det växer i takt med att data samlas.
+          DERIVED_GENRE_WEIGHT *
+            tasteConfidence *
+            ((s.base.genre_ids ?? []).reduce((sum, gid) => sum + (taste.genreW.get(gid) ?? 0), 0)),
         scoreTasteOnly: tasteOnly,
         kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),

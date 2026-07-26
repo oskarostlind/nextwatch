@@ -34,6 +34,12 @@ export type TasteMaps = {
   keywordW: Map<number, number>;
   peopleW: Map<number, number>;
   /**
+   * Genrer HÄRLEDDA ur faktiska betyg/reaktioner (seeds), skilt från profilens
+   * deklarerade favoritgenrer. Normaliserad [−1, 1] per genre-id. Tom om
+   * användaren saknar seeds → tillägget blir 0 och ingen påverkas (rent additivt).
+   */
+  genreW: Map<number, number>;
+  /**
    * Anime kontra västerländsk animation, härlett ur seeds: −1 (bara västerländskt
    * gillat / anime ogillat) … +1 (bara anime gillat). 0 = ingen signal (inga
    * animerade seeds). Se hasAnimeMarker.
@@ -271,6 +277,7 @@ function labelsFromNamedMap(
 export async function buildTasteMaps(seeds: Seed[], locale: string): Promise<TasteMaps> {
   const keywordW = new Map<number, number>();
   const peopleW = new Map<number, number>();
+  const genreW = new Map<number, number>();
   const feats: FeatureBundle[] = await Promise.all(
     seeds.map((s) => fetchFeatures(s.type, s.id, locale).catch(() => ({
       keywords: [],
@@ -291,6 +298,7 @@ export async function buildTasteMaps(seeds: Seed[], locale: string): Promise<Tas
     const f = feats[i];
     for (const kw of f.keywords) increment(keywordW, kw.id, w);
     for (const p of [...f.directors, ...f.cast]) increment(peopleW, p.id, w);
+    for (const g of f.genres ?? []) increment(genreW, g.id, w);
 
     if ((f.genres ?? []).some((g) => g.id === ANIMATION_GENRE_ID)) {
       if (hasAnimeMarker(f.keywords)) animeRaw += w;
@@ -303,6 +311,7 @@ export async function buildTasteMaps(seeds: Seed[], locale: string): Promise<Tas
   return {
     keywordW: normalizeTopK(keywordW, 60),
     peopleW: normalizeTopK(peopleW, 60),
+    genreW: normalizeTopK(genreW, 30),
     animeAffinity: styleDenom > 0 ? (animeRaw - westernRaw) / styleDenom : 0,
   };
 }

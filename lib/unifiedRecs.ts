@@ -541,6 +541,27 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const tvIdToName = new Map(tvGenres.genres.map((g) => [g.id, g.name] as const));
     const { liked: likedGenres, disliked: dislikedGenres } = resolveGenreSets(tasteInput);
 
+    // Hård genrefiltrering för GRUPPER: bara när gruppen själv (via kugghjulet)
+    // satt explicita gillade genrer på Group.favoriteGenres — inte den
+    // medlemsaggregerade fallbacken i resolveGenreSets. Detta är gruppens
+    // uttryckliga val och ska begränsa TMDB-kandidatpoolen på riktigt (samma
+    // sätt som Discover-fliken redan gör), i stället för att bara knuffa
+    // rankingen som V1-scoringen (genreScore) gör. Solo/personlig lek berörs
+    // inte — där är genren fortfarande bara en mjuk signal.
+    const groupExplicitLikedGenreNames = isGroup ? groupRow?.favoriteGenres ?? [] : [];
+    const movieNameToId = new Map(movieGenres.genres.map((g) => [g.name, g.id] as const));
+    const tvNameToId = new Map(tvGenres.genres.map((g) => [g.name, g.id] as const));
+    // Flera valda genrer = ELLER-semantik (TMDB tolkar "|" som OR, "," som AND) —
+    // en titel ska räcka att matcha EN av de valda genrerna, inte alla.
+    const hardFilterMovieGenres = groupExplicitLikedGenreNames
+      .map((n) => movieNameToId.get(n))
+      .filter((id): id is number => id != null);
+    const hardFilterTvGenres = groupExplicitLikedGenreNames
+      .map((n) => tvNameToId.get(n))
+      .filter((id): id is number => id != null);
+    const withGenresMovie = hardFilterMovieGenres.length > 0 ? hardFilterMovieGenres.join("|") : undefined;
+    const withGenresTv = hardFilterTvGenres.length > 0 ? hardFilterTvGenres.join("|") : undefined;
+
     // Startas här och inväntas efter discover-loopen, så uppslagen löper
     // parallellt med sidhämtningen i stället för att lägga sig ovanpå den.
     const watchlistCandidatesPromise =
@@ -616,6 +637,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               // Träffar även Pixar/Ghibli-familjefilmer — de kommer tillbaka när
               // toggeln slås på.
               without_genres: showKidsContent ? undefined : "10751",
+              with_genres: withGenresMovie,
               certification_country: "SE",
               "certification.lte": certMax,
               sort_by: "popularity.desc",
@@ -635,6 +657,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               with_watch_providers: tmdbProviderString,
               // Barn-tv (My Little Pony m.fl.) exkluderas om barnfiltret är av.
               without_genres: showKidsContent ? undefined : "10762",
+              with_genres: withGenresTv,
               sort_by: "popularity.desc",
               page: tmdbPage,
             }, "force-cache").catch((err) => {

@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { jitterFor } from "@/lib/deckVisuals";
 import { CURATED, type HeroCard } from "@/lib/curatedHero";
 import HeroDeck from "./components/landing/HeroDeck";
+import AuthGate from "./components/client/AuthGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,5 +77,9 @@ export default async function HomePage() {
     };
   });
 
-  return <HeroDeck cards={cards} />;
+  return (
+    <AuthGate>
+      <HeroDeck cards={cards} />
+    </AuthGate>
+  );
 }

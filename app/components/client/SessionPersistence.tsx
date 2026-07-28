@@ -11,10 +11,11 @@
 //      /api/session/restore vid start.
 //   2) Vid KALLSTART hinner webbvyn ladda sidan innan cookie-storen synkats →
 //      SSR-requesten saknar nw_uid och renderar landningen fast användaren är
-//      inloggad. WKWebView skickar dessutom inte cookien på top-level-
-//      dokumentnavigering (en reload räcker alltså inte). Motmedel: en KLIENT-
-//      navigering (router.replace) till /swipe — RSC-fetchen bär cookien, precis
-//      som fetch mot /api/profile/exists, så servern renderar inloggat.
+//      inloggad. Den kallstarts-racen (och navigeringen in i appen när den
+//      inträffar) hanteras numera av AuthGate.tsx (körs på både native och
+//      webb, och håller den native launch-skärmen kvar under tiden — se
+//      SplashScreenHide.tsx). Den här komponenten fokuserar på (1): hålla
+//      native-speglingen färsk och återställa en klobbrad session.
 //
 // Webben: no-op.
 
@@ -38,8 +39,6 @@ export default function SessionPersistence() {
       try {
         const { Preferences } = await import("@capacitor/preferences");
 
-        const path = window.location.pathname;
-        const onLoggedOutView = path === "/" || path.startsWith("/auth");
         const alreadyNavigated = sessionStorage.getItem(RELOAD_GUARD) === "1";
         const goToApp = () => {
           if (alreadyNavigated) return;
@@ -66,12 +65,6 @@ export default function SessionPersistence() {
             if (j.ok && j.token) {
               await Preferences.set({ key: STORE_KEY, value: j.token });
             }
-          }
-
-          // Fullt inloggad men SSR visade ändå landningen → kallstarts-race.
-          // Navigera in i appen (RSC-fetchen bär cookien).
-          if (exists.authed && onLoggedOutView && !cancelled) {
-            goToApp();
           }
           return;
         }

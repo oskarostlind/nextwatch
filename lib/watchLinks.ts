@@ -24,6 +24,7 @@ const PROVIDER_PATTERNS: Array<[keyword: string, build: LinkBuilder]> = [
   ["sf anytime", (t) => `https://www.sfanytime.com/sv/search?q=${q(t)}`],
   ["discovery", (t) => `https://www.discoveryplus.com/se/search?q=${q(t)}`],
   ["google play", (t) => `https://play.google.com/store/search?q=${q(t)}&c=movies`],
+  ["tele2 play", (t) => `https://www.tele2play.se/search?q=${q(t)}`],
 ];
 
 /**

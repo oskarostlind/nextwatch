@@ -7,7 +7,28 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
 import { groupMatchNeed } from "@/lib/groupSettings";
-import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
+import { tmdbDetails, type TmdbType, type TmdbLite } from "@/lib/tmdbDetails";
+import { providerGroupsFor, providerWatchUrl } from "@/lib/watchLinks";
+
+/**
+ * TMDB-detaljerna innehåller rå watch-providers (flatrate/rent/buy) — matchrutan
+ * ska bara visa tjänster vi kan direktlänka till (lib/watchLinks.ts), i samma
+ * ordning och med samma hyr/köp-policy som resten av appen (Profile.showPaidOptions).
+ */
+function toProviderLinks(details: TmdbLite | null, showPaidOptions: boolean) {
+  if (!details?.providers) return [] as { name: string; url: string }[];
+  const groups = providerGroupsFor(details.providers, showPaidOptions);
+  const out: { name: string; url: string }[] = [];
+  for (const g of groups) {
+    for (const p of g.list) {
+      const url = providerWatchUrl(p.provider_name, details.title);
+      if (url && !out.some((x) => x.name === p.provider_name)) {
+        out.push({ name: p.provider_name, url });
+      }
+    }
+  }
+  return out;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,11 +58,15 @@ export async function GET(req: NextRequest) {
     }
     const locale = jar.get("nw_locale")?.value ?? "sv-SE";
 
-    const [size, groupRow] = await Promise.all([
+    const [size, groupRow, profileRow] = await Promise.all([
       prisma.groupMember.count({ where: { groupCode: code } }),
       prisma.group.findUnique({ where: { code }, select: { matchThreshold: true } }),
+      userId
+        ? prisma.profile.findUnique({ where: { userId }, select: { showPaidOptions: true } })
+        : Promise.resolve(null),
     ]);
     const need = groupMatchNeed(size, groupRow?.matchThreshold);
+    const showPaidOptions = profileRow?.showPaidOptions ?? false;
 
     // En ensam kvarvarande medlem ska aldrig kunna "matcha" med sig själv.
     // Golvtröskeln är need = max(2, …), så två gamla LIKE-röster från medlemmar
@@ -133,17 +158,17 @@ export async function GET(req: NextRequest) {
       .map((s) => s.user.profile?.displayName?.trim())
       .filter((n): n is string => Boolean(n));
 
+    const match = details
+      ? { ...details, providers: toProviderLinks(details, showPaidOptions) }
+      : { tmdbId: chosen.tmdbId, tmdbType: chosen.tmdbType, title: "" };
+
     return NextResponse.json(
       {
         ok: true,
         size,
         need,
         count: chosen.count,
-        match: details ?? {
-          tmdbId: chosen.tmdbId,
-          tmdbType: chosen.tmdbType,
-          title: "",
-        },
+        match,
         savedBy,
         matches: [],
       },

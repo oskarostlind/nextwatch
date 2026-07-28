@@ -18,7 +18,13 @@ export const GROUP_GENRES = [
 export const GROUP_CERTS = ["0", "7", "11", "15"] as const;
 export type GroupCert = (typeof GROUP_CERTS)[number];
 
-export const DEFAULT_MATCH_THRESHOLD = 60;
+/** Procentandel som styr den AUTOMATISKA (ej anpassade) matchtröskeln. */
+export const DEFAULT_MATCH_PERCENT = 60;
+
+/** En match kräver alltid minst 2 personer, oavsett gruppstorlek. */
+export const MIN_MATCH_THRESHOLD = 2;
+/** Skyddsgräns för lagrat värde — det faktiska taket är alltid gruppens storlek, se groupMatchNeed. */
+export const MAX_MATCH_THRESHOLD = 500;
 
 export type GroupSettings = {
   /** Tom = automatik (union av medlemmarnas gillade genrer). */
@@ -29,7 +35,11 @@ export type GroupSettings = {
   providers: string[];
   /** null = automatik (yngsta medlemmens SE-certifiering). */
   maxCert: GroupCert | null;
-  /** Procent 1–100. null = default 60. */
+  /**
+   * Antal PERSONER (≥2) som måste gilla samma titel för en match.
+   * null = automatik: 60 % av gruppens aktuella storlek (min 2).
+   * Klamras alltid till aktuell gruppstorlek vid matchberäkning — se groupMatchNeed.
+   */
   matchThreshold: number | null;
   /** Vilken typ av titlar gruppen swipar (standard: båda). */
   mediaFilter: SwipeMediaFilter;
@@ -40,7 +50,12 @@ export function isValidCert(v: unknown): v is GroupCert {
 }
 
 export function isValidThreshold(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 100;
+  return (
+    typeof v === "number" &&
+    Number.isInteger(v) &&
+    v >= MIN_MATCH_THRESHOLD &&
+    v <= MAX_MATCH_THRESHOLD
+  );
 }
 
 export function sanitizeGenres(v: unknown): string[] | null {
@@ -59,10 +74,19 @@ export function parseProvidersJson(v: unknown): string[] {
 /**
  * Antal LIKE-röster som krävs för match i en grupp.
  * Delas av app/api/group/match och lib/push.ts så tröskeln alltid är samma.
+ *
+ * `matchThresholdCount` är antalet PERSONER gruppens skapare valt (kugghjulet).
+ * Det klamras alltid till gruppens aktuella storlek, så en grupp som krymper
+ * (medlemmar lämnar) aldrig kan kräva fler likes än det finns medlemmar kvar.
+ * null/ogiltigt värde = automatik: 60 % av aktuell storlek (min 2).
+ *
+ * OBS: fältet lagrade tidigare en PROCENTANDEL (1–100). Vid övergången till
+ * personantal (2026-07-29) hade ingen grupp i produktionsdatabasen ett
+ * anpassat värde satt, så ingen datamigrering av gamla värden krävdes.
  */
-export function groupMatchNeed(size: number, thresholdPercent?: number | null): number {
-  const pct = isValidThreshold(thresholdPercent ?? undefined)
-    ? (thresholdPercent as number)
-    : DEFAULT_MATCH_THRESHOLD;
-  return Math.max(2, Math.ceil((size * pct) / 100));
+export function groupMatchNeed(size: number, matchThresholdCount?: number | null): number {
+  if (isValidThreshold(matchThresholdCount)) {
+    return Math.max(MIN_MATCH_THRESHOLD, Math.min(size, matchThresholdCount));
+  }
+  return Math.max(MIN_MATCH_THRESHOLD, Math.ceil((size * DEFAULT_MATCH_PERCENT) / 100));
 }

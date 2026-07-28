@@ -252,11 +252,14 @@ model Group {
 
   // Gruppinställningar (kugghjulet, endast skaparen). Tomma/null = automatik:
   // genrer/providers unionas från medlemmarnas profiler, åldersgräns från
-  // yngsta medlemmen och matchtröskeln är 60 %. Se lib/groupSettings.ts.
+  // yngsta medlemmen och matchtröskeln är 60 % av gruppens storlek.
+  // Se lib/groupSettings.ts.
   favoriteGenres String[] @default([]) @map("favorite_genres")
   dislikedGenres String[] @default([]) @map("disliked_genres")
   providers      Json     @default("[]")
   maxCert        String?  @map("max_cert")
+  /// Antal PERSONER (≥2) som krävs för match. null = automatik (60 % av storlek).
+  /// Klamras till aktuell gruppstorlek vid matchberäkning, se groupMatchNeed().
   matchThreshold Int?     @map("match_threshold")
   /// movie | tv | both — vilken typ av titlar gruppen swipar (standard: both).
   mediaFilter    String   @default("both") @map("media_filter")

@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import {
-  DEFAULT_MATCH_THRESHOLD,
+  groupMatchNeed,
   isValidCert,
   isValidThreshold,
   parseProvidersJson,
@@ -25,7 +25,10 @@ type Ok = {
   code: string;
   isCreator: boolean;
   settings: GroupSettings;
-  defaults: { matchThreshold: number };
+  /** Aktuellt antal medlemmar — styr slaidern för anpassad matchtröskel i UI:t. */
+  memberCount: number;
+  /** Vad matchtröskeln (antal personer) faktiskt blir just nu om ingen anpassad är satt. */
+  defaults: { matchNeed: number };
 };
 type Err = { ok: false; message: string };
 
@@ -59,20 +62,23 @@ export async function GET(req: NextRequest) {
   const code = (new URL(req.url).searchParams.get("code") || "").toUpperCase();
   if (!code) return bad("Gruppkod saknas.");
 
-  const group = await prisma.group.findUnique({
-    where: { code },
-    select: {
-      code: true,
-      createdBy: true,
-      favoriteGenres: true,
-      dislikedGenres: true,
-      providers: true,
-      maxCert: true,
-      matchThreshold: true,
-      mediaFilter: true,
-      members: { where: { userId: uid }, select: { userId: true } },
-    },
-  });
+  const [group, memberCount] = await Promise.all([
+    prisma.group.findUnique({
+      where: { code },
+      select: {
+        code: true,
+        createdBy: true,
+        favoriteGenres: true,
+        dislikedGenres: true,
+        providers: true,
+        maxCert: true,
+        matchThreshold: true,
+        mediaFilter: true,
+        members: { where: { userId: uid }, select: { userId: true } },
+      },
+    }),
+    prisma.groupMember.count({ where: { groupCode: code } }),
+  ]);
   if (!group) return bad("Gruppen finns inte.", 404);
   if (group.members.length === 0) return bad("Du är inte medlem i gruppen.", 403);
 
@@ -81,7 +87,8 @@ export async function GET(req: NextRequest) {
     code: group.code,
     isCreator: group.createdBy === uid,
     settings: toSettingsDto(group),
-    defaults: { matchThreshold: DEFAULT_MATCH_THRESHOLD },
+    memberCount,
+    defaults: { matchNeed: groupMatchNeed(memberCount, null) },
   } as Ok);
 }
 
@@ -150,7 +157,7 @@ export async function PATCH(req: NextRequest) {
   }
   if ("matchThreshold" in body) {
     if (body.matchThreshold !== null && !isValidThreshold(body.matchThreshold)) {
-      return bad("Ogiltig matchtröskel (1–100).");
+      return bad("Ogiltig matchtröskel (minst 2 personer).");
     }
     data.matchThreshold = body.matchThreshold as number | null;
   }
@@ -163,25 +170,29 @@ export async function PATCH(req: NextRequest) {
 
   if (Object.keys(data).length === 0) return bad("Inget att uppdatera.");
 
-  const updated = await prisma.group.update({
-    where: { code },
-    data,
-    select: {
-      code: true,
-      favoriteGenres: true,
-      dislikedGenres: true,
-      providers: true,
-      maxCert: true,
-      matchThreshold: true,
-      mediaFilter: true,
-    },
-  });
+  const [updated, memberCount] = await Promise.all([
+    prisma.group.update({
+      where: { code },
+      data,
+      select: {
+        code: true,
+        favoriteGenres: true,
+        dislikedGenres: true,
+        providers: true,
+        maxCert: true,
+        matchThreshold: true,
+        mediaFilter: true,
+      },
+    }),
+    prisma.groupMember.count({ where: { groupCode: code } }),
+  ]);
 
   return NextResponse.json({
     ok: true,
     code: updated.code,
     isCreator: true,
     settings: toSettingsDto(updated),
-    defaults: { matchThreshold: DEFAULT_MATCH_THRESHOLD },
+    memberCount,
+    defaults: { matchNeed: groupMatchNeed(memberCount, null) },
   } as Ok);
 }

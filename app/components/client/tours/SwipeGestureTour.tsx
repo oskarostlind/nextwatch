@@ -14,7 +14,7 @@
 // <Client /> — INTE importerad av page_client.tsx själv. Det håller den
 // riktiga swipe/rating-koden helt orörd och undviker en cirkulär import
 // (den här filen importerar ju namngivna exports FRÅN page_client.tsx).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useAnimation, useMotionValue, useTransform, type PanInfo } from "framer-motion";
 import {
@@ -63,6 +63,10 @@ export default function SwipeGestureTour() {
   const [confirming, setConfirming] = useState(false);
   const [phase, setPhase] = useState<"active" | "rating">("active");
   const [ratingSaving, setRatingSaving] = useState(false);
+  // Låser gestkontrollen från det ögonblick den bekräftas till nästa steg —
+  // annars kan ett andra tryck under tap-stegets fördröjda "titta på baksidan"-
+  // paus (innan `confirming` sätts) trigga onGestureConfirmed två gånger.
+  const advancingRef = useRef(false);
 
   const controls = useAnimation();
   const x = useMotionValue(0);
@@ -115,6 +119,10 @@ export default function SwipeGestureTour() {
     };
   }, [state]);
 
+  useEffect(() => {
+    advancingRef.current = false;
+  }, [stepIndex]);
+
   if (!mounted || state !== "show" || !demoCard) return null;
 
   const step = STEPS[stepIndex];
@@ -149,21 +157,35 @@ export default function SwipeGestureTour() {
   }
 
   function onGestureConfirmed() {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+
     if (step.gesture === "swipe-up") {
       void controls.start({ y: -760, opacity: 0, transition: { duration: 0.22 } }).then(() => {
         void beginSeenFlow();
       });
       return;
     }
+
+    if (step.gesture === "tap") {
+      // Kortet är redan vänt (handleCardTap satte flipped=true) — låt
+      // användaren faktiskt SE baksidan (den riktiga detaljvyn) en stund
+      // innan "Snyggt!"-bekräftelsen, annars hinner de aldrig se vad en
+      // tryckning gör. Vänd tillbaka och gå vidare efteråt.
+      window.setTimeout(() => {
+        setConfirming(true);
+        window.setTimeout(() => {
+          setConfirming(false);
+          setFlipped(false);
+          window.setTimeout(() => setStepIndex((i) => i + 1), 300);
+        }, 600);
+      }, 1100);
+      return;
+    }
+
     setConfirming(true);
-    const target =
-      step.gesture === "swipe-right"
-        ? { x: 560, opacity: 0 }
-        : step.gesture === "swipe-left"
-        ? { x: -560, opacity: 0 }
-        : null;
-    const anim = target ? controls.start({ ...target, transition: { duration: 0.22 } }) : Promise.resolve();
-    void anim.then(() => {
+    const target = step.gesture === "swipe-right" ? { x: 560, opacity: 0 } : { x: -560, opacity: 0 };
+    void controls.start({ ...target, transition: { duration: 0.22 } }).then(() => {
       resetCardPosition();
       setFlipped(false);
       window.setTimeout(() => {
@@ -283,7 +305,7 @@ export default function SwipeGestureTour() {
             />
           </motion.div>
 
-          {!confirming ? (
+          {!confirming && !flipped ? (
             <div className="pointer-events-none absolute -bottom-16 left-1/2 -translate-x-1/2">
               <GestureHint gesture={step.gesture} />
             </div>

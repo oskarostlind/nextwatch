@@ -178,6 +178,18 @@ async function fetchMembers(): Promise<void> {
     const res = await fetch(`/api/group/members?code=${encodeURIComponent(code)}`, {
       cache: "no-store",
     });
+    if (res.status === 404) {
+      // Servern har redan nollställt nw_group-cookien (gruppen borta, eller vi
+      // är inte längre medlem — t.ex. utsparkade). Följ med lokalt så
+      // GroupBar/GroupTab faller tillbaka till solo direkt i stället för att
+      // vänta på nästa full sidladdning.
+      if (state.groupCode !== null || state.members.length > 0) {
+        setState({ groupCode: null, members: [], membersReady: true });
+      } else if (!state.membersReady) {
+        setState({ membersReady: true });
+      }
+      return;
+    }
     if (!res.ok) return;
     const j = (await res.json()) as MembersResp;
     if (!j?.ok || !Array.isArray(j.members)) return;

@@ -884,7 +884,7 @@ export function StaticCard({
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
-          <Front card={card} />
+          <Front card={card} flipped={flipped} />
         </div>
         <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
           <Back card={card} onShare={onShare} />
@@ -950,7 +950,7 @@ function AdCard({ adId }: { adId: string }) {
   );
 }
 
-function Front({ card }: { card: Card }) {
+function Front({ card, flipped }: { card: Card; flipped: boolean }) {
   return (
     <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
       {card.poster ? (
@@ -969,7 +969,12 @@ function Front({ card }: { card: Card }) {
         <div className="flex h-full w-full items-center justify-center bg-neutral-800">{card.title}</div>
       )}
 
-      {card.reasons && card.reasons.length > 0 ? (
+      {/* [backface-visibility:hidden] på förälderdiven ska räcka för att dölja
+          den här remsan när kortet är vänt — men backdrop-blur skapar ett eget
+          kompositeringslager som WebKit (iOS-appens WKWebView) ibland fortsätter
+          rita trots det, spegelvänt. Döljs explicit i stället för att lita på
+          backface-visibility för det här elementet. */}
+      {!flipped && card.reasons && card.reasons.length > 0 ? (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-10">
           <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/55 px-2 py-1 backdrop-blur-sm">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">

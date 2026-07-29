@@ -13,10 +13,11 @@ import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { Info, Play, Undo2 } from "lucide-react";
+import { Check, Info, Play, Undo2 } from "lucide-react";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { Trailer } from "@/lib/tmdbVideos";
 import type { MatchEvidence } from "@/lib/tasteModel";
+import { BUTTON_VARIANTS } from "@/app/components/ui/kit";
 
 export type ProviderLink = { name: string; url: string };
 
@@ -332,12 +333,16 @@ export default function MatchOverlay({
                 </a>
               ) : null}
 
+              {/* Sekundära knappar delar en och samma stil (kit.tsx:s
+                  BUTTON_VARIANTS.secondary) så Trailer/Mer info/Fortsätt swipa
+                  läses som en enhetlig rad under hjälte-CTA:n, i stället för
+                  tre olika grå/vita/emerald-nyanser som tidigare. */}
               <div className="flex flex-wrap justify-center gap-2">
                 <TrailerButton trailer={item.trailer} title={item.title} variant="solid" />
                 <button
                   type="button"
                   onClick={onFlip}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition ${BUTTON_VARIANTS.secondary}`}
                 >
                   {flipped ? <Undo2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
                   {flipped ? "Framsida" : "Mer info"}
@@ -345,8 +350,9 @@ export default function MatchOverlay({
                 <button
                   type="button"
                   onClick={close}
-                  className="inline-flex items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition ${BUTTON_VARIANTS.secondary}`}
                 >
+                  <Check className="h-4 w-4" />
                   Fortsätt swipa
                 </button>
               </div>

@@ -160,6 +160,9 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     name: f.displayName ?? f.username ?? "Okänd",
   }));
 
+  // Vänner som redan är med i gruppen ska inte gå att bjuda in igen.
+  const memberIds = new Set(members.map((m) => m.userId));
+
   const [meUserId, setMeUserId] = useState<string | null>(initialMeUserId || null);
 
   // Kugghjulet visas bara för gruppens skapare (servern verifierar också vid PATCH).
@@ -373,7 +376,9 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
               {friends.map((f) => (
                 <li key={f.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3">
                   <span className="font-medium">{f.name}</span>
-                  {invitedIds.has(f.id) ? (
+                  {memberIds.has(f.id) ? (
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/50">Med i gruppen</span>
+                  ) : invitedIds.has(f.id) ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400"><Check className="h-3 w-3" /> Inbjuden</span>
                   ) : (
                     <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-white/80">Bjud in</button>

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Play } from "lucide-react";
 import TrailerModal from "./TrailerModal";
 import type { Trailer } from "@/lib/tmdbVideos";
+import { BUTTON_VARIANTS } from "@/app/components/ui/kit";
 
 type Props = {
   trailer: Trailer | null | undefined;
@@ -20,9 +21,12 @@ export default function TrailerButton({ trailer, title, variant = "solid" }: Pro
 
   if (!trailer) return null;
 
+  // "solid" (match-rutan) återanvänder kit.tsx:s sekundärfärg för att matcha
+  // knapparna bredvid ("Mer info", "Fortsätt swipa") i stället för sin egen
+  // ad-hoc-grå. "ghost" (kortets baksida) behåller sin egen, lite tonade look.
   const cls =
     variant === "solid"
-      ? "bg-white/10 text-white hover:bg-white/20"
+      ? BUTTON_VARIANTS.secondary
       : "border border-white/10 bg-white/5 text-neutral-200 hover:border-white/25 hover:bg-white/10";
 
   return (

@@ -990,6 +990,22 @@ function SettingsTab() {
         </div>
       </section>
 
+      {/* Genomgång — låter användaren titta på swipe-tutorialen igen på begäran. */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Genomgång</h3>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Swipe-genomgången</div>
+            <div className="text-xs text-white/45">
+              Gilla, ogilla, mer info och sett + betygsätt — så funkar korten.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/swipe?tour=swipe-gestures"; }}>
+            Visa igen
+          </Button>
+        </div>
+      </section>
+
       {/* Om — legal/support-länkarna Apple kräver + TMDB-attribution (TMDB:s villkor). */}
       <section className="grid gap-3">
         <h3 className="text-sm font-semibold text-white/80">Om NextWatch</h3>

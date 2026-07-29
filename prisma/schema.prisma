@@ -74,6 +74,7 @@ model User {
 
   verifications Verification[]
   pushTokens    PushToken[]
+  onboardingTours OnboardingTour[]
 
   @@map("users")
 }
@@ -243,6 +244,26 @@ model AppleIapTransaction {
 
   @@index([userId], map: "idx_apple_iap_user")
   @@map("apple_iap_transactions")
+}
+
+/// Server-side "seen" state for interactive onboarding tours (lib/tours). Versioned
+/// so a tour can be re-triggered for everyone by bumping its version in
+/// lib/tours/registry.ts — old rows with a lower version count as unseen again.
+/// Unlike the older localStorage coach-marks (lib/userGuide.ts), this persists
+/// across devices/reinstalls, which the swipe-gesture tour needs to reach existing
+/// users exactly once on next open, regardless of which device they open next.
+model OnboardingTour {
+  userId      String   @map("user_id")
+  tourId      String   @map("tour_id")
+  version     Int
+  /// "completed" | "skipped"
+  status      String   @default("completed")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tourId])
+  @@map("onboarding_tours")
 }
 
 model Group {

@@ -397,6 +397,9 @@ export default function SwipePageClient() {
     if (!top || top.kind === "ad") return;
     if (hasSeenGuide("swipe")) return;
     const t = window.setTimeout(() => {
+      // Omkolla: den nya forcerade swipe-genomgången (SwipeGestureTour, mountad
+      // i app/swipe/page.tsx) kan ha markerat den här som sedd medan vi väntade.
+      if (hasSeenGuide("swipe")) return;
       if (tryAcquireGuide("swipe")) setSwipeGuideOpen(true);
     }, 700);
     return () => window.clearTimeout(t);

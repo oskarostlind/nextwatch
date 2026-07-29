@@ -1,9 +1,10 @@
-export type GuideId = "swipe" | "nav" | "group";
+export type GuideId = "swipe" | "nav" | "group" | "watchlist";
 
 const KEYS: Record<GuideId, string> = {
   swipe: "nw_guide_swipe_v1",
   nav: "nw_guide_nav_v1",
   group: "nw_guide_group_v1",
+  watchlist: "nw_guide_watchlist_v1",
 };
 
 export function hasSeenGuide(id: GuideId): boolean {

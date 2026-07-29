@@ -1004,6 +1004,39 @@ function SettingsTab() {
             Visa igen
           </Button>
         </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Vän-genomgången</div>
+            <div className="text-xs text-white/45">
+              Lägg till vänner, förfrågningar och vad vänner låser upp.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=friends-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Grupp-genomgången</div>
+            <div className="text-xs text-white/45">
+              Skapa eller gå med, bjud in, inställningar och gruppswipe.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=groups-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Watchlist-genomgången</div>
+            <div className="text-xs text-white/45">
+              Sparade titlar, betygsätt det du sett och Kolla nu.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/watchlist?tour=watchlist-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
       </section>
 
       {/* Om — legal/support-länkarna Apple kräver + TMDB-attribution (TMDB:s villkor). */}

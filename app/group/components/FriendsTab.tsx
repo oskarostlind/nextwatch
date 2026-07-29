@@ -8,6 +8,8 @@ import FriendProfileModal from "./FriendProfileModal";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
 import Avatar from "@/app/components/ui/Avatar";
 import { refreshThreads, useShareThreads } from "@/lib/threadsStore";
+import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
+import { FRIENDS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { FriendsInitial } from "../page";
 
 type SearchRow = {
@@ -140,7 +142,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={cardClass} data-guide="friends-search">
+      <div className={cardClass} data-guide="friends-search" data-tour="friends-add">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
           <input
@@ -202,7 +204,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
       )}
 
       {/* Dina vänner */}
-      <div className={cardClass}>
+      <div className={cardClass} data-tour="friends-list">
         <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
           <Users className="h-4 w-4 text-white/50" />
           Dina vänner ({friends.length})
@@ -277,7 +279,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
       />
 
       {hasPending && (
-        <div className={cardClass}>
+        <div className={cardClass} data-tour="friends-requests">
           <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
             <UserPlus className="h-4 w-4 text-white/50" />
             Förfrågningar
@@ -325,6 +327,8 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
           </ul>
         </div>
       )}
+
+      <CoachMarkTour tourId="friends-tour" steps={FRIENDS_TOUR_STEPS} suppressGuideId="group" />
     </div>
   );
 }

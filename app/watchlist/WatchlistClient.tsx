@@ -24,6 +24,8 @@ import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
 import { getCached, setCached } from '@/lib/clientCache';
 import { markTitleRated } from '@/lib/swipeDeckStore';
 import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
+import CoachMarkTour from '@/app/components/client/tours/CoachMarkTour';
+import { WATCHLIST_TOUR_STEPS } from '@/lib/tours/coachSteps';
 
 type WatchItem = {
   id: number;
@@ -552,7 +554,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       {/* Filmtips från vänner — visas bara när det finns några. */}
       <SharedTipsInbox onAdded={refetchWatchlist} />
 
-      <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1">
+      <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1" data-tour="watchlist-tabs">
         {(
           [
             { key: 'watchlist' as Tab, label: 'Watchlist' },
@@ -680,7 +682,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
             : 'Inga serier i listan — men du har filmer. Byt till Film ovanför.'}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" data-tour="watchlist-grid">
           {filtered.map((it) => (
             <div
               key={`${it.tmdbType}-${it.id}`}
@@ -923,6 +925,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           if (tab === 'ratings') refetchRated();
         }}
       />
+
+      <CoachMarkTour tourId="watchlist-tour" steps={WATCHLIST_TOUR_STEPS} suppressGuideId="watchlist" />
     </>
   );
 }

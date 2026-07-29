@@ -8,6 +8,8 @@ import Modal from "@/app/components/ui/Modal";
 import GroupSettingsModal from "./GroupSettingsModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
+import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
+import { GROUPS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
 
 type GroupResponse = {
@@ -288,6 +290,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         <button
           type="button"
           data-guide="group-start-swipe"
+          data-tour="group-start-swipe"
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
         >
@@ -302,6 +305,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 type="button"
                 aria-label="Gruppinställningar"
                 title="Gruppinställningar"
+                data-tour="group-settings"
                 onClick={() => setSettingsOpen(true)}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition hover:bg-white/10 hover:text-white"
               >
@@ -323,6 +327,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             </button>
             <button
               type="button"
+              data-tour="group-invite"
               onClick={openInviteModal}
               className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
             >
@@ -392,12 +397,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         {isCreator && (
           <GroupSettingsModal code={code} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         )}
+
+        <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4" data-guide="group-create-join">
+    <div className="space-y-4" data-guide="group-create-join" data-tour="group-join-create">
       {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -439,6 +446,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           <Plus className="h-4 w-4" /> Skapa ny grupp
         </button>
       </div>
+
+      <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
     </div>
   );
 }

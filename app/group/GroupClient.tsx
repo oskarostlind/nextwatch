@@ -21,6 +21,20 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const [tab, setTab] = useState<"group" | "friends">("group");
   const [groupGuideOpen, setGroupGuideOpen] = useState(false);
 
+  // "Visa igen"-knappen för vän-genomgången (Profil → Inställningar) länkar
+  // hit med ?tour=friends-tour — den ligger på fliken Vänner, så växla dit
+  // efter mount (inte i useState-initieraren: window finns inte server-side,
+  // och det skulle ge en hydration-mismatch mot SSR-markeringen).
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get("tour") === "friends-tour") {
+        setTab("friends");
+      }
+    } catch {
+      /* no-op */
+    }
+  }, []);
+
   useEffect(() => {
     if (hasSeenGuide("group")) return;
     // Öppna bara om ingen annan guide är aktiv (t.ex. nav-guiden mitt i sitt flöde).

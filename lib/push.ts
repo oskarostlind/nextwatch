@@ -268,6 +268,15 @@ export async function notifyGroupMatchIfNeeded(
     });
     if (likeCount !== need) return;
 
+    // Historik för Matchningar-fliken (app/group). Upsert eftersom denna
+    // funktion i teorin kan racea vid samtidiga röster runt tröskeln —
+    // matchedAt ska då stå kvar på det första tillfället, inte skrivas om.
+    await prisma.groupMatch.upsert({
+      where: { groupCode_tmdbId_tmdbType: { groupCode, tmdbId, tmdbType } },
+      update: {},
+      create: { groupCode, tmdbId, tmdbType },
+    });
+
     const members = await prisma.groupMember.findMany({
       where: { groupCode },
       select: { userId: true },

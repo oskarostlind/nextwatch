@@ -289,6 +289,7 @@ model Group {
   votes       GroupVote[]      @relation("GroupVotes")
   invites     GroupInvite[]
   matchesSeen GroupMatchSeen[]
+  matches     GroupMatch[]
 
   creator User @relation("UserGroupsCreated", fields: [createdBy], references: [id], onDelete: Cascade)
 
@@ -383,4 +384,20 @@ model GroupMatchSeen {
 
   @@id([groupCode, userId, tmdbId, tmdbType])
   @@map("group_match_seen")
+}
+
+/// Historik över gruppens matchningar (Matchningar-fliken). Skrivs en gång per
+/// titel, i samma stund som notifyGroupMatchIfNeeded() (lib/push.ts) upptäcker
+/// att LIKE-antalet först når tröskeln — inte varje gång tröskeln räknas om.
+model GroupMatch {
+  groupCode String   @map("group_code")
+  tmdbId    Int      @map("tmdb_id")
+  tmdbType  String   @map("tmdb_type")
+  matchedAt DateTime @default(now()) @map("matched_at")
+
+  group Group @relation(fields: [groupCode], references: [code], onDelete: Cascade)
+
+  @@id([groupCode, tmdbId, tmdbType])
+  @@index([groupCode, matchedAt], map: "idx_group_matches_group_matched_at")
+  @@map("group_matches")
 }

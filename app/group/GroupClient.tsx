@@ -1,25 +1,95 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import GroupTab from "./components/GroupTab";
 import FriendsTab from "./components/FriendsTab";
+import MatchesTab, { type GroupMatchItem } from "./components/MatchesTab";
 import IncomingInvites from "./components/IncomingInvites";
 import { PageHeader, SegmentedTabs } from "@/app/components/ui/kit";
 import GuideOverlay from "@/app/components/client/GuideOverlay";
 import { GROUP_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
+import { useSocial } from "@/app/components/client/SocialProvider";
 import type { GroupInitial } from "./page";
 
 export type { PublicMember, GroupInitial } from "./page";
 
-const TABS = [
-  { id: "group" as const, label: "Grupp" },
-  { id: "friends" as const, label: "Vänner" },
-];
+type Tab = "group" | "matches" | "friends";
+
+/** Namnrymd för "senast sedd match"-tidsstämpeln som styr Matchningar-badgen. */
+const MATCHES_SEEN_PREFIX = "nw_matches_seen:";
 
 export default function GroupClient({ initial }: { initial: GroupInitial }) {
-  const [tab, setTab] = useState<"group" | "friends">("group");
+  const [tab, setTab] = useState<Tab>("group");
   const [groupGuideOpen, setGroupGuideOpen] = useState(false);
+
+  // Samma live-gruppkod som GroupTab/FriendsTab redan synkar mot via
+  // social-store:n — annars ligger badgen och matchlistan kvar på den gamla
+  // gruppen tills nästa fulla server-refresh.
+  const social = useSocial();
+  const groupCode = social.groupCode ?? initial.code;
+
+  const [matches, setMatches] = useState<GroupMatchItem[] | null>(null);
+  const [seenAt, setSeenAt] = useState<string | null>(null);
+
+  const refetchMatches = useCallback(() => {
+    if (!groupCode) {
+      setMatches([]);
+      return;
+    }
+    void fetch(`/api/group/matches?code=${encodeURIComponent(groupCode)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { ok?: boolean; items?: GroupMatchItem[] } | null) => {
+        setMatches(j?.ok ? j.items ?? [] : []);
+      })
+      .catch(() => setMatches((prev) => prev ?? []));
+  }, [groupCode]);
+
+  useEffect(() => {
+    setMatches(null);
+    refetchMatches();
+  }, [refetchMatches]);
+
+  useEffect(() => {
+    if (!groupCode) {
+      setSeenAt(null);
+      return;
+    }
+    try {
+      setSeenAt(window.localStorage.getItem(MATCHES_SEEN_PREFIX + groupCode));
+    } catch {
+      setSeenAt(null);
+    }
+  }, [groupCode]);
+
+  const hasUnseenMatch = useMemo(() => {
+    const latest = matches?.[0]?.matchedAt;
+    return Boolean(latest) && latest !== seenAt;
+  }, [matches, seenAt]);
+
+  const openTab = useCallback(
+    (next: Tab) => {
+      setTab(next);
+      if (next === "matches" && groupCode && matches?.[0]) {
+        try {
+          window.localStorage.setItem(MATCHES_SEEN_PREFIX + groupCode, matches[0].matchedAt);
+        } catch {
+          /* no-op */
+        }
+        setSeenAt(matches[0].matchedAt);
+      }
+    },
+    [groupCode, matches]
+  );
+
+  const tabs = useMemo(
+    () => [
+      { id: "group" as const, label: "Grupp" },
+      { id: "matches" as const, label: hasUnseenMatch ? "Matchningar •" : "Matchningar" },
+      { id: "friends" as const, label: "Vänner" },
+    ],
+    [hasUnseenMatch]
+  );
 
   // "Visa igen"-knappen för vän-genomgången (Profil → Inställningar) länkar
   // hit med ?tour=friends-tour — den ligger på fliken Vänner, så växla dit
@@ -56,7 +126,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
       <IncomingInvites />
 
       <div className="mb-5 mt-1" data-guide="group-tabs">
-        <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="group-tabs" />
+        <SegmentedTabs tabs={tabs} value={tab} onChange={openTab} layoutId="group-tabs" />
       </div>
 
       {tab === "group" ? (
@@ -66,6 +136,8 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
           initialMembers={initial.members}
           initialMeUserId={initial.meUserId}
         />
+      ) : tab === "matches" ? (
+        <MatchesTab code={groupCode} items={matches} />
       ) : (
         <FriendsTab initial={initial.friends} />
       )}

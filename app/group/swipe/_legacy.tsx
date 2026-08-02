@@ -38,12 +38,67 @@ type MatchResp =
   | { ok: true; match: { tmdbId: number; tmdbType: MediaType } | null }
   | { ok: false };
 
+/** Hur få kort som får finnas kvar innan användaren varnas att leken snart tar slut. */
+const LOW_DECK_WARNING_CARDS = 4;
+
 export default function GroupSwipePage({ code }: { code: string }) {
-  const { deck, popCard, updateCards, unshiftCard } = useGroupSwipeDeck(code);
-  const { cards, loading, ready } = deck;
+  const { deck, popCard, updateCards, unshiftCard, retry } = useGroupSwipeDeck(code);
+  const { cards, loading, ready, hasMore, broadened } = deck;
   const showLoading = cards.length === 0 && (loading || !ready);
 
   const undoStackRef = useRef<UndoEntry[]>([]);
+
+  // Varna INNAN leken tar slut, så det inte kommer som en överraskning att
+  // sökningen vidgas eller att förslagen snart sinar. Återställs så fort en
+  // påfyllning (lib/swipeDeckStore.ts maybePrefetchGroupPages) gett fler kort,
+  // så varningen kan visas igen nästa gång leken blir tunn.
+  const warnedLowRef = useRef(false);
+  useEffect(() => {
+    if (!ready || cards.length === 0) return;
+    if (hasMore && cards.length <= LOW_DECK_WARNING_CARDS) {
+      if (!warnedLowRef.current) {
+        warnedLowRef.current = true;
+        notify("Få förslag kvar – hämtar fler och vidgar sökningen vid behov…");
+      }
+    } else if (cards.length > LOW_DECK_WARNING_CARDS) {
+      warnedLowRef.current = false;
+    }
+  }, [cards.length, hasMore, ready]);
+
+  // Servern (lib/unifiedRecs.ts) släpper hårda genre-/nyckelordsfilter när
+  // gruppens val gjort TMDB-katalogen för smal. Ett nytt `broadened`-objekt
+  // per hämtning (se lib/swipeDeckStore.ts) => effekten triggar en gång per
+  // svar; själva flaggorna avgör om det faktiskt är värt att säga något.
+  useEffect(() => {
+    if (!broadened) return;
+    if (broadened.genres) {
+      notify("Få träffar med era filter — vidgade sökningen (släppte genre/sub-genre) för fler förslag.");
+    } else if (broadened.keywords) {
+      notify("Få träffar med era sub-genrer — vidgade sökningen för fler förslag.");
+    }
+  }, [broadened]);
+
+  // Leken kan tömmas helt (hasMore=false, 0 kort kvar) trots påfyllningen ovan
+  // — t.ex. om även det vidgade sökningsläget är uttömt just nu. Tidigare var
+  // enda vägen tillbaka att lämna swipen och trycka "Starta gruppswipe" i
+  // gruppfliken, vilket bara gör samma sak (ensureGroupDeck med tomma cards
+  // triggar redan en full omstart) fast med en extra navigering. Gör det
+  // navigeringsfritt: försök EN gång automatiskt, återställ bara flaggan när
+  // leken faktiskt fylls på igen (annars skulle en fortsatt tom lek trigga om
+  // och om igen varje render).
+  const autoRetriedRef = useRef(false);
+  useEffect(() => {
+    if (!ready) return;
+    if (cards.length > 0) {
+      autoRetriedRef.current = false;
+      return;
+    }
+    if (loading || hasMore || autoRetriedRef.current) return;
+    autoRetriedRef.current = true;
+    notify("Letar efter fler förslag…");
+    void retry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.length, ready, loading, hasMore]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
 
@@ -416,6 +471,20 @@ export default function GroupSwipePage({ code }: { code: string }) {
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
             <p className="opacity-70">Slut på förslag nu.</p>
+            <button
+              type="button"
+              className="text-cyan-400 underline underline-offset-2"
+              onClick={() => {
+                // Automatförsöket ovan (en gång per tömning) kan redan ha
+                // körts och ändå kommit tomhänt — låt användaren utlösa ett
+                // till utan att lämna skärmen.
+                autoRetriedRef.current = false;
+                notify("Letar efter fler förslag…");
+                void retry();
+              }}
+            >
+              Försök igen
+            </button>
             <a
               className="text-cyan-400 underline underline-offset-2"
               href={`/group/match?code=${encodeURIComponent(code)}`}

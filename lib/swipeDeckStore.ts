@@ -171,6 +171,14 @@ export type GroupDeckState = {
   error: string | null;
   mediaFilter: SwipeMediaFilter;
   ready: boolean;
+  /**
+   * Satt av senaste hämtningen (lib/unifiedRecs.ts) när hårda genre-/
+   * nyckelordsfilter gjorde katalogen så smal att servern släppte dem för att
+   * fylla leken. Ett nytt objekt varje hämtning (även {false,false}) så en
+   * UI-effekt som lyssnar på referensen kan visa en vidgnings-toast en gång
+   * per hämtning utan egen bokföring — se app/group/swipe/_legacy.tsx.
+   */
+  broadened: { keywords: boolean; genres: boolean } | null;
 };
 
 const emptySolo = (): SoloDeckState => ({
@@ -196,6 +204,7 @@ const emptyGroup = (): GroupDeckState => ({
   error: null,
   mediaFilter: "both",
   ready: false,
+  broadened: null,
 });
 
 const EMPTY_GROUP: GroupDeckState = {
@@ -207,6 +216,7 @@ const EMPTY_GROUP: GroupDeckState = {
   error: null,
   mediaFilter: "both",
   ready: false,
+  broadened: null,
 };
 
 let soloState = hydrateSoloDeck();
@@ -470,6 +480,7 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
           ok: true;
           mediaFilter?: SwipeMediaFilter;
           nextTmdbPage?: number;
+          broadened?: { keywords: boolean; genres: boolean };
           items: Parameters<typeof mapUnifiedItems>[0];
         }
       | { ok: false; message?: string };
@@ -496,6 +507,7 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
       error: null,
       mediaFilter: replace ? data.mediaFilter ?? prev.mediaFilter : prev.mediaFilter,
       ready: true,
+      broadened: data.broadened ?? { keywords: false, genres: false },
     });
   } catch {
     if (replace) setGroupDeck(key, { loading: false, error: "Nätverksfel.", ready: true });

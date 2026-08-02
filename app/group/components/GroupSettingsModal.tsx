@@ -24,7 +24,7 @@ import {
 import { Button, Chip, SegmentedTabs } from "@/app/components/ui/kit";
 import GenrePicker from "@/app/components/discover/GenrePicker";
 import { PROVIDERS } from "@/lib/providers";
-import { subgenresFor, toggleKeywordGroup } from "@/lib/subgenres";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 type SettingsResp = {
   ok: boolean;
@@ -121,20 +121,11 @@ export default function GroupSettingsModal({
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   };
 
-  const toggleLiked = (g: string) => {
-    toggle(likedGenres, setLikedGenres, g);
-    setDislikedGenres((prev) => prev.filter((v) => v !== g));
-  };
-  const toggleDisliked = (g: string) => {
-    toggle(dislikedGenres, setDislikedGenres, g);
-    setLikedGenres((prev) => prev.filter((v) => v !== g));
-    // Genren lämnar Gillar-listan (unfoldet försvinner) — städa dess ev. valda
-    // sub-genrer så inget osynligt keyword-filter hänger kvar (se GenrePicker).
-    const staleIds = subgenresFor(g).flatMap((s) => s.keywordIds);
-    if (staleIds.length) {
-      setFavoriteKeywordIds((prev) => prev.filter((id) => !staleIds.includes(id)));
-    }
-  };
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt — de här är
+  // bara "toggla medlemskap i respektive lista", ett per läge.
+  const toggleLikedMembership = (g: string) => toggle(likedGenres, setLikedGenres, g);
+  const toggleDislikedMembership = (g: string) => toggle(dislikedGenres, setDislikedGenres, g);
   const toggleFavoriteKeywordIds = (ids: number[]) => {
     setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   };
@@ -216,41 +207,20 @@ export default function GroupSettingsModal({
                 />
               </SettingsSection>
 
-              <SettingsSection title="Genrer">
-                <div className="space-y-4">
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-400/70">
-                      Gillar
-                    </p>
-                    <GenrePicker
-                      genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
-                      selectedGenreIds={likedGenres}
-                      onToggleGenre={toggleLiked}
-                      selectedKeywordIds={favoriteKeywordIds}
-                      onToggleKeywordIds={toggleFavoriteKeywordIds}
-                      tone="like"
-                      wrap
-                    />
-                  </div>
-                  <div className="h-px bg-white/5" />
-                  <div>
-                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-rose-400/70">
-                      Ogillar
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {GROUP_GENRES.map((g) => (
-                        <Chip
-                          key={`dis-${g}`}
-                          tone="dislike"
-                          selected={dislikedGenres.includes(g)}
-                          onClick={() => toggleDisliked(g)}
-                        >
-                          {g}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+              <SettingsSection
+                title="Genrer"
+                hint="Tryck: gillar → ogillar → neutral. Gillade genrer kan smalnas ner med sub-genrer."
+              >
+                <GenrePicker
+                  genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                  selectedGenreIds={likedGenres}
+                  onToggleGenre={toggleLikedMembership}
+                  dislikedGenreIds={dislikedGenres}
+                  onToggleDislikedGenre={toggleDislikedMembership}
+                  selectedKeywordIds={favoriteKeywordIds}
+                  onToggleKeywordIds={toggleFavoriteKeywordIds}
+                  wrap
+                />
               </SettingsSection>
 
               <SettingsSection title="Streamingtjänster" hint="Tomt = alla tjänster som någon medlem har.">

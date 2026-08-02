@@ -39,6 +39,8 @@ type WatchItem = {
   voteAverage?: number | null;
   popularity?: number | null;
   genreIds?: number[];
+  /** TMDB keyword-id:n. `undefined` = inte cachat än (se refetchWatchlist), inte "inga". */
+  keywordIds?: number[];
 };
 
 // Titlar med eget betyg (Betyg-fliken) — från POST /api/ratings/list.
@@ -49,6 +51,8 @@ type RatedItem = {
   year: string | null;
   poster: string | null;
   genreIds: number[];
+  /** TMDB keyword-id:n. `undefined` = inte cachat än (se refetchRated), inte "inga". */
+  keywordIds?: number[];
   userRating: number;
 };
 
@@ -71,6 +75,7 @@ type WatchlistApiItem = {
   voteAverage?: number | null;
   popularity?: number | null;
   genreIds?: number[];
+  keywordIds?: number[];
 };
 
 const PLACEHOLDER_POSTER =
@@ -132,6 +137,7 @@ function toCachedTitle(raw: WatchlistApiItem): CachedTitle {
     voteAverage: raw.voteAverage ?? null,
     popularity: raw.popularity ?? null,
     genreIds: raw.genreIds ?? [],
+    keywordIds: raw.keywordIds ?? [],
   };
 }
 
@@ -152,6 +158,10 @@ function rowToWatchItem(row: WatchlistRowApi, meta: CachedTitle | undefined): Wa
     voteAverage: meta?.voteAverage ?? null,
     popularity: meta?.popularity ?? null,
     genreIds: meta?.genreIds ?? [],
+    // Ingen `?? []` här med flit: `undefined` (metadata inte hämtad/cachad än)
+    // ska tolkas annorlunda än en TOM lista (hämtat, titeln har inga keywords)
+    // av sub-genre-filtret nedan.
+    keywordIds: meta?.keywordIds,
   };
 }
 
@@ -188,11 +198,13 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   const [wlType, setWlType] = useState<MediaTypeFilter>('movie');
   const [wlSort, setWlSort] = useState('addedAt');
   const [wlGenres, setWlGenres] = useState<string[]>([]);
-  // Sub-genre-val (GenrePicker-unfold). OBS: watchlist/betyg har bara bred
-  // genre_ids per titel (ingen TMDB keyword-data client-side), så ett valt
-  // sub-genre-chip smalnar INTE listan förbi den breda genren — se `filtered`
-  // och `filteredRated` nedan. Chippen visas ändå för samma UX som Discover/
-  // Gruppinställningar, men state används bara för att rendera vald/ej vald.
+  // Sub-genre-val (GenrePicker-unfold). Titlarna bär numera TMDB keyword-id:n
+  // (append_to_response=keywords i lib/watchlistCards.ts/ratings/list, cachat
+  // client-side i lib/titleCache), så ett valt sub-genre-chip smalnar listan
+  // ner till titlar som faktiskt har det keywordet — se `filtered` och
+  // `filteredRated` nedan. En titel vars keywords ännu inte hunnit cachas
+  // (keywordIds === undefined) filtreras INTE bort — den visas tills
+  // enrichmenten hinner ikapp, i stället för att försvinna förvirrande.
   const [wlKeywordIds, setWlKeywordIds] = useState<number[]>([]);
   const [ratedType, setRatedType] = useState<MediaTypeFilter>('movie');
   const [ratedSort, setRatedSort] = useState('userRating');
@@ -216,10 +228,14 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         const rows = rowsData.rows;
 
         // Steg 2: fyll i metadata från cachen, hämta bara det som saknas.
+        // "Saknas" inkluderar poster skrivna FÖRE keywordIds-fältet fanns —
+        // annars fick de aldrig sub-genre-data och sub-genre-filtret skulle
+        // permanent falla tillbaka till "okänt" för hela den befintliga
+        // watchlisten. Självläker en gång per titel, sedan är cachen komplett.
         const cache = readTitleCache();
         const missing = rows
           .map((r) => titleKey(r.mediaType, r.tmdbId))
-          .filter((k) => !cache[k]);
+          .filter((k) => !cache[k] || cache[k].keywordIds === undefined);
 
         if (missing.length > 0) {
           const add: Record<string, CachedTitle> = {};
@@ -286,9 +302,11 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         const rows = rowsData.rows;
 
         const cache = readTitleCache();
+        // Se refetchWatchlist: poster utan keywordIds (skrivna före fältet
+        // fanns) räknas som saknade så de självläker en gång.
         const missing = rows
           .map((r) => titleKey(r.mediaType, r.tmdbId))
-          .filter((k) => !cache[k]);
+          .filter((k) => !cache[k] || cache[k].keywordIds === undefined);
 
         if (missing.length > 0) {
           const add: Record<string, CachedTitle> = {};
@@ -307,11 +325,13 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                   year: it.year,
                   poster: it.poster,
                   // Betygsrouten returnerar inte betyg/popularitet; watchlisten
-                  // fyller på dem för samma titel när den passerar. Genrer ger
-                  // den däremot nu, för genrefiltret på Betyg-fliken.
+                  // fyller på dem för samma titel när den passerar. Genrer och
+                  // keywords ger den däremot nu, för (sub-)genrefiltret på
+                  // Betyg-fliken.
                   voteAverage: null,
                   popularity: null,
                   genreIds: it.genreIds ?? [],
+                  keywordIds: it.keywordIds ?? [],
                 };
                 add[titleKey(it.mediaType, it.tmdbId)] = meta;
                 cache[titleKey(it.mediaType, it.tmdbId)] = meta;
@@ -330,6 +350,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
             year: meta?.year ?? null,
             poster: meta?.poster ?? null,
             genreIds: meta?.genreIds ?? [],
+            // undefined = inte cachat än, skiljs från tom lista — se rowToWatchItem.
+            keywordIds: meta?.keywordIds,
             userRating: r.userRating,
           };
         });
@@ -423,6 +445,11 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         (it.genreIds ?? []).some((gid) => wlGenres.includes(String(gid)))
       );
     }
+    if (wlKeywordIds.length > 0) {
+      list = list.filter(
+        (it) => it.keywordIds === undefined || it.keywordIds.some((kid) => wlKeywordIds.includes(kid))
+      );
+    }
     const needle = q.trim().toLowerCase();
     if (needle) list = list.filter((it) => it.title.toLowerCase().includes(needle));
 
@@ -437,13 +464,18 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       sorted.sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''));
     }
     return sorted;
-  }, [q, items, wlType, wlSort, wlGenres]);
+  }, [q, items, wlType, wlSort, wlGenres, wlKeywordIds]);
 
   const filteredRated = useMemo(() => {
     let list = (rated ?? []).filter((it) => it.mediaType === ratedType);
     if (ratedGenres.length > 0) {
       list = list.filter((it) =>
         (it.genreIds ?? []).some((gid) => ratedGenres.includes(String(gid)))
+      );
+    }
+    if (ratedKeywordIds.length > 0) {
+      list = list.filter(
+        (it) => it.keywordIds === undefined || it.keywordIds.some((kid) => ratedKeywordIds.includes(kid))
       );
     }
     const needle = q.trim().toLowerCase();
@@ -460,7 +492,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       sorted.sort((a, b) => b.userRating - a.userRating);
     }
     return sorted;
-  }, [q, rated, ratedType, ratedSort, ratedGenres]);
+  }, [q, rated, ratedType, ratedSort, ratedGenres, ratedKeywordIds]);
 
   const userRatingFor = useCallback(
     (tmdbId: number, mediaType: 'movie' | 'tv') =>
@@ -491,6 +523,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               year: it.year ?? null,
               poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
               genreIds: it.genreIds ?? [],
+              keywordIds: it.keywordIds,
               userRating: rating,
             };
             if (idx >= 0) {

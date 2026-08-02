@@ -25,6 +25,14 @@ export type CachedTitle = {
   voteAverage: number | null;
   popularity: number | null;
   genreIds: number[];
+  /**
+   * TMDB keyword-id:n (sub-genre-filtret, lib/subgenres.ts). Optional — inte
+   * `number[]` — så att en cache-post skriven FÖRE detta fält fanns kan
+   * skiljas från en post som verkligen har noll keywords: `undefined` betyder
+   * "okänt, hämta om", tom array betyder "hämtat, titeln har inga". Se
+   * refetchWatchlist/refetchRated i app/watchlist/WatchlistClient.tsx.
+   */
+  keywordIds?: number[];
 };
 
 /** `movie_123` / `tv_456` — samma nyckelformat som resten av appen. */

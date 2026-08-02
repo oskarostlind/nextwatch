@@ -11,6 +11,7 @@
 
 import prisma from "@/lib/prisma";
 import { tmdbFetch } from "@/lib/tmdbClient";
+import { extractKeywordIds } from "@/lib/subgenres";
 
 export type WatchlistCard = {
   id: string;
@@ -24,6 +25,8 @@ export type WatchlistCard = {
   voteAverage: number | null;
   popularity: number | null;
   genreIds: number[];
+  /** TMDB keyword-id:n (för sub-genre-filtret på Watchlist, se lib/subgenres.ts). */
+  keywordIds: number[];
 };
 
 type TmdbTitle = {
@@ -36,6 +39,8 @@ type TmdbTitle = {
   vote_average?: number | null;
   popularity?: number | null;
   genres?: { id: number }[];
+  /** Med av `append_to_response=keywords` — filmer under `keywords`, serier under `results`. */
+  keywords?: { keywords?: { id: number }[]; results?: { id: number }[] };
 };
 
 const V4_TOKEN =
@@ -80,6 +85,7 @@ function normalize(x: TmdbTitle, mediaType: "movie" | "tv", addedAt: Date): Watc
     voteAverage: typeof x.vote_average === "number" ? x.vote_average : null,
     popularity: typeof x.popularity === "number" ? x.popularity : null,
     genreIds: (x.genres ?? []).map((g) => g.id),
+    keywordIds: extractKeywordIds(x.keywords),
   };
 }
 
@@ -137,7 +143,10 @@ export async function buildWatchlistCards(
   const results = await Promise.all(
     rows.map(async (r) => {
       const mediaType = r.mediaType as "movie" | "tv";
-      const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
+      const path =
+        mediaType === "movie"
+          ? `movie/${r.tmdbId}?append_to_response=keywords`
+          : `tv/${r.tmdbId}?append_to_response=keywords`;
       const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
       if (!t) return null;
       return normalize(t, mediaType, r.addedAt);

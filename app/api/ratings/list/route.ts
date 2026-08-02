@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { tmdbFetch } from "@/lib/tmdbClient";
+import { extractKeywordIds } from "@/lib/subgenres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ type RatedCard = {
   poster: string | null;
   /** TMDB-genre-id:n, för genrefiltret på Betyg-fliken. */
   genreIds: number[];
+  /** TMDB keyword-id:n, för sub-genre-filtret på Betyg-fliken (lib/subgenres.ts). */
+  keywordIds: number[];
   /** Användarens eget betyg 1–10. */
   userRating: number;
 };
@@ -34,6 +37,8 @@ type TmdbTitle = {
   release_date?: string | null;
   first_air_date?: string | null;
   genres?: { id: number }[];
+  /** Med av `append_to_response=keywords` — filmer under `keywords`, serier under `results`. */
+  keywords?: { keywords?: { id: number }[]; results?: { id: number }[] };
 };
 
 const V4_TOKEN =
@@ -111,7 +116,10 @@ export async function POST(req: Request) {
     const results = await Promise.all(
       rows.map(async (r): Promise<RatedCard | null> => {
         const mediaType = r.mediaType as "movie" | "tv";
-        const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
+        const path =
+          mediaType === "movie"
+            ? `movie/${r.tmdbId}?append_to_response=keywords`
+            : `tv/${r.tmdbId}?append_to_response=keywords`;
         const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
         if (!t) return null; // titel borttagen från TMDB — hoppa över
         const title = mediaType === "movie" ? t.title ?? "" : t.name ?? "";
@@ -124,6 +132,7 @@ export async function POST(req: Request) {
           year: date && date.length >= 4 ? date.slice(0, 4) : null,
           poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
           genreIds: (t.genres ?? []).map((g) => g.id),
+          keywordIds: extractKeywordIds(t.keywords),
           userRating: r.rating as number,
         };
       })

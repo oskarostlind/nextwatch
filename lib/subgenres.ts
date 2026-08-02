@@ -66,6 +66,21 @@ export function subgenresFor(genreLabel: string): SubGenre[] {
 }
 
 /**
+ * Plockar ut keyword-id:n ur TMDB:s `append_to_response=keywords`-fält.
+ * Filmer nästlar dem under `keywords`, serier under `results` — samma
+ * inkonsekvens som lib/tasteModel.ts (extractKeywords) redan hanterar för
+ * smakmodellen. Delad här så watchlist-/betygskorten (lib/watchlistCards.ts,
+ * app/api/ratings/list) kan avgöra vilka sub-genre-keywords en titel bär utan
+ * ett separat TMDB-anrop per titel.
+ */
+export function extractKeywordIds(kw: unknown): number[] {
+  if (!kw || typeof kw !== "object") return [];
+  const obj = kw as { keywords?: unknown; results?: unknown };
+  const arr = Array.isArray(obj.keywords) ? obj.keywords : Array.isArray(obj.results) ? obj.results : [];
+  return arr.filter((x): x is { id: number } => Boolean(x) && typeof x.id === "number").map((x) => x.id);
+}
+
+/**
  * Togglar en hel sub-genre-grupp (kan vara flera keyword-id:n) som en enhet:
  * står alla redan i `current` tas alla bort, annars läggs alla till. Delas av
  * GenrePicker (chip-klick) och dess automatiska städning när en bred genre

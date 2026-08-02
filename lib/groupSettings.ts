@@ -4,6 +4,7 @@
 // Hålls fri från Prisma/next-imports så den kan importeras från klienten.
 
 import { type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
+import { SUBGENRES } from "@/lib/subgenres";
 
 export type { SwipeMediaFilter };
 
@@ -31,6 +32,8 @@ export type GroupSettings = {
   favoriteGenres: string[];
   /** Tom = automatik (union av ogillade minus någons gillade). */
   dislikedGenres: string[];
+  /** Valda sub-genrer (TMDB keyword-id:n) för genrerna i favoriteGenres. Tom = ingen sub-genre-filtrering. */
+  favoriteKeywordIds: number[];
   /** Tjänste-namn (labels, t.ex. "Netflix"). Tom = automatik (OR-union av medlemmarna). */
   providers: string[];
   /** null = automatik (yngsta medlemmens SE-certifiering). */
@@ -62,6 +65,19 @@ export function sanitizeGenres(v: unknown): string[] | null {
   if (!Array.isArray(v)) return null;
   const allowed = new Set<string>(GROUP_GENRES);
   const out = v.filter((g): g is string => typeof g === "string" && allowed.has(g));
+  return Array.from(new Set(out));
+}
+
+/** Alla giltiga sub-genre keyword-id:n (lib/subgenres.ts), oavsett bred genre. */
+const ALL_SUBGENRE_KEYWORD_IDS = new Set<number>(
+  Object.values(SUBGENRES).flatMap((subs) => subs.flatMap((s) => s.keywordIds))
+);
+
+export function sanitizeKeywordIds(v: unknown): number[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.filter(
+    (id): id is number => typeof id === "number" && Number.isInteger(id) && ALL_SUBGENRE_KEYWORD_IDS.has(id)
+  );
   return Array.from(new Set(out));
 }
 

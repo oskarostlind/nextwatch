@@ -1,6 +1,7 @@
 "use client";
 
-import { Chip, SegmentedTabs } from "@/app/components/ui/kit";
+import { SegmentedTabs } from "@/app/components/ui/kit";
+import GenrePicker from "@/app/components/discover/GenrePicker";
 
 export const MOVIE_GENRES = [
   ["28", "Action"], ["12", "Äventyr"], ["16", "Animerat"], ["35", "Komedi"],
@@ -47,6 +48,9 @@ type Props = {
   onSortChange: (s: string) => void;
   genres: string[];
   onToggleGenre: (id: string) => void;
+  /** Valda sub-genre TMDB keyword-id:n (inline-unfold under markerad genre). Tom lista = ingen sub-genre-filtrering. */
+  keywordIds?: number[];
+  onToggleKeywordIds?: (keywordIds: number[]) => void;
   /** discover = TMDB sort keys; watchlist/rated = client sort keys */
   mode?: "discover" | "watchlist" | "rated";
   layoutId?: string;
@@ -59,6 +63,8 @@ export default function MediaFilters({
   onSortChange,
   genres,
   onToggleGenre,
+  keywordIds = [],
+  onToggleKeywordIds,
   mode = "discover",
   layoutId = "media-filters-type",
 }: Props) {
@@ -101,18 +107,13 @@ export default function MediaFilters({
         </select>
       </div>
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {genreList.map(([id, name]) => (
-          <Chip
-            key={id}
-            selected={genres.includes(id)}
-            onClick={() => onToggleGenre(id)}
-            className="shrink-0 whitespace-nowrap"
-          >
-            {name}
-          </Chip>
-        ))}
-      </div>
+      <GenrePicker
+        genres={genreList.map(([id, name]) => ({ id, label: name }))}
+        selectedGenreIds={genres}
+        onToggleGenre={onToggleGenre}
+        selectedKeywordIds={keywordIds}
+        onToggleKeywordIds={onToggleKeywordIds ?? (() => {})}
+      />
     </div>
   );
 }

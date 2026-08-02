@@ -22,7 +22,9 @@ import {
   type SwipeMediaFilter,
 } from "@/lib/groupSettings";
 import { Button, Chip, SegmentedTabs } from "@/app/components/ui/kit";
+import GenrePicker from "@/app/components/discover/GenrePicker";
 import { PROVIDERS } from "@/lib/providers";
+import { subgenresFor, toggleKeywordGroup } from "@/lib/subgenres";
 
 type SettingsResp = {
   ok: boolean;
@@ -69,6 +71,7 @@ export default function GroupSettingsModal({
   const [memberCount, setMemberCount] = useState(0);
   const [likedGenres, setLikedGenres] = useState<string[]>([]);
   const [dislikedGenres, setDislikedGenres] = useState<string[]>([]);
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
   const [providers, setProviders] = useState<string[]>([]);
   const [maxCert, setMaxCert] = useState<GroupCert | null>(null);
   const [thresholdCount, setThresholdCount] = useState<number>(MIN_MATCH_THRESHOLD);
@@ -92,6 +95,7 @@ export default function GroupSettingsModal({
         setMemberCount(n);
         setLikedGenres(j.settings.favoriteGenres);
         setDislikedGenres(j.settings.dislikedGenres);
+        setFavoriteKeywordIds(j.settings.favoriteKeywordIds);
         setProviders(j.settings.providers);
         setMaxCert(j.settings.maxCert);
         setThresholdCustom(j.settings.matchThreshold !== null);
@@ -124,6 +128,15 @@ export default function GroupSettingsModal({
   const toggleDisliked = (g: string) => {
     toggle(dislikedGenres, setDislikedGenres, g);
     setLikedGenres((prev) => prev.filter((v) => v !== g));
+    // Genren lämnar Gillar-listan (unfoldet försvinner) — städa dess ev. valda
+    // sub-genrer så inget osynligt keyword-filter hänger kvar (se GenrePicker).
+    const staleIds = subgenresFor(g).flatMap((s) => s.keywordIds);
+    if (staleIds.length) {
+      setFavoriteKeywordIds((prev) => prev.filter((id) => !staleIds.includes(id)));
+    }
+  };
+  const toggleFavoriteKeywordIds = (ids: number[]) => {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   };
 
   const canCustomizeThreshold = memberCount >= MIN_MATCH_THRESHOLD;
@@ -143,6 +156,7 @@ export default function GroupSettingsModal({
           code,
           favoriteGenres: likedGenres,
           dislikedGenres,
+          favoriteKeywordIds,
           providers,
           maxCert,
           matchThreshold: thresholdCustom && canCustomizeThreshold ? shownThreshold : null,
@@ -208,18 +222,15 @@ export default function GroupSettingsModal({
                     <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-400/70">
                       Gillar
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {GROUP_GENRES.map((g) => (
-                        <Chip
-                          key={`like-${g}`}
-                          tone="like"
-                          selected={likedGenres.includes(g)}
-                          onClick={() => toggleLiked(g)}
-                        >
-                          {g}
-                        </Chip>
-                      ))}
-                    </div>
+                    <GenrePicker
+                      genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                      selectedGenreIds={likedGenres}
+                      onToggleGenre={toggleLiked}
+                      selectedKeywordIds={favoriteKeywordIds}
+                      onToggleKeywordIds={toggleFavoriteKeywordIds}
+                      tone="like"
+                      wrap
+                    />
                   </div>
                   <div className="h-px bg-white/5" />
                   <div>

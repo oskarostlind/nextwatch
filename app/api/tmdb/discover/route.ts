@@ -59,6 +59,13 @@ export async function GET(req: Request) {
     const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
     const sortBy = url.searchParams.get("sort_by") || "popularity.desc";
     const withGenres = url.searchParams.get("with_genres") || "";
+    // Sub-genre-filtrering (lib/subgenres.ts): TMDB keyword-id:n, kommatecknade
+    // från klienten men OR-semantik (pipe) i TMDB:s eget API, precis som genrer.
+    const withKeywords = (url.searchParams.get("with_keywords") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join("|");
     const useMyProviders = url.searchParams.get("myProviders") === "1";
 
     // Default region/language; override from profile if available
@@ -90,6 +97,7 @@ export async function GET(req: Request) {
       with_watch_monetization_types: "flatrate",
       watch_region: region,
     });
+    if (withKeywords) qs.set("with_keywords", withKeywords);
     const isHighestRated = sortBy === "vote_average.desc";
     if (isHighestRated) {
       // Hard eligibility floor: excludes near-zero-vote titles from TMDB's

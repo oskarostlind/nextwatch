@@ -277,6 +277,10 @@ model Group {
   // Se lib/groupSettings.ts.
   favoriteGenres String[] @default([]) @map("favorite_genres")
   dislikedGenres String[] @default([]) @map("disliked_genres")
+  /// Valda sub-genrer (TMDB keyword-id:n, se lib/subgenres.ts) för de gillade
+  /// genrerna ovan. Tomt = ingen sub-genre-filtrering. Appliceras som HÅRT
+  /// filter (with_keywords) i lib/unifiedRecs.ts, precis som favoriteGenres.
+  favoriteKeywordIds Int[]  @default([]) @map("favorite_keyword_ids")
   providers      Json     @default("[]")
   maxCert        String?  @map("max_cert")
   /// Antal PERSONER (≥2) som krävs för match. null = automatik (60 % av storlek).

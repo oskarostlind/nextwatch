@@ -361,6 +361,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
             select: {
               favoriteGenres: true,
               dislikedGenres: true,
+              favoriteKeywordIds: true,
               providers: true,
               maxCert: true,
               mediaFilter: true,
@@ -562,6 +563,14 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const withGenresMovie = hardFilterMovieGenres.length > 0 ? hardFilterMovieGenres.join("|") : undefined;
     const withGenresTv = hardFilterTvGenres.length > 0 ? hardFilterTvGenres.join("|") : undefined;
 
+    // Sub-genrer (lib/subgenres.ts): samma HÅRDA-filter-princip som genrerna
+    // ovan, fast som TMDB keywords. Bara satt när gruppen (kugghjulet) själv
+    // valt sub-genrer på Group.favoriteKeywordIds — automatik-läget (ingen
+    // grupp-inställning) har inga keyword-id:n att filtrera på.
+    const groupExplicitKeywordIds = isGroup ? groupRow?.favoriteKeywordIds ?? [] : [];
+    const withKeywords =
+      groupExplicitKeywordIds.length > 0 ? groupExplicitKeywordIds.join("|") : undefined;
+
     // Startas här och inväntas efter discover-loopen, så uppslagen löper
     // parallellt med sidhämtningen i stället för att lägga sig ovanpå den.
     const watchlistCandidatesPromise =
@@ -638,6 +647,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               // toggeln slås på.
               without_genres: showKidsContent ? undefined : "10751",
               with_genres: withGenresMovie,
+              with_keywords: withKeywords,
               certification_country: "SE",
               "certification.lte": certMax,
               sort_by: "popularity.desc",
@@ -658,6 +668,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               // Barn-tv (My Little Pony m.fl.) exkluderas om barnfiltret är av.
               without_genres: showKidsContent ? undefined : "10762",
               with_genres: withGenresTv,
+              with_keywords: withKeywords,
               sort_by: "popularity.desc",
               page: tmdbPage,
             }, "force-cache").catch((err) => {

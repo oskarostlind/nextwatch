@@ -19,6 +19,7 @@ import {
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
 import { markTitleRated } from "@/lib/swipeDeckStore";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 type Item = {
   id: number;
@@ -91,6 +92,9 @@ export default function DiscoverPage() {
   const [type, setType] = useState<MediaTypeFilter>("movie");
   const [sort, setSort] = useState("popularity.desc");
   const [genres, setGenres] = useState<string[]>([]);
+  // Sub-genre-filtrering (TMDB keyword-id:n, se lib/subgenres.ts). Ephemer
+  // UI-state — sparas inte, precis som resten av Discover-filtren.
+  const [keywordIds, setKeywordIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
   // Sentinel högst upp i listan. scrollIntoView scrollar den container som
   // faktiskt scrollar (discover-mainen har egen overflow-y-auto) — så ett
@@ -135,6 +139,7 @@ export default function DiscoverPage() {
           sort_by: sort,
         });
         if (genres.length) qs.set("with_genres", genres.join(","));
+        if (keywordIds.length) qs.set("with_keywords", keywordIds.join(","));
         const r = await fetch(`/api/tmdb/discover?${qs.toString()}`, { cache: "no-store" });
         const j = (await r.json()) as ApiOk | ApiErr;
         if (ignore) return;
@@ -149,7 +154,7 @@ export default function DiscoverPage() {
     return () => {
       ignore = true;
     };
-  }, [type, sort, genres, page]);
+  }, [type, sort, genres, keywordIds, page]);
 
   useEffect(() => {
     const needle = debouncedQ.trim();
@@ -219,6 +224,11 @@ export default function DiscoverPage() {
   function toggleGenre(id: string) {
     setPage(1);
     setGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function toggleKeywordIds(ids: number[]) {
+    setPage(1);
+    setKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   }
 
   function submitRating(rating: number) {
@@ -322,6 +332,7 @@ export default function DiscoverPage() {
           setType(t);
           setPage(1);
           setGenres([]);
+          setKeywordIds([]);
         }}
         sort={sort}
         onSortChange={(s) => {
@@ -330,6 +341,8 @@ export default function DiscoverPage() {
         }}
         genres={genres}
         onToggleGenre={toggleGenre}
+        keywordIds={keywordIds}
+        onToggleKeywordIds={toggleKeywordIds}
         mode="discover"
         layoutId="discover-type"
       />

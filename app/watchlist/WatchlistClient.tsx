@@ -26,6 +26,7 @@ import { markTitleRated } from '@/lib/swipeDeckStore';
 import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
 import CoachMarkTour from '@/app/components/client/tours/CoachMarkTour';
 import { WATCHLIST_TOUR_STEPS } from '@/lib/tours/coachSteps';
+import { toggleKeywordGroup } from '@/lib/subgenres';
 
 type WatchItem = {
   id: number;
@@ -187,9 +188,16 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   const [wlType, setWlType] = useState<MediaTypeFilter>('movie');
   const [wlSort, setWlSort] = useState('addedAt');
   const [wlGenres, setWlGenres] = useState<string[]>([]);
+  // Sub-genre-val (GenrePicker-unfold). OBS: watchlist/betyg har bara bred
+  // genre_ids per titel (ingen TMDB keyword-data client-side), så ett valt
+  // sub-genre-chip smalnar INTE listan förbi den breda genren — se `filtered`
+  // och `filteredRated` nedan. Chippen visas ändå för samma UX som Discover/
+  // Gruppinställningar, men state används bara för att rendera vald/ej vald.
+  const [wlKeywordIds, setWlKeywordIds] = useState<number[]>([]);
   const [ratedType, setRatedType] = useState<MediaTypeFilter>('movie');
   const [ratedSort, setRatedSort] = useState('userRating');
   const [ratedGenres, setRatedGenres] = useState<string[]>([]);
+  const [ratedKeywordIds, setRatedKeywordIds] = useState<number[]>([]);
 
   const [imdbOpen, setImdbOpen] = useState(false);
   const [shareItem, setShareItem] = useState<ShareItem | null>(null);
@@ -589,6 +597,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           onTypeChange={(t) => {
             setWlType(t);
             setWlGenres([]);
+            setWlKeywordIds([]);
           }}
           sort={wlSort}
           onSortChange={setWlSort}
@@ -596,6 +605,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           onToggleGenre={(id) =>
             setWlGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
           }
+          keywordIds={wlKeywordIds}
+          onToggleKeywordIds={(ids) => setWlKeywordIds((prev) => toggleKeywordGroup(prev, ids))}
           mode="watchlist"
           layoutId="watchlist-type"
         />
@@ -605,6 +616,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           onTypeChange={(t) => {
             setRatedType(t);
             setRatedGenres([]);
+            setRatedKeywordIds([]);
           }}
           sort={ratedSort}
           onSortChange={setRatedSort}
@@ -612,6 +624,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           onToggleGenre={(id) =>
             setRatedGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
           }
+          keywordIds={ratedKeywordIds}
+          onToggleKeywordIds={(ids) => setRatedKeywordIds((prev) => toggleKeywordGroup(prev, ids))}
           mode="rated"
           layoutId="ratings-type"
         />

@@ -16,6 +16,7 @@ import {
   isValidThreshold,
   parseProvidersJson,
   sanitizeGenres,
+  sanitizeKeywordIds,
   type GroupSettings,
 } from "@/lib/groupSettings";
 import { isValidSwipeMediaFilter } from "@/lib/swipeMediaFilter";
@@ -39,6 +40,7 @@ function bad(message: string, status = 400) {
 function toSettingsDto(g: {
   favoriteGenres: string[];
   dislikedGenres: string[];
+  favoriteKeywordIds: number[];
   providers: unknown;
   maxCert: string | null;
   matchThreshold: number | null;
@@ -47,6 +49,7 @@ function toSettingsDto(g: {
   return {
     favoriteGenres: g.favoriteGenres,
     dislikedGenres: g.dislikedGenres,
+    favoriteKeywordIds: g.favoriteKeywordIds,
     providers: parseProvidersJson(g.providers),
     maxCert: isValidCert(g.maxCert) ? g.maxCert : null,
     matchThreshold: g.matchThreshold,
@@ -70,6 +73,7 @@ export async function GET(req: NextRequest) {
         createdBy: true,
         favoriteGenres: true,
         dislikedGenres: true,
+        favoriteKeywordIds: true,
         providers: true,
         maxCert: true,
         matchThreshold: true,
@@ -96,6 +100,7 @@ type PatchBody = {
   code?: string;
   favoriteGenres?: unknown;
   dislikedGenres?: unknown;
+  favoriteKeywordIds?: unknown;
   providers?: unknown;
   maxCert?: unknown;
   matchThreshold?: unknown;
@@ -129,6 +134,7 @@ export async function PATCH(req: NextRequest) {
   const data: {
     favoriteGenres?: string[];
     dislikedGenres?: string[];
+    favoriteKeywordIds?: number[];
     providers?: string[];
     maxCert?: string | null;
     matchThreshold?: number | null;
@@ -144,6 +150,11 @@ export async function PATCH(req: NextRequest) {
     const g = sanitizeGenres(body.dislikedGenres);
     if (g === null) return bad("Ogiltiga genrer.");
     data.dislikedGenres = g;
+  }
+  if ("favoriteKeywordIds" in body) {
+    const k = sanitizeKeywordIds(body.favoriteKeywordIds);
+    if (k === null) return bad("Ogiltiga sub-genrer.");
+    data.favoriteKeywordIds = k;
   }
   if ("providers" in body) {
     if (!Array.isArray(body.providers) || body.providers.some((p) => typeof p !== "string")) {
@@ -178,6 +189,7 @@ export async function PATCH(req: NextRequest) {
         code: true,
         favoriteGenres: true,
         dislikedGenres: true,
+        favoriteKeywordIds: true,
         providers: true,
         maxCert: true,
         matchThreshold: true,

@@ -85,6 +85,12 @@ export type UnifiedRecsOk = {
    * värdet som `?from=`.
    */
   nextTmdbPage: number;
+  /**
+   * Satt när hårda genre-/nyckelordsfilter gjorde katalogen för smal och
+   * servern släppte dem för att fylla leken (se POOL_THIN_TARGET nedan).
+   * Klienten kan visa det som "vidgade sökningen" åt användaren.
+   */
+  broadened: { keywords: boolean; genres: boolean };
 };
 
 export type UnifiedRecsErr = { ok: false; message: string; status: number };
@@ -621,7 +627,6 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
 
     const baseRaw: { id: number; tmdbType: MediaType; item: TMDBListItem }[] = [];
     const seenCandidate = new Set<string>();
-    let maxTmdbPages = 1;
 
     // Sidorna hämtas i klumpar i stället för en i taget: djupet ovan behövs bara
     // för storswipare, men om de 40 sidorna kördes sekventiellt skulle just de
@@ -629,7 +634,13 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // Concurrency-taket i lib/tmdbClient håller trycket nere.
     const PAGE_CHUNK = 4;
 
-    async function fetchDiscoverPage(tmdbPage: number) {
+    type DiscoverFilters = {
+      withGenresMovie?: string;
+      withGenresTv?: string;
+      withKeywords?: string;
+    };
+
+    async function fetchDiscoverPage(tmdbPage: number, filters: DiscoverFilters) {
       // En trasig sida får inte fälla hela leken. Tidigare bubblade ett kastat
       // discover-anrop (t.ex. TMDB 429) till yttre catch → 500 → "Slut på
       // förslag nu", trots att tidigare sidor redan gett fullt användbara
@@ -650,8 +661,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               // Träffar även Pixar/Ghibli-familjefilmer — de kommer tillbaka när
               // toggeln slås på.
               without_genres: showKidsContent ? undefined : "10751",
-              with_genres: withGenresMovie,
-              with_keywords: withKeywords,
+              with_genres: filters.withGenresMovie,
+              with_keywords: filters.withKeywords,
               certification_country: "SE",
               "certification.lte": certMax,
               sort_by: "popularity.desc",
@@ -671,8 +682,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               with_watch_providers: tmdbProviderString,
               // Barn-tv (My Little Pony m.fl.) exkluderas om barnfiltret är av.
               without_genres: showKidsContent ? undefined : "10762",
-              with_genres: withGenresTv,
-              with_keywords: withKeywords,
+              with_genres: filters.withGenresTv,
+              with_keywords: filters.withKeywords,
               sort_by: "popularity.desc",
               page: tmdbPage,
             }, "force-cache").catch((err) => {
@@ -683,43 +694,112 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       ]);
     }
 
-    let scannedTo = startTmdbPage - 1;
-    outer: for (let offset = 0; offset < MAX_PAGES_PER_REQUEST; offset += PAGE_CHUNK) {
-      const pages: number[] = [];
-      for (let i = 0; i < PAGE_CHUNK && offset + i < MAX_PAGES_PER_REQUEST; i++) {
-        const p = startTmdbPage + offset + i;
-        if (p > 500) break; // TMDB tillåter max 500 sidor.
-        if (p > maxTmdbPages && offset > 0) break; // Inga fler TMDB-sidor att hämta.
-        pages.push(p);
-      }
-      if (pages.length === 0) break;
-
-      const chunk = await Promise.all(pages.map(fetchDiscoverPage));
-
-      for (let i = 0; i < chunk.length; i++) {
-        const [popMovie, popTv] = chunk[i];
-        scannedTo = pages[i];
-        maxTmdbPages = Math.max(maxTmdbPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
-
-        for (const r of popMovie.results) {
-          const key = `movie_${r.id}`;
-          if (!watchKeys.has(key) && !seenCandidate.has(key)) {
-            seenCandidate.add(key);
-            baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
-          }
+    /**
+     * Skannar TMDB-sidor med givna filter tills `target` kandidater samlats i
+     * `baseRaw`, eller `maxPages`/katalogens slut nås. Delad av strikt-passet
+     * (gruppens/profilens egna genre-/nyckelordsval) och vidgnings-passen nedan
+     * — de skiljer sig bara på filter och startsida, så samma paginering
+     * återanvänds i stället för att dupliceras per pass. `localMaxPages` är
+     * skopad till just detta anrop eftersom olika filter ger olika
+     * TMDB-`total_pages` — ett vidgat pass (färre filter) har en helt annan
+     * katalogstorlek än det strikta.
+     */
+    async function scanDiscoverPages(opts: {
+      filters: DiscoverFilters;
+      startPage: number;
+      maxPages: number;
+      target: number;
+    }): Promise<number> {
+      const { filters, startPage, maxPages, target } = opts;
+      let scannedTo = startPage - 1;
+      let localMaxPages = 1;
+      outer: for (let offset = 0; offset < maxPages; offset += PAGE_CHUNK) {
+        const pages: number[] = [];
+        for (let i = 0; i < PAGE_CHUNK && offset + i < maxPages; i++) {
+          const p = startPage + offset + i;
+          if (p > 500) break; // TMDB tillåter max 500 sidor.
+          if (p > localMaxPages && offset > 0) break; // Inga fler TMDB-sidor att hämta.
+          pages.push(p);
         }
-        for (const r of popTv.results) {
-          const key = `tv_${r.id}`;
-          if (!watchKeys.has(key) && !seenCandidate.has(key)) {
-            seenCandidate.add(key);
-            baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+        if (pages.length === 0) break;
+
+        const chunk = await Promise.all(pages.map((p) => fetchDiscoverPage(p, filters)));
+
+        for (let i = 0; i < chunk.length; i++) {
+          const [popMovie, popTv] = chunk[i];
+          scannedTo = pages[i];
+          localMaxPages = Math.max(localMaxPages, popMovie.total_pages ?? 1, popTv.total_pages ?? 1);
+
+          for (const r of popMovie.results) {
+            const key = `movie_${r.id}`;
+            if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+              seenCandidate.add(key);
+              baseRaw.push({ id: r.id, tmdbType: "movie", item: r });
+            }
           }
+          for (const r of popTv.results) {
+            const key = `tv_${r.id}`;
+            if (!watchKeys.has(key) && !seenCandidate.has(key)) {
+              seenCandidate.add(key);
+              baseRaw.push({ id: r.id, tmdbType: "tv", item: r });
+            }
+          }
+
+          if (baseRaw.length >= target) break outer;
         }
 
-        if (baseRaw.length >= CANDIDATE_TARGET) break outer;
+        if (scannedTo >= localMaxPages) break; // Inga fler TMDB-sidor att hämta.
       }
+      return scannedTo;
+    }
 
-      if (scannedTo >= maxTmdbPages) break; // Inga fler TMDB-sidor att hämta.
+    const scannedTo = await scanDiscoverPages({
+      filters: { withGenresMovie, withGenresTv, withKeywords },
+      startPage: startTmdbPage,
+      maxPages: MAX_PAGES_PER_REQUEST,
+      target: CANDIDATE_TARGET,
+    });
+
+    /**
+     * Vidgning: gruppens hårda genre-/nyckelordsfilter (kugghjulet respektive
+     * sub-genre-valet) kan göra TMDB-katalogen så smal att strikt-passet ovan
+     * tar slut på sidor långt under CANDIDATE_TARGET — värst i grupp, där båda
+     * filtren kan gälla SAMTIDIGT och exkluderingsmängden (allas röster) redan
+     * är större än solo. Utan det här tömdes leken och enda vägen tillbaka var
+     * att lämna swipen och trycka "Starta gruppswipe" (full omstart från
+     * TMDB-sida 1, se lib/swipeDeckStore.ts ensureGroupDeck). Släpp filtren
+     * stegvis — nyckelord först, sedan genre — och skanna om från sida 1 (ett
+     * annat filter = en annan TMDB-fråga, sidnumren från strikt-passet betyder
+     * inget här). `broadened` skickas till klienten så den kan berätta för
+     * användaren att sökningen vidgades.
+     *
+     * Solo-swipen har också ett hårt sub-genre-filter (withKeywords), men den
+     * ska INTE vidgas automatiskt här — dess val i Profil är lika explicit som
+     * gruppens och ska förbli hårt (samma princip som kommentaren ovan filtren
+     * beskriver). Bara gruppleken tömdes utan återhämtning, så bara den får
+     * automatisk vidgning; `isGroup`-vakten nedan håller solo oförändrad.
+     */
+    const POOL_THIN_TARGET = 20;
+    const RELAX_MAX_PAGES = 20;
+    const broadened = { keywords: false, genres: false };
+
+    if (isGroup && withKeywords && baseRaw.length < POOL_THIN_TARGET) {
+      await scanDiscoverPages({
+        filters: { withGenresMovie, withGenresTv, withKeywords: undefined },
+        startPage: 1,
+        maxPages: RELAX_MAX_PAGES,
+        target: CANDIDATE_TARGET,
+      });
+      broadened.keywords = true;
+    }
+    if (isGroup && (withGenresMovie || withGenresTv) && baseRaw.length < POOL_THIN_TARGET) {
+      await scanDiscoverPages({
+        filters: { withGenresMovie: undefined, withGenresTv: undefined, withKeywords: undefined },
+        startPage: 1,
+        maxPages: RELAX_MAX_PAGES,
+        target: CANDIDATE_TARGET,
+      });
+      broadened.genres = true;
     }
 
     // Väv in de titlar exakt en medlem sparat. De läggs till baseRaw och går
@@ -937,6 +1017,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       mediaFilter,
       items,
       nextTmdbPage: Math.min(scannedTo + 1, 501),
+      broadened,
     };
   } catch (err) {
     console.error("computeUnifiedRecs error:", err);

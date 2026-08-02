@@ -37,16 +37,23 @@ model User {
   /// null = har aldrig fått ett tips och går därför främst i kön.
   lastDailyRecAt DateTime? @map("last_daily_rec_at")
 
+  /// Senast PUSHADE dagliga tipset. Utan interaktion är recs-listan stabil, så
+  /// items[0] blev samma titel dag efter dag — cronen hoppar över den här.
+  lastDailyRecTmdbId    Int?    @map("last_daily_rec_tmdb_id")
+  lastDailyRecMediaType String? @map("last_daily_rec_media_type")
+
   // Username för kompis-sök
   username String? @unique
 
   // Sign in with Apple (unikt Apple-användar-id)
   appleSub String? @unique @map("apple_sub")
 
-  profile   Profile?
-  ratings   Rating[]
-  watchlist watchlist[]
-  purchases Purchase[]
+  profile        Profile?
+  ratings        Rating[]
+  sharesSent     SharedTitle[] @relation("sharesSent")
+  sharesReceived SharedTitle[] @relation("sharesReceived")
+  watchlist      watchlist[]
+  purchases      Purchase[]
 
   appleIapTransactions AppleIapTransaction[]
 
@@ -65,8 +72,9 @@ model User {
   groupInvitesReceived GroupInvite[]    @relation("GroupInvitesTo")
   groupMatchesSeen     GroupMatchSeen[]
 
-  verifications Verification[]
-  pushTokens    PushToken[]
+  verifications   Verification[]
+  pushTokens      PushToken[]
+  onboardingTours OnboardingTour[]
 
   @@map("users")
 }
@@ -97,25 +105,38 @@ model Profile {
   updatedAt        DateTime @default(now()) @map("updated_at")
 
   // Smakprofil
-  displayName    String?  @map("display_name")
-  favoriteMovie  Json?    @map("favorite_movie")
-  favoriteShow   Json?    @map("favorite_show")
-  favoriteGenres String[] @default([]) @map("favorite_genres")
-  dislikedGenres String[] @default([]) @map("disliked_genres")
+  displayName        String?  @map("display_name")
+  /// Vald avatar ur det förvalda biblioteket (lib/avatars.ts), t.ex. "popcorn".
+  /// Null = ingen vald (frivilligt val — UI faller tillbaka på initial).
+  avatarId           String?  @map("avatar_id")
+  favoriteMovie      Json?    @map("favorite_movie")
+  favoriteShow       Json?    @map("favorite_show")
+  favoriteGenres     String[] @default([]) @map("favorite_genres")
+  dislikedGenres     String[] @default([]) @map("disliked_genres")
+  /// Valda sub-genrer (TMDB keyword-id:n, se lib/subgenres.ts) för de gillade
+  /// genrerna ovan. Tomt = ingen sub-genre-filtrering. Appliceras som HÅRT
+  /// filter (with_keywords) i lib/unifiedRecs.ts för solo-läget, precis som
+  /// Group.favoriteKeywordIds gör för grupper.
+  favoriteKeywordIds Int[]    @default([]) @map("favorite_keyword_ids")
 
   // Swipe-inställningar (styrs från profilen).
   /// Visa hyr-/köpalternativ på titelkort. Av som standard: annars tror användaren
   /// att titeln går att streama fritt och länkas till en betalsida.
-  showPaidOptions Boolean @default(false) @map("show_paid_options")
+  showPaidOptions  Boolean @default(false) @map("show_paid_options")
   /// movie | tv | both — vilken typ av titlar solo-swipen visar (standard: both).
   /// Grupper har sitt eget filter på Group.mediaFilter.
-  swipeMediaFilter String @default("both") @map("swipe_media_filter")
+  swipeMediaFilter String  @default("both") @map("swipe_media_filter")
+  /// Visa barn-/familjeinnehåll (TV-Kids-genren) i förslagen. Av som standard:
+  /// vuxna vill sällan ha t.ex. My Little Pony i flödet. Se lib/unifiedRecs.ts.
+  showKidsContent  Boolean @default(false) @map("show_kids_content")
 
   // Notisinställningar (per användare). Default: allt på.
   notifyDailyRecs      Boolean @default(true) @map("notify_daily_recs")
   notifyGroupMatches   Boolean @default(true) @map("notify_group_matches")
   notifyFriendRequests Boolean @default(true) @map("notify_friend_requests")
   notifyGroupInvites   Boolean @default(true) @map("notify_group_invites")
+  /// Push när en vän skickar ett filmtips (filmchatten).
+  notifyShares         Boolean @default(true) @map("notify_shares")
   notifyMarketing      Boolean @default(false) @map("notify_marketing")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -170,6 +191,33 @@ model watchlist {
   @@map("watchlist")
 }
 
+/// Filmtips mellan vänner ("chatten", omscopad): ett delat titelkort, ingen
+/// fritext. Unik per (från, till, titel) — att tipsa om samma film igen bumpar
+/// raden i stället för att spamma mottagarens inbox.
+model SharedTitle {
+  id         String    @id @default(cuid())
+  fromUserId String    @map("from_user_id")
+  toUserId   String    @map("to_user_id")
+  tmdbId     Int       @map("tmdb_id")
+  mediaType  String    @map("media_type")
+  title      String
+  year       String?
+  poster     String?
+  /// När mottagaren öppnat tipset (null = oläst).
+  seenAt     DateTime? @map("seen_at")
+  /// Mottagarens fasta reaktion: "seen" (Redan sett) | "want" (Vill kolla) |
+  /// "skip" (Vill inte se). Null = ingen reaktion än.
+  reaction   String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  from User @relation("sharesSent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to   User @relation("sharesReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId, tmdbId, mediaType], map: "shared_titles_unique_tip")
+  @@index([toUserId, createdAt], map: "idx_shared_titles_inbox")
+  @@map("shared_titles")
+}
+
 model Purchase {
   id                    String   @id
   userId                String   @map("user_id")
@@ -203,6 +251,26 @@ model AppleIapTransaction {
   @@map("apple_iap_transactions")
 }
 
+/// Server-side "seen" state for interactive onboarding tours (lib/tours). Versioned
+/// so a tour can be re-triggered for everyone by bumping its version in
+/// lib/tours/registry.ts — old rows with a lower version count as unseen again.
+/// Unlike the older localStorage coach-marks (lib/userGuide.ts), this persists
+/// across devices/reinstalls, which the swipe-gesture tour needs to reach existing
+/// users exactly once on next open, regardless of which device they open next.
+model OnboardingTour {
+  userId      String   @map("user_id")
+  tourId      String   @map("tour_id")
+  version     Int
+  /// "completed" | "skipped"
+  status      String   @default("completed")
+  completedAt DateTime @default(now()) @map("completed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tourId])
+  @@map("onboarding_tours")
+}
+
 model Group {
   code      String   @id
   createdBy String   @map("created_by")
@@ -210,19 +278,27 @@ model Group {
 
   // Gruppinställningar (kugghjulet, endast skaparen). Tomma/null = automatik:
   // genrer/providers unionas från medlemmarnas profiler, åldersgräns från
-  // yngsta medlemmen och matchtröskeln är 60 %. Se lib/groupSettings.ts.
-  favoriteGenres String[] @default([]) @map("favorite_genres")
-  dislikedGenres String[] @default([]) @map("disliked_genres")
-  providers      Json     @default("[]")
-  maxCert        String?  @map("max_cert")
-  matchThreshold Int?     @map("match_threshold")
+  // yngsta medlemmen och matchtröskeln är 60 % av gruppens storlek.
+  // Se lib/groupSettings.ts.
+  favoriteGenres     String[] @default([]) @map("favorite_genres")
+  dislikedGenres     String[] @default([]) @map("disliked_genres")
+  /// Valda sub-genrer (TMDB keyword-id:n, se lib/subgenres.ts) för de gillade
+  /// genrerna ovan. Tomt = ingen sub-genre-filtrering. Appliceras som HÅRT
+  /// filter (with_keywords) i lib/unifiedRecs.ts, precis som favoriteGenres.
+  favoriteKeywordIds Int[]    @default([]) @map("favorite_keyword_ids")
+  providers          Json     @default("[]")
+  maxCert            String?  @map("max_cert")
+  /// Antal PERSONER (≥2) som krävs för match. null = automatik (60 % av storlek).
+  /// Klamras till aktuell gruppstorlek vid matchberäkning, se groupMatchNeed().
+  matchThreshold     Int?     @map("match_threshold")
   /// movie | tv | both — vilken typ av titlar gruppen swipar (standard: both).
-  mediaFilter    String   @default("both") @map("media_filter")
+  mediaFilter        String   @default("both") @map("media_filter")
 
   members     GroupMember[]
   votes       GroupVote[]      @relation("GroupVotes")
   invites     GroupInvite[]
   matchesSeen GroupMatchSeen[]
+  matches     GroupMatch[]
 
   creator User @relation("UserGroupsCreated", fields: [createdBy], references: [id], onDelete: Cascade)
 
@@ -317,4 +393,20 @@ model GroupMatchSeen {
 
   @@id([groupCode, userId, tmdbId, tmdbType])
   @@map("group_match_seen")
+}
+
+/// Historik över gruppens matchningar (Matchningar-fliken). Skrivs en gång per
+/// titel, i samma stund som notifyGroupMatchIfNeeded() (lib/push.ts) upptäcker
+/// att LIKE-antalet först når tröskeln — inte varje gång tröskeln räknas om.
+model GroupMatch {
+  groupCode String   @map("group_code")
+  tmdbId    Int      @map("tmdb_id")
+  tmdbType  String   @map("tmdb_type")
+  matchedAt DateTime @default(now()) @map("matched_at")
+
+  group Group @relation(fields: [groupCode], references: [code], onDelete: Cascade)
+
+  @@id([groupCode, tmdbId, tmdbType])
+  @@index([groupCode, matchedAt], map: "idx_group_matches_group_matched_at")
+  @@map("group_matches")
 }

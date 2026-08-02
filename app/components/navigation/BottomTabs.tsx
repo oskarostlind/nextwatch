@@ -5,9 +5,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "../lib/nav";
 import { motion } from "framer-motion";
+import { useSocial } from "../client/SocialProvider";
+import { useShareThreads } from "@/lib/threadsStore";
 
 export default function BottomTabs() {
   const pathname = usePathname();
+
+  // Oläst-badge på Grupp-fliken: vänförfrågningar + gruppinbjudningar (från
+  // social-storen) + olästa filmchattar (delade threads-storen — en poll för
+  // hela appen; tidigare hade den här komponenten en egen som dessutom
+  // resettade intervallet på varje route-byte).
+  const social = useSocial();
+  const { threads } = useShareThreads();
+  const unseenChats = threads.reduce((sum, t) => sum + t.unseen, 0);
+
+  const groupBadge =
+    social.pendingIn.length + social.invitesIncoming.length + unseenChats;
 
   return (
     // Behåller ditt z-20 och backdrop-blur
@@ -47,6 +60,12 @@ export default function BottomTabs() {
                   active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-300",
                 ].join(" ")}
               />
+
+              {item.href === "/group" && groupBadge > 0 && (
+                <span className="absolute right-1 top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold text-black">
+                  {groupBadge > 9 ? "9+" : groupBadge}
+                </span>
+              )}
             </Link>
           );
         })}

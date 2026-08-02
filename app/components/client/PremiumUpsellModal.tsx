@@ -5,8 +5,10 @@
 // spammar). Triggas från swipe-vyn via maybeTriggerAdUpsell().
 
 import { useEffect, useState } from "react";
-import { Crown, X } from "lucide-react";
+import { Crown, PlayCircle, X } from "lucide-react";
 import { goPremium } from "@/lib/premiumPurchase";
+import { canOfferAdFreeReward, watchRewardedForAdFree } from "@/lib/admobAds";
+import { notify } from "@/app/components/lib/notify";
 
 const UPSELL_EVENT = "nw:premium-upsell";
 const AD_COUNT_KEY = "nw_ad_impressions";
@@ -35,11 +37,24 @@ export function maybeTriggerAdUpsell(): void {
 export default function PremiumUpsellModal() {
   const [open, setOpen] = useState(false);
   const [buying, setBuying] = useState(false);
+  const [watching, setWatching] = useState(false);
+  // Rewarded-erbjudandet finns bara i native-appen (AdMob), aldrig på webben.
+  const [rewardAvailable, setRewardAvailable] = useState(false);
 
   useEffect(() => {
-    const onUpsell = () => setOpen(true);
+    const onUpsell = () => {
+      setRewardAvailable(canOfferAdFreeReward());
+      setOpen(true);
+    };
+    // I native-appen triggas upsellen av AdMob-interstitials (AdSense-korten
+    // som drev maybeTriggerAdUpsell är avstängda där) — samma sessions-cap.
+    const onNativeAd = () => maybeTriggerAdUpsell();
     window.addEventListener(UPSELL_EVENT, onUpsell);
-    return () => window.removeEventListener(UPSELL_EVENT, onUpsell);
+    window.addEventListener("nw:admob-ad-shown", onNativeAd);
+    return () => {
+      window.removeEventListener(UPSELL_EVENT, onUpsell);
+      window.removeEventListener("nw:admob-ad-shown", onNativeAd);
+    };
   }, []);
 
   if (!open) return null;
@@ -75,6 +90,27 @@ export default function PremiumUpsellModal() {
           <Crown className="h-4 w-4" />
           {buying ? "Öppnar…" : "Bli Premium – 19 kr/mån"}
         </button>
+        {rewardAvailable && (
+          <button
+            type="button"
+            disabled={watching}
+            onClick={() => {
+              setWatching(true);
+              void watchRewardedForAdFree()
+                .then((ok) => {
+                  if (ok) {
+                    notify("Klart! Annonsfritt i 24 timmar. 🎉");
+                    setOpen(false);
+                  }
+                })
+                .finally(() => setWatching(false));
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+          >
+            <PlayCircle className="h-4 w-4" />
+            {watching ? "Laddar video…" : "Titta på en video – slipp annonser i 24h"}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setOpen(false)}

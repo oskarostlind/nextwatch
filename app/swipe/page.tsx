@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "../../lib/prisma";
 import Client from "./page_client";
 import GroupSwipeClient from "../group/swipe/Client";
+import SwipeGestureTour from "../components/client/tours/SwipeGestureTour";
 
 export default async function Page() {
   const c = await cookies();
@@ -21,5 +22,10 @@ export default async function Page() {
     return <GroupSwipeClient initialCode={groupCode} />;
   }
 
-  return <Client />;
+  return (
+    <>
+      <Client />
+      <SwipeGestureTour />
+    </>
+  );
 }

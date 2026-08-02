@@ -2,12 +2,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { sanitizeUsernameInput, usernameValidRequired } from "@/lib/usernameClient";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import GuestEntryButton from "@/app/components/auth/GuestEntryButton";
+import { replayAnonLikes } from "@/lib/anonLikes";
+import GenrePicker from "@/app/components/discover/GenrePicker";
+import { GROUP_GENRES } from "@/lib/groupSettings";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -166,21 +171,6 @@ const STEPS = [
   { id: 3, title: "Konto", subtitle: "Gäst eller registrera dig" },
 ] as const;
 
-const GENRES = [
-  "Action",
-  "Äventyr",
-  "Animerat",
-  "Komedi",
-  "Kriminal",
-  "Drama",
-  "Fantasy",
-  "Skräck",
-  "Romantik",
-  "Sci-Fi",
-  "Thriller",
-  "Dokumentär",
-] as const;
-
 export default function Client() {
   const router = useRouter();
 
@@ -204,6 +194,7 @@ export default function Client() {
   const [favoriteShow, setFavoriteShow] = useState<Fav | null>(null);
   const [likeGenres, setLikeGenres] = useState<string[]>([]);
   const [dislikeGenres, setDislikeGenres] = useState<string[]>([]);
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [searchLocale, setSearchLocale] = useState<string>("sv-SE");
@@ -219,11 +210,14 @@ export default function Client() {
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
   }
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt (samma
+  // kontrakt som Gruppinställningar/Profil) — de här är bara "toggla
+  // medlemskap i respektive lista", ett per läge.
   function toggleLike(g: string) {
     setLikeGenres((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
     );
-    setDislikeGenres((prev) => prev.filter((x) => x !== g));
   }
   function onUsernameChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
@@ -296,7 +290,9 @@ export default function Client() {
     setDislikeGenres((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
     );
-    setLikeGenres((prev) => prev.filter((x) => x !== g));
+  }
+  function toggleFavoriteKeywordIds(ids: number[]) {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   }
 
   async function saveAndContinue(redirect: string) {
@@ -318,6 +314,7 @@ export default function Client() {
       favoriteShow,
       favoriteGenres: likeGenres,
       dislikedGenres: dislikeGenres,
+      favoriteKeywordIds,
     };
 
     try {
@@ -332,6 +329,13 @@ export default function Client() {
       }
       const data = (await res.json()) as { ok?: boolean; message?: string };
       if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
+
+      // Startsidan är spelbar innan man har konto, och gaten lovar att swipesen
+      // "följer med". Här infrias löftet: likesen har legat i localStorage och
+      // spelas upp mot profilen nu när den finns. Best-effort — en misslyckad
+      // titel får aldrig blockera onboardingen.
+      await replayAnonLikes().catch(() => 0);
+
       router.replace(redirect);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
@@ -353,34 +357,37 @@ export default function Client() {
   const progress = ((step + 1) / STEPS.length) * 100;
 
   return (
-    <div className="mx-auto min-h-[100dvh] max-w-lg px-4 py-8">
+    <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-4 py-10">
       {/* Header */}
-      <div className="mb-8 text-center">
-        <p className="text-xs font-medium uppercase tracking-widest text-cyan-400/80">
+      <div className="mb-7 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400/80">
           Välkommen till NextWatch
         </p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">{STEPS[step].title}</h1>
-        <p className="mt-1 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
+        <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{STEPS[step].title}</h1>
+        <p className="mt-1.5 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
       </div>
 
       {/* Progress */}
       <div className="mb-6">
-        <div className="mb-2 flex justify-between text-xs text-neutral-500">
+        <div className="mb-2 flex justify-between text-[11px] font-medium">
           {STEPS.map((s, i) => (
-            <span key={s.id} className={i <= step ? "text-cyan-400" : ""}>
+            <span
+              key={s.id}
+              className={i < step ? "text-cyan-400/70" : i === step ? "text-cyan-300" : "text-neutral-600"}
+            >
               {s.title}
             </span>
           ))}
         </div>
-        <div className="h-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
+            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-500 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-neutral-900/60 p-5 shadow-xl backdrop-blur sm:p-6">
+      <div className="rounded-2xl border border-white/[0.08] bg-neutral-900/70 p-5 shadow-2xl shadow-black/40 ring-1 ring-white/5 backdrop-blur-md sm:p-6">
         {err && (
           <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {err}
@@ -396,6 +403,17 @@ export default function Client() {
           }}
           className="space-y-5"
         >
+          {/* Mjuk övergång mellan stegen. En keyad motion.div per steg gör att
+              AnimatePresence tonar in det nya steget — mjukare än ett hårt hopp. */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="space-y-5"
+            >
           {/* Steg 1: Om dig */}
           {step === 0 && (
             <div className="space-y-4">
@@ -537,47 +555,20 @@ export default function Client() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <div>
-                  <div className="mb-2 text-sm text-neutral-300">Gillar</div>
-                  <div className="flex flex-wrap gap-2">
-                    {GENRES.map((g) => (
-                      <button
-                        key={`like-${g}`}
-                        type="button"
-                        onClick={() => toggleLike(g)}
-                        className={[
-                          "rounded-full border px-3 py-1 text-sm transition",
-                          likeGenres.includes(g)
-                            ? "border-emerald-400 bg-emerald-400/10 text-emerald-300"
-                            : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 text-sm text-neutral-300">Ogillar</div>
-                  <div className="flex flex-wrap gap-2">
-                    {GENRES.map((g) => (
-                      <button
-                        key={`dislike-${g}`}
-                        type="button"
-                        onClick={() => toggleDislike(g)}
-                        className={[
-                          "rounded-full border px-3 py-1 text-sm transition",
-                          dislikeGenres.includes(g)
-                            ? "border-rose-400 bg-rose-400/10 text-rose-300"
-                            : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div>
+                <div className="mb-2 text-sm text-neutral-300">Genrer</div>
+                <GenrePicker
+                  genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                  selectedGenreIds={likeGenres}
+                  onToggleGenre={toggleLike}
+                  dislikedGenreIds={dislikeGenres}
+                  onToggleDislikedGenre={toggleDislike}
+                  selectedKeywordIds={favoriteKeywordIds}
+                  onToggleKeywordIds={toggleFavoriteKeywordIds}
+                  wrap
+                  subLayout="card"
+                  emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                />
               </div>
             </div>
           )}
@@ -612,6 +603,8 @@ export default function Client() {
               </button>
             </div>
           )}
+            </motion.div>
+          </AnimatePresence>
 
           {/* Navigation */}
           {step < 3 && (
@@ -624,7 +617,7 @@ export default function Client() {
                 <button
                   type="button"
                   onClick={goBack}
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10"
+                  className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
                 >
                   ← Föregående
                 </button>
@@ -633,7 +626,7 @@ export default function Client() {
               <button
                 type="button"
                 onClick={goNext}
-                className="rounded-xl bg-cyan-500 px-5 py-2 text-sm font-medium text-black hover:bg-cyan-400"
+                className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
               >
                 Nästa →
               </button>

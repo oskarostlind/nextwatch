@@ -21,11 +21,14 @@ export type SwipeSettings = {
   showPaidOptions: boolean;
   /** Film/serie-filter för solo-swipe. */
   mediaFilter: SwipeMediaFilter;
+  /** Visa barn-/familjeinnehåll (TV-Kids) i förslagen. */
+  showKidsContent: boolean;
 };
 
 const DEFAULTS: SwipeSettings = {
   showPaidOptions: false,
   mediaFilter: SWIPE_MEDIA_FILTER_DEFAULT,
+  showKidsContent: false,
 };
 
 export async function GET() {
@@ -35,13 +38,14 @@ export async function GET() {
 
   const p = await prisma.profile.findUnique({
     where: { userId: uid },
-    select: { showPaidOptions: true, swipeMediaFilter: true },
+    select: { showPaidOptions: true, swipeMediaFilter: true, showKidsContent: true },
   });
 
   const settings: SwipeSettings = p
     ? {
         showPaidOptions: p.showPaidOptions,
         mediaFilter: normalizeSwipeMediaFilter(p.swipeMediaFilter),
+        showKidsContent: p.showKidsContent,
       }
     : DEFAULTS;
 
@@ -60,9 +64,10 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid body" }, { status: 400 });
   }
 
-  const data: { showPaidOptions?: boolean; swipeMediaFilter?: SwipeMediaFilter } = {};
+  const data: { showPaidOptions?: boolean; swipeMediaFilter?: SwipeMediaFilter; showKidsContent?: boolean } = {};
   if (typeof body.showPaidOptions === "boolean") data.showPaidOptions = body.showPaidOptions;
   if (isValidSwipeMediaFilter(body.mediaFilter)) data.swipeMediaFilter = body.mediaFilter;
+  if (typeof body.showKidsContent === "boolean") data.showKidsContent = body.showKidsContent;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ ok: false, error: "no valid fields" }, { status: 400 });
@@ -83,7 +88,7 @@ export async function PUT(req: NextRequest) {
   const p = await prisma.profile.update({
     where: { userId: uid },
     data,
-    select: { showPaidOptions: true, swipeMediaFilter: true },
+    select: { showPaidOptions: true, swipeMediaFilter: true, showKidsContent: true },
   });
 
   return NextResponse.json({
@@ -91,6 +96,7 @@ export async function PUT(req: NextRequest) {
     settings: {
       showPaidOptions: p.showPaidOptions,
       mediaFilter: normalizeSwipeMediaFilter(p.swipeMediaFilter),
+      showKidsContent: p.showKidsContent,
     },
   });
 }

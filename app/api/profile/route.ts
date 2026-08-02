@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import prisma from "../../../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { isValidAvatarId } from "@/lib/avatars";
+import { sanitizeKeywordIds } from "@/lib/groupSettings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,12 +44,14 @@ export async function GET() {
     select: {
       userId: true,
       displayName: true,
+      avatarId: true,
       dob: true,
       region: true,
       locale: true,
       uiLanguage: true,
       favoriteGenres: true,
       dislikedGenres: true,
+      favoriteKeywordIds: true,
       providers: true,
       favoriteMovie: true,
       favoriteShow: true,
@@ -79,8 +83,13 @@ export async function PUT(req: Request) {
 
   const displayName = s(body.displayName);
   const dobStr = s(body.dob);
+  // Frivilligt val ur förvalda biblioteket: giltigt id sätter, explicit null
+  // rensar, utelämnat fält lämnar orört. Okända id:n ignoreras tyst.
+  const avatarId: string | null | undefined =
+    body.avatarId === null ? null : isValidAvatarId(body.avatarId) ? body.avatarId : undefined;
   const favoriteGenres = arr(body.favoriteGenres);
   const dislikedGenres = arr(body.dislikedGenres);
+  const favoriteKeywordIds = sanitizeKeywordIds(body.favoriteKeywordIds) ?? [];
   const providers = arr(body.providers);
   const favMovie = (body.favoriteMovie ?? null) as Prisma.InputJsonValue | null;
   const favShow = (body.favoriteShow ?? null) as Prisma.InputJsonValue | null;
@@ -95,12 +104,14 @@ export async function PUT(req: Request) {
       where: { userId: uid },
       data: {
         displayName: displayName ?? undefined,
+        avatarId,
         dob: dobStr ? new Date(dobStr) : undefined,
         uiLanguage,
         region,
         locale,
         favoriteGenres,
         dislikedGenres,
+        favoriteKeywordIds,
         providers,
         favoriteMovie: (favMovie ?? undefined) as Prisma.InputJsonValue | undefined,
         favoriteShow: (favShow ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -121,12 +132,14 @@ export async function PUT(req: Request) {
     data: {
       userId: uid,
       displayName,
+      avatarId: avatarId ?? null,
       dob: new Date(dobStr),
       uiLanguage,
       region,
       locale,
       favoriteGenres,
       dislikedGenres,
+      favoriteKeywordIds,
       providers,
       favoriteMovie: favMovie as Prisma.InputJsonValue,
       favoriteShow: favShow as Prisma.InputJsonValue,

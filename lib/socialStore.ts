@@ -12,6 +12,8 @@ export type SocialUser = {
   id: string;
   username: string | null;
   displayName: string | null;
+  /** Vald avatar ur lib/avatars.ts — null/undefined när ingen valts (initial-fallback). */
+  avatarId?: string | null;
 };
 
 export type FriendRequestIn = { requestId: string; from: SocialUser };
@@ -89,7 +91,14 @@ type FriendRowData = {
   userId?: string;
   username?: string | null;
   displayName?: string | null;
-  other?: { id?: string; userId?: string; username?: string | null; displayName?: string | null };
+  avatarId?: string | null;
+  other?: {
+    id?: string;
+    userId?: string;
+    username?: string | null;
+    displayName?: string | null;
+    avatarId?: string | null;
+  };
 };
 
 type FriendsListResp = {
@@ -116,6 +125,7 @@ function parseFriendRow(row: FriendRowData): SocialUser {
     id: String(u.id ?? u.userId ?? ""),
     username: u.username ?? null,
     displayName: u.displayName ?? null,
+    avatarId: u.avatarId ?? null,
   };
 }
 
@@ -168,6 +178,18 @@ async function fetchMembers(): Promise<void> {
     const res = await fetch(`/api/group/members?code=${encodeURIComponent(code)}`, {
       cache: "no-store",
     });
+    if (res.status === 404) {
+      // Servern har redan nollställt nw_group-cookien (gruppen borta, eller vi
+      // är inte längre medlem — t.ex. utsparkade). Följ med lokalt så
+      // GroupBar/GroupTab faller tillbaka till solo direkt i stället för att
+      // vänta på nästa full sidladdning.
+      if (state.groupCode !== null || state.members.length > 0) {
+        setState({ groupCode: null, members: [], membersReady: true });
+      } else if (!state.membersReady) {
+        setState({ membersReady: true });
+      }
+      return;
+    }
     if (!res.ok) return;
     const j = (await res.json()) as MembersResp;
     if (!j?.ok || !Array.isArray(j.members)) return;
@@ -201,6 +223,26 @@ export function refreshSocial(): Promise<void> {
 
 /* ---------- poller (en enda för hela appen) ---------- */
 
+// Pathname-medveten polltakt: 5s realtidskänsla bara där socialdatan faktiskt
+// SYNS (gruppytorna); 15s räcker gott för navbadge/toasts på övriga sidor.
+// Var 5s överallt tidigare = 3 fetches var 5:e sekund hela sessionen.
+const POLL_MS_ACTIVE = POLL_MS; // 5s
+const POLL_MS_IDLE = 15_000;
+let currentPollMs = POLL_MS_IDLE;
+
+/** Anropas från SocialPreloader vid route-byte. */
+export function setSocialPollProfile(profile: "active" | "idle") {
+  const next = profile === "active" ? POLL_MS_ACTIVE : POLL_MS_IDLE;
+  if (next === currentPollMs) return;
+  currentPollMs = next;
+  // Starta om timern med nya takten (om pollen är igång).
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+    if (pollTickets > 0) scheduleNext();
+  }
+}
+
 function scheduleNext() {
   if (pollTimer !== null) return;
   pollTimer = setTimeout(() => {
@@ -213,7 +255,7 @@ function scheduleNext() {
     void refreshSocial().finally(() => {
       if (pollTickets > 0) scheduleNext();
     });
-  }, POLL_MS);
+  }, currentPollMs);
 }
 
 function hookVisibility() {

@@ -11,13 +11,15 @@ import {
   clearLegacySoloSwipeMediaFilter,
   type SwipeMediaFilter,
 } from "@/lib/swipeMediaFilter";
-import { applySoloMediaFilterChange } from "@/lib/swipeDeckStore";
+import { setSoloDisplayFilter, retrySoloDeck } from "@/lib/swipeDeckStore";
 
 export type SwipeSettingsState = {
   /** Visa hyr-/köpalternativ på titelkort. */
   showPaidOptions: boolean;
   /** Film/serie-filter för solo-swipe. */
   mediaFilter: SwipeMediaFilter;
+  /** Visa barn-/familjeinnehåll (TV-Kids) i förslagen. */
+  showKidsContent: boolean;
   /** Falskt tills första hämtningen svarat — ytor kan då undvika att blinka. */
   ready: boolean;
 };
@@ -25,6 +27,7 @@ export type SwipeSettingsState = {
 let state: SwipeSettingsState = {
   showPaidOptions: false,
   mediaFilter: SWIPE_MEDIA_FILTER_DEFAULT,
+  showKidsContent: false,
   ready: false,
 };
 
@@ -52,7 +55,7 @@ export function getSwipeSettingsSnapshot(): SwipeSettingsState {
 
 type SettingsResp = {
   ok: boolean;
-  settings?: { showPaidOptions: boolean; mediaFilter: string };
+  settings?: { showPaidOptions: boolean; mediaFilter: string; showKidsContent: boolean };
 };
 
 let inflight: Promise<void> | null = null;
@@ -76,6 +79,7 @@ export function loadSwipeSettings(): Promise<void> {
       setState({
         showPaidOptions: j.settings.showPaidOptions,
         mediaFilter: serverFilter,
+        showKidsContent: j.settings.showKidsContent,
         ready: true,
       });
 
@@ -101,6 +105,28 @@ export async function saveSwipeSettings(patch: Partial<Omit<SwipeSettingsState, 
   const prev = state;
   setState(patch);
 
+  // Filtra leken direkt (optimistiskt) så pill-bytet känns omedelbart, inte
+  // efter round-trippen till /swipe-settings. Rullas tillbaka nedan om servern
+  // nekar. Leken hämtas alltid som "båda", så det här är bara en omfiltrering.
+  if (patch.mediaFilter && patch.mediaFilter !== prev.mediaFilter) {
+    setSoloDisplayFilter(patch.mediaFilter);
+  }
+
+  // Barninnehåll-flaggan filtreras SERVER-side (TV-Kids exkluderas i
+  // /discover) — till skillnad från mediaFilter går den alltså inte att
+  // omfiltrera lokalt. Ett byte kräver därför en färsk hämtning.
+  const kidsChanged =
+    typeof patch.showKidsContent === "boolean" && patch.showKidsContent !== prev.showKidsContent;
+
+  const rollback = () => {
+    setState({
+      showPaidOptions: prev.showPaidOptions,
+      mediaFilter: prev.mediaFilter,
+      showKidsContent: prev.showKidsContent,
+    });
+    setSoloDisplayFilter(prev.mediaFilter);
+  };
+
   try {
     const res = await fetch("/api/profile/swipe-settings", {
       method: "PUT",
@@ -109,22 +135,29 @@ export async function saveSwipeSettings(patch: Partial<Omit<SwipeSettingsState, 
       body: JSON.stringify(patch),
     });
     if (!res.ok) {
-      setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+      rollback();
       return false;
     }
     const j = (await res.json()) as SettingsResp;
     if (!j.ok || !j.settings) {
-      setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+      rollback();
       return false;
     }
     const nextFilter = normalizeSwipeMediaFilter(j.settings.mediaFilter);
-    setState({ showPaidOptions: j.settings.showPaidOptions, mediaFilter: nextFilter });
+    setState({
+      showPaidOptions: j.settings.showPaidOptions,
+      mediaFilter: nextFilter,
+      showKidsContent: j.settings.showKidsContent,
+    });
 
-    // Filtret ägs server-side, så redan hämtade kort kan vara fel typ nu.
-    if (nextFilter !== prev.mediaFilter) applySoloMediaFilterChange(nextFilter);
+    // Servern kan ha normaliserat filtret till något annat än vi antog optimistiskt
+    // — synka vyn med det bekräftade värdet.
+    if (nextFilter !== state.mediaFilter) setSoloDisplayFilter(nextFilter);
+    // Barnfiltret ändrade kandidatunderlaget → hämta om leken med nya urvalet.
+    if (kidsChanged) void retrySoloDeck();
     return true;
   } catch {
-    setState({ showPaidOptions: prev.showPaidOptions, mediaFilter: prev.mediaFilter });
+    rollback(); // rulla tillbaka den optimistiska vyn
     return false;
   }
 }

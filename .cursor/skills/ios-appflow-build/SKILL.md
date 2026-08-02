@@ -2,11 +2,14 @@
 name: ios-appflow-build
 description: >-
   iOS Appflow/TestFlight builds for NextWatch. Use when preparing Appflow builds,
-  fixing TestFlight upload errors, bumping iOS build numbers, or working with
-  ios/App, entitlements, or Capacitor native iOS config.
+  fixing TestFlight upload errors, bumping iOS build numbers, adding/syncing
+  Capacitor plugins, or working with ios/App, entitlements, or Capacitor native
+  iOS config.
 ---
 
 # iOS Appflow Build (NextWatch)
+
+> Speglad i `.claude/skills/ios-appflow-build/SKILL.md` — uppdatera båda vid ändring.
 
 ## Auto build-nummer (primärt — ingen manuell bump behövs)
 
@@ -45,6 +48,39 @@ Endast för lokala tester utan Appflow:
 npm run bump:ios
 ```
 
+## Nytt Capacitor-plugin = cap sync + ny native-build
+
+När ett plugin läggs till i `package.json` räcker det INTE att deploya webben —
+pluginet måste in i iOS-binären:
+
+1. `npx cap sync ios` — registrerar pluginet i `ios/App/CapApp-SPM/Package.swift`
+2. Committa `ios/` (+ `package-lock.json`, ev. `patches/`)
+3. Starta Appflow iOS App Store-build
+
+Utan steg 1–2 saknas pluginet i binären: JS-modulen laddar (den kommer från
+webben) men native-anropen kastar. Symptom: funktionen ser ut att finnas men
+misslyckas i runtime. Hände 2026-07 med `@capacitor/local-notifications` —
+"Påminn mig" visades men schemaläggningen dog tyst.
+
+## ⚠️ Windows-fälla: cap sync skriver backslashes i Package.swift
+
+`npx cap sync ios` på Windows genererar package-sökvägar med omvända snedstreck:
+
+```swift
+.package(name: "CapacitorApp", path: "..\..\..\node_modules\@capacitor\app"),
+```
+
+Det knäcker SPM-bygget på Appflows macOS-byggare. **Handrätta alltid diffen till
+forward slashes innan commit:**
+
+```swift
+.package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
+```
+
+Granska `git diff ios/App/CapApp-SPM/Package.swift` efter varje sync — den enda
+avsiktliga ändringen ska vara plugin-rader som läggs till/tas bort, aldrig
+sökvägsstilen.
+
 ## iOS-specifikt i detta repo
 
 | Fil | Syfte |
@@ -52,13 +88,17 @@ npm run bump:ios
 | `appflow.yml` | Trapeze: sätter buildNumber från `CI_BUILD_NUMBER` |
 | `ios/App/App/App.entitlements` | Sign in with Apple |
 | `ios/App/App.xcodeproj/project.pbxproj` | `MARKETING_VERSION` (1.0), `CURRENT_PROJECT_VERSION` |
+| `ios/App/CapApp-SPM/Package.swift` | SPM-registrering av Capacitor-plugins (via cap sync) |
 | `patches/@capacitor-community+apple-sign-in+7.1.0.patch` | SPM Capacitor 8-kompatibilitet |
 
-## Innan du committar iOS-ändringar
+## Vad som INTE kräver ny build
 
-1. Kör `npx cap sync ios` om Capacitor-plugins ändrats
-2. Committa `ios/` + `patches/` + `package-lock.json`
-3. Starta Appflow iOS App Store-build — build-nummer hanteras automatiskt
+Appen är en WebView-wrapper (`capacitor.config.ts` pekar `server.url` mot
+`https://www.nextwatch.se`). Ändringar i React-komponenter, API-routes, `lib/`
+och styling följer med web-deployen automatiskt — även i redan installerade
+appar. Ny build krävs bara för: nya/borttagna Capacitor-plugins,
+`capacitor.config.ts`, `ios/`-filer (entitlements, Info.plist, pbxproj),
+`patches/`, eller npm-paket med native-delar.
 
 ## Apple Sign-In checklist
 

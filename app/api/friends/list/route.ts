@@ -7,7 +7,12 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { touchLastActive } from "@/lib/lastActive";
 
-type FriendsListUser = { id: string; username: string | null; displayName: string | null };
+type FriendsListUser = {
+  id: string;
+  username: string | null;
+  displayName: string | null;
+  avatarId: string | null;
+};
 
 export async function GET() {
   try {
@@ -22,8 +27,8 @@ export async function GET() {
     const friendships = await prisma.friendship.findMany({
       where: { OR: [{ userId: me }, { friendId: me }] },
       include: {
-        user: { select: { id: true, username: true, profile: { select: { displayName: true } } } },
-        friend: { select: { id: true, username: true, profile: { select: { displayName: true } } } },
+        user: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+        friend: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -34,6 +39,7 @@ export async function GET() {
         id: other.id,
         username: other.username,
         displayName: other.profile?.displayName ?? null,
+        avatarId: other.profile?.avatarId ?? null,
       };
       return {
         id: `${f.userId}_${f.friendId}`,
@@ -48,7 +54,7 @@ export async function GET() {
     const pendingIn = await prisma.friendRequest.findMany({
       where: { toUserId: me, status: "pending" },
       include: {
-        fromUser: { select: { id: true, username: true, profile: { select: { displayName: true } } } },
+        fromUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -57,7 +63,7 @@ export async function GET() {
     const pendingOut = await prisma.friendRequest.findMany({
       where: { fromUserId: me, status: "pending" },
       include: {
-        toUser: { select: { id: true, username: true, profile: { select: { displayName: true } } } },
+        toUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -71,6 +77,7 @@ export async function GET() {
           id: r.fromUser.id,
           username: r.fromUser.username,
           displayName: r.fromUser.profile?.displayName ?? null,
+          avatarId: r.fromUser.profile?.avatarId ?? null,
         },
       })),
       pendingOut: pendingOut.map((r) => ({
@@ -79,6 +86,7 @@ export async function GET() {
           id: r.toUser.id,
           username: r.toUser.username,
           displayName: r.toUser.profile?.displayName ?? null,
+          avatarId: r.toUser.profile?.avatarId ?? null,
         },
       })),
     });

@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { MessageCircle } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
+import Avatar from "@/app/components/ui/Avatar";
 
 type Top = { tmdbId: number; tmdbType: "movie" | "tv"; title: string; year: string | null; poster: string | null };
 type Prof = {
   id: string;
   displayName: string;
   username: string | null;
+  avatarId: string | null;
   genres: string[];
   top3: Top[];
   lastActiveAt: string | null;
@@ -29,9 +32,12 @@ function lastActiveLabel(iso: string | null): string {
 export default function FriendProfileModal({
   friendId,
   onClose,
+  onOpenChat,
 }: {
   friendId: string | null;
   onClose: () => void;
+  /** Öppnar filmchatten med vännen (stänger profilen först). */
+  onOpenChat?: (friendId: string) => void;
 }) {
   const [prof, setProf] = useState<Prof | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,11 +74,25 @@ export default function FriendProfileModal({
         {error && <p className="py-8 text-center text-sm text-rose-300">{error}</p>}
         {prof && (
           <div className="space-y-5">
-            <div>
-              <h3 className="text-xl font-bold text-white">{prof.displayName}</h3>
-              {prof.username && <p className="text-sm text-white/40">@{prof.username}</p>}
-              <p className="mt-1 text-xs text-emerald-300/80">{lastActiveLabel(prof.lastActiveAt)}</p>
+            <div className="flex items-center gap-4">
+              <Avatar avatarId={prof.avatarId} name={prof.displayName} size={56} />
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-xl font-bold text-white">{prof.displayName}</h3>
+                {prof.username && <p className="text-sm text-white/40">@{prof.username}</p>}
+                <p className="mt-1 text-xs text-emerald-300/80">{lastActiveLabel(prof.lastActiveAt)}</p>
+              </div>
             </div>
+
+            {onOpenChat && (
+              <button
+                type="button"
+                onClick={() => onOpenChat(prof.id)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Öppna filmchatt
+              </button>
+            )}
 
             {prof.genres.length > 0 && (
               <div>

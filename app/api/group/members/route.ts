@@ -74,7 +74,8 @@ export async function GET(req: NextRequest) {
     // Om den som anropar ÄR medlem i denna grupp men saknar/har fel cookie,
     // sätt nw_group så klientens polling m.m. blir konsekvent.
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (uid && members.some((m) => m.id === uid)) {
+    const isMember = Boolean(uid) && members.some((m) => m.id === uid);
+    if (uid && isMember) {
       const existing = jar.get("nw_group")?.value;
       if (existing !== code) {
         jar.set("nw_group", code, {
@@ -85,6 +86,14 @@ export async function GET(req: NextRequest) {
           httpOnly: false, // läsbar av klient-hooken (useGroupMatchPolling)
         });
       }
+    } else if (uid && !isMember && jar.get("nw_group")?.value === code) {
+      // Gruppen finns kvar men den här användaren är inte längre medlem — de
+      // lämnade själva, eller blev borttagna av en admin (som aldrig rör DERAS
+      // cookie, bara sin egen). Utan den här grenen låg nw_group kvar signerad
+      // mot en grupp de inte längre är med i, och swipe/gruppvyn fortsatte visa
+      // gruppläget tills cookien gick ut av sig själv efter 14 dagar.
+      jar.set("nw_group", "", { path: "/", maxAge: 0, sameSite: "lax", secure: true, httpOnly: false });
+      return bad("Not a member of this group.", 404);
     }
 
     return NextResponse.json({ ok: true, code, members } as Ok, { status: 200 });

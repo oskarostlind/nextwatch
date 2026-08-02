@@ -22,6 +22,7 @@ type TMDBResult = {
   release_date?: string | null;
   first_air_date?: string | null;
   vote_average?: number | null;
+  vote_count?: number | null;
 };
 
 type TMDBResp = {
@@ -32,6 +33,18 @@ type TMDBResp = {
 
 const TMDB = "https://api.themoviedb.org/3";
 const H = { Authorization: `Bearer ${process.env.TMDB_V4_TOKEN!}` };
+
+// IMDb-style Bayesian weighted rating so a single 10.0 vote can't outrank a
+// classic with thousands of votes. m/C are TMDB-scale (not IMDb's own
+// m=25000, which assumes IMDb's much larger vote counts).
+const RANK_MIN_VOTES = Number(process.env.NW_RANK_MIN_VOTES) || 300;
+const RANK_MEAN = Number(process.env.NW_RANK_MEAN) || 6.9;
+
+function weightedRating(voteCount: number, voteAverage: number): number {
+  const v = voteCount;
+  const m = RANK_MIN_VOTES;
+  return (v / (v + m)) * voteAverage + (m / (v + m)) * RANK_MEAN;
+}
 
 function yearFrom(d: string | null | undefined): string | null {
   if (!d) return null;
@@ -46,6 +59,13 @@ export async function GET(req: Request) {
     const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
     const sortBy = url.searchParams.get("sort_by") || "popularity.desc";
     const withGenres = url.searchParams.get("with_genres") || "";
+    // Sub-genre-filtrering (lib/subgenres.ts): TMDB keyword-id:n, kommatecknade
+    // från klienten men OR-semantik (pipe) i TMDB:s eget API, precis som genrer.
+    const withKeywords = (url.searchParams.get("with_keywords") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join("|");
     const useMyProviders = url.searchParams.get("myProviders") === "1";
 
     // Default region/language; override from profile if available
@@ -77,6 +97,13 @@ export async function GET(req: Request) {
       with_watch_monetization_types: "flatrate",
       watch_region: region,
     });
+    if (withKeywords) qs.set("with_keywords", withKeywords);
+    const isHighestRated = sortBy === "vote_average.desc";
+    if (isHighestRated) {
+      // Hard eligibility floor: excludes near-zero-vote titles from TMDB's
+      // result set entirely, so they never even occupy a page slot.
+      qs.set("vote_count.gte", String(RANK_MIN_VOTES));
+    }
     if (withProviders) qs.set("with_watch_providers", withProviders);
 
     const r = await fetch(`${TMDB}/discover/${type}?${qs.toString()}`, { headers: H, next: { revalidate: 60 } });
@@ -86,7 +113,17 @@ export async function GET(req: Request) {
     }
 
     const d = (await r.json()) as TMDBResp;
-    const items: Item[] = (d.results || []).map((it): Item => ({
+    let results = d.results || [];
+    if (isHighestRated) {
+      // Re-rank this page by the weighted score; the raw vote_average is
+      // still what gets displayed on the card (see fmtRating in the client).
+      results = [...results].sort(
+        (a, b) =>
+          weightedRating(b.vote_count ?? 0, b.vote_average ?? 0) -
+          weightedRating(a.vote_count ?? 0, a.vote_average ?? 0)
+      );
+    }
+    const items: Item[] = results.map((it): Item => ({
       id: it.id,
       mediaType: type,
       title: it.title ?? it.name ?? "",

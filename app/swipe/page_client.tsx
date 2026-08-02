@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ChevronUp, Eye, Heart, Settings, X } from "lucide-react";
+import { ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
@@ -13,6 +13,10 @@ import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
+import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
+import { registerSwipeForAds } from "@/lib/admobAds";
+import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import {
   bestWatchUrl,
@@ -23,6 +27,8 @@ import {
   type WatchProviders,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
+import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
+import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import MatchOverlay, { type GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
@@ -30,7 +36,7 @@ import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/clien
 import RatingModal from "@/app/components/client/RatingModal";
 import GuideOverlay from "@/app/components/client/GuideOverlay";
 import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
-import { hasSeenGuide } from "@/lib/userGuide";
+import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 
 /* ---------- types ---------- */
 
@@ -245,12 +251,63 @@ function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
   };
 }
 
+/**
+ * Minimal film/serie-väljare, centrerad i toppraden. Skriver till samma
+ * profilinställning som förut (saveSwipeSettings → /api/profile/swipe-settings),
+ * så valet överlever mellan sessioner och kortleken hämtas om av storen.
+ */
+function MediaFilterPill({
+  value,
+  onChange,
+}: {
+  value: SwipeMediaFilter;
+  onChange: (next: SwipeMediaFilter) => void;
+}) {
+  const options: { id: SwipeMediaFilter; label: string }[] = [
+    { id: "both", label: "Båda" },
+    { id: "movie", label: "Film" },
+    { id: "tv", label: "Serier" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Visa i swipen"
+      className="absolute left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/10 bg-white/[0.06] p-0.5"
+    >
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={value === o.id}
+          onClick={() => value !== o.id && onChange(o.id)}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+            value === o.id ? "bg-white/15 text-white" : "text-white/45 hover:text-white/75"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
   const router = useRouter();
-  const { showPaidOptions } = useSwipeSettings();
+  const { showPaidOptions, mediaFilter } = useSwipeSettings();
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null);
+  const shareCard = useCallback((c: Card) => {
+    setShareItem({
+      tmdbId: c.tmdbId,
+      mediaType: c.mediaType,
+      title: c.title,
+      year: c.year,
+      poster: c.poster,
+    });
+  }, []);
   const { solo, popSoloCard, updateSoloCards, retrySoloDeck, unshiftSoloCard } =
     useSoloSwipeDeck();
   const { cards, mode, group, loading, error, ready } = solo;
@@ -339,9 +396,18 @@ export default function SwipePageClient() {
     const top = cards[0];
     if (!top || top.kind === "ad") return;
     if (hasSeenGuide("swipe")) return;
-    const t = window.setTimeout(() => setSwipeGuideOpen(true), 700);
+    const t = window.setTimeout(() => {
+      // Omkolla: den nya forcerade swipe-genomgången (SwipeGestureTour, mountad
+      // i app/swipe/page.tsx) kan ha markerat den här som sedd medan vi väntade.
+      if (hasSeenGuide("swipe")) return;
+      if (tryAcquireGuide("swipe")) setSwipeGuideOpen(true);
+    }, 700);
     return () => window.clearTimeout(t);
   }, [feedLoading, cards, ratePrompt]);
+
+  // Släpp låset om sidan lämnas medan guiden är öppen (egen unmount-effekt, inte
+  // kopplad till öppna-villkorets täta deps).
+  useEffect(() => () => releaseGuide("swipe"), []);
 
   useEffect(() => {
     if (mode === "group" && group?.code && !groupRefreshAttempted) {
@@ -383,6 +449,7 @@ export default function SwipePageClient() {
     })
       .then((res) => {
         if (!res.ok) return null;
+        emitGroupVoted(); // OverlayMount snabb-pollar matchen (ersatte fetch-patchen)
         return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, { cache: "no-store" });
       })
       .then((matchRes) => {
@@ -531,6 +598,8 @@ export default function SwipePageClient() {
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
+    // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
+    registerSwipeForAds();
     // Återställ direkt (utan animation) så nästa kort inte glider in från sidan.
     x.set(0);
     y.set(0);
@@ -546,9 +615,25 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
-      {/* Swipen hålls ren: allt som styr vad som visas (film/serie, tjänster,
-          genrer) bor i profilen och nås härifrån via kugghjulet. */}
-      <div className="flex shrink-0 items-center justify-end px-3 pt-2">
+      {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
+          poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
+          fel bildvariant. */}
+      <DeckPosterPreload
+        posters={cards.slice(3, 8).map((c) => c.poster)}
+        sizes="(max-width: 768px) 100vw, 600px"
+      />
+
+      {/* Toppraden: film/serie-filtret bor här (flyttat från profilen — valet
+          hör hemma där man ser effekten), resten av det som styr förslagen
+          (tjänster, genrer) nås via kugghjulet. I gruppläge styr gruppens egna
+          inställningar, så pillen visas bara solo. */}
+      <div className="relative flex shrink-0 items-center justify-end px-3 pt-2">
+        {mode === "individual" && (
+          <MediaFilterPill
+            value={mediaFilter}
+            onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
+          />
+        )}
         <button
           type="button"
           onClick={() => router.push("/profile")}
@@ -654,6 +739,7 @@ export default function SwipePageClient() {
                     flipped={flippedId === card.id}
                     interactive
                     onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                    onShare={shareCard}
                   />
 
                   <SwipeStampOverlays
@@ -705,11 +791,16 @@ export default function SwipePageClient() {
         />
       </div>
 
+      <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
+
       <GuideOverlay
         guideId="swipe"
         steps={SWIPE_GUIDE_STEPS}
         open={swipeGuideOpen}
-        onClose={() => setSwipeGuideOpen(false)}
+        onClose={() => {
+          setSwipeGuideOpen(false);
+          releaseGuide("swipe");
+        }}
       />
     </div>
   );
@@ -769,11 +860,14 @@ export function StaticCard({
   flipped,
   onFlip,
   interactive = true,
+  onShare,
 }: {
   card: Card;
   flipped: boolean;
   interactive?: boolean;
   onFlip: () => void;
+  /** Öppnar "Tipsa en vän" för kortet. Bara meningsfullt på toppkortet. */
+  onShare?: (card: Card) => void;
 }) {
   // Annonskort: ingen flip, ingen poster – renderar AdCard (AdSense/AdMob).
   if (card.kind === "ad") {
@@ -793,10 +887,10 @@ export function StaticCard({
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
-          <Front card={card} />
+          <Front card={card} flipped={flipped} />
         </div>
         <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-          <Back card={card} />
+          <Back card={card} onShare={onShare} />
         </div>
       </div>
     </div>
@@ -859,7 +953,7 @@ function AdCard({ adId }: { adId: string }) {
   );
 }
 
-function Front({ card }: { card: Card }) {
+function Front({ card, flipped }: { card: Card; flipped: boolean }) {
   return (
     <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
       {card.poster ? (
@@ -878,7 +972,12 @@ function Front({ card }: { card: Card }) {
         <div className="flex h-full w-full items-center justify-center bg-neutral-800">{card.title}</div>
       )}
 
-      {card.reasons && card.reasons.length > 0 ? (
+      {/* [backface-visibility:hidden] på förälderdiven ska räcka för att dölja
+          den här remsan när kortet är vänt — men backdrop-blur skapar ett eget
+          kompositeringslager som WebKit (iOS-appens WKWebView) ibland fortsätter
+          rita trots det, spegelvänt. Döljs explicit i stället för att lita på
+          backface-visibility för det här elementet. */}
+      {!flipped && card.reasons && card.reasons.length > 0 ? (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-10">
           <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/55 px-2 py-1 backdrop-blur-sm">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">
@@ -915,7 +1014,7 @@ function Front({ card }: { card: Card }) {
   );
 }
 
-function Back({ card }: { card: Card }) {
+function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void }) {
   const heroSrc = card.backdrop ?? card.poster;
   const { showPaidOptions } = useSwipeSettings();
   const providerGroups = providerGroupsFor(card.providers, showPaidOptions);
@@ -1034,15 +1133,23 @@ function Back({ card }: { card: Card }) {
         <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{PAID_ONLY_LABEL}</div>
       ) : null}
 
-      {card.providers !== undefined || card.trailer ? (
-        <div
-          className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
-          <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
-        </div>
-      ) : null}
+      <div
+        className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
+        <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
+        {onShare ? (
+          <button
+            type="button"
+            onClick={() => onShare(card)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-white/25 hover:bg-white/10"
+          >
+            <Send className="h-4 w-4" />
+            Tipsa
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

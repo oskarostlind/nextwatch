@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     prisma.user.findUnique({ where: { id }, select: { username: true, lastActiveAt: true } }),
     prisma.profile.findUnique({
       where: { userId: id },
-      select: { displayName: true, favoriteGenres: true, locale: true },
+      select: { displayName: true, avatarId: true, favoriteGenres: true, locale: true },
     }),
     prisma.rating.findMany({
       where: { userId: id, decision: "like" },
@@ -68,6 +68,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       id,
       displayName: profile.displayName ?? user.username ?? "Okänd",
       username: user.username,
+      avatarId: profile.avatarId ?? null,
       genres: profile.favoriteGenres ?? [],
       top3,
       lastActiveAt: user.lastActiveAt ? user.lastActiveAt.toISOString() : null,

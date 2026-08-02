@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings } from "lucide-react";
+import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings, Sparkles, X } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
 import GroupSettingsModal from "./GroupSettingsModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
+import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
+import { GROUPS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
 
 type GroupResponse = {
@@ -35,6 +38,74 @@ type Props = {
   initialMembers: PublicMember[];
   initialMeUserId?: string | null;
 };
+
+type CommonItem = {
+  tmdbId: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  year: string | null;
+  poster: string | null;
+  count: number;
+};
+
+/**
+ * "Gemensamt i era watchlists" — titlar som ≥2 medlemmar redan sparat.
+ * Svaret på "vad händer när alla swipat klart?": det ni redan är överens om.
+ */
+function CommonWatchlistSection({ code, memberCount }: { code: string; memberCount: number }) {
+  const [items, setItems] = useState<CommonItem[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetch(`/api/group/common-watchlist?code=${encodeURIComponent(code)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { ok?: boolean; items?: CommonItem[] } | null) => {
+        if (active && j?.ok) setItems(j.items ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [code, memberCount]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div>
+      <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
+        <Sparkles className="h-4 w-4" /> Gemensamt i era watchlists
+      </h3>
+      <p className="mb-2 text-xs text-white/40">
+        Titlar som flera av er redan sparat — börja kvällen här.
+      </p>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {items.map((it) => (
+          <div key={`${it.mediaType}-${it.tmdbId}`} className="w-[100px] shrink-0">
+            <div className="relative overflow-hidden rounded-lg border border-white/10">
+              {it.poster ? (
+                <Image
+                  src={it.poster}
+                  alt={it.title}
+                  width={100}
+                  height={150}
+                  className="h-[150px] w-[100px] object-cover"
+                />
+              ) : (
+                <div className="flex h-[150px] w-[100px] items-center justify-center bg-neutral-800 p-2 text-center text-[11px] text-neutral-400">
+                  {it.title}
+                </div>
+              )}
+              <span className="absolute right-1 top-1 rounded-full bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {it.count}/{memberCount}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-[11px] text-white/70">{it.title}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function GroupTab({ initialCode, initialRegion, initialMembers, initialMeUserId }: Props) {
   const router = useRouter();
@@ -69,6 +140,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     setCode(initialCode);
   }, [initialCode]);
 
+  // "Inbjuden"-chippen lever i lokalt state. Utan den här nollställningen låg
+  // den kvar när man lämnade en grupp och skapade/gick med i en ny (samma
+  // komponentinstans återanvänds vid router.refresh) — då såg det ut som att
+  // vännerna redan var inbjudna i den nya gruppen fast de inte var det.
+  useEffect(() => {
+    setInvitedIds(new Set());
+  }, [code]);
+
   const members: PublicMember[] =
     social.membersReady && social.groupCode === code
       ? social.members.map((m) => ({
@@ -82,6 +161,9 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     id: f.id,
     name: f.displayName ?? f.username ?? "Okänd",
   }));
+
+  // Vänner som redan är med i gruppen ska inte gå att bjuda in igen.
+  const memberIds = new Set(members.map((m) => m.userId));
 
   const [meUserId, setMeUserId] = useState<string | null>(initialMeUserId || null);
 
@@ -186,6 +268,20 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
     void refreshSocial();
   };
 
+  const removeMember = async (userId: string) => {
+    setError(null);
+    const result = await apiCall<{ ok?: boolean; message?: string }>("/api/group/remove", { userId });
+    if (result && "error" in result) {
+      setError(result.error);
+      return;
+    }
+    if (result && "ok" in result && result.ok === false) {
+      setError(result.message ?? "Kunde inte ta bort medlemmen.");
+      return;
+    }
+    void refreshSocial();
+  };
+
   if (code) {
     return (
       <div className="space-y-4">
@@ -194,6 +290,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         <button
           type="button"
           data-guide="group-start-swipe"
+          data-tour="group-start-swipe"
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
         >
@@ -208,6 +305,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 type="button"
                 aria-label="Gruppinställningar"
                 title="Gruppinställningar"
+                data-tour="group-settings"
                 onClick={() => setSettingsOpen(true)}
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition hover:bg-white/10 hover:text-white"
               >
@@ -229,6 +327,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             </button>
             <button
               type="button"
+              data-tour="group-invite"
               onClick={openInviteModal}
               className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
             >
@@ -255,13 +354,25 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
               >
                 <span className="font-medium text-white/90">{m.displayName ?? m.username ?? "Okänd"}</span>
-                {meUserId === m.userId && (
+                {meUserId === m.userId ? (
                   <span className="text-xs text-white/40">Du</span>
-                )}
+                ) : isCreator ? (
+                  <button
+                    type="button"
+                    aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
+                    title="Ta bort ur gruppen"
+                    onClick={() => void removeMember(m.userId)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
         </div>
+
+        <CommonWatchlistSection code={code} memberCount={members.length} />
 
         <Modal open={inviteOpen} onClose={() => setInviteOpen(false)}>
           <div className="p-2">
@@ -270,7 +381,9 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
               {friends.map((f) => (
                 <li key={f.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3">
                   <span className="font-medium">{f.name}</span>
-                  {invitedIds.has(f.id) ? (
+                  {memberIds.has(f.id) ? (
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/50">Med i gruppen</span>
+                  ) : invitedIds.has(f.id) ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400"><Check className="h-3 w-3" /> Inbjuden</span>
                   ) : (
                     <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-white/80">Bjud in</button>
@@ -284,12 +397,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         {isCreator && (
           <GroupSettingsModal code={code} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         )}
+
+        <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4" data-guide="group-create-join">
+    <div className="space-y-4" data-guide="group-create-join" data-tour="group-join-create">
       {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -331,6 +446,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           <Plus className="h-4 w-4" /> Skapa ny grupp
         </button>
       </div>
+
+      <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
     </div>
   );
 }

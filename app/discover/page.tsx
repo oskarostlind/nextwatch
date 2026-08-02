@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Star } from "lucide-react";
+import { Send, Star } from "lucide-react";
 import { PageHeader, Button, Note } from "../components/ui/kit";
 import MediaFilters, { type MediaTypeFilter } from "../components/discover/MediaFilters";
 import RatingModal from "../components/client/RatingModal";
+import ShareTitleModal, { type ShareItem } from "../components/client/ShareTitleModal";
 import Modal from "../components/ui/Modal";
 import WatchNowButton from "../components/watch/WatchNowButton";
 import {
@@ -17,6 +18,8 @@ import {
   type WatchProviders as Providers,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
+import { markTitleRated } from "@/lib/swipeDeckStore";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 type Item = {
   id: number;
@@ -52,6 +55,16 @@ function posterSrc(posterPath: string | null, size: "w342" | "w500" = "w342") {
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
 }
 
+function itemToShareItem(it: Item): ShareItem {
+  return {
+    tmdbId: it.id,
+    mediaType: it.mediaType,
+    title: it.title,
+    year: it.year,
+    poster: posterSrc(it.posterPath, "w500"),
+  };
+}
+
 function searchHitToItem(hit: SearchHit, mediaType: MediaTypeFilter): Item {
   return {
     id: hit.id,
@@ -79,7 +92,15 @@ export default function DiscoverPage() {
   const [type, setType] = useState<MediaTypeFilter>("movie");
   const [sort, setSort] = useState("popularity.desc");
   const [genres, setGenres] = useState<string[]>([]);
+  // Sub-genre-filtrering (TMDB keyword-id:n, se lib/subgenres.ts). Ephemer
+  // UI-state — sparas inte, precis som resten av Discover-filtren.
+  const [keywordIds, setKeywordIds] = useState<number[]>([]);
   const [page, setPage] = useState(1);
+  // Sentinel högst upp i listan. scrollIntoView scrollar den container som
+  // faktiskt scrollar (discover-mainen har egen overflow-y-auto) — så ett
+  // sidbyte tar dig till toppen i stället för att lämna dig kvar på botten.
+  const topRef = useRef<HTMLDivElement>(null);
+  const scrollToTop = () => topRef.current?.scrollIntoView({ block: "start" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -95,6 +116,7 @@ export default function DiscoverPage() {
   const [modalLoading, setModalLoading] = useState(false);
 
   const [rateTarget, setRateTarget] = useState<Item | null>(null);
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null);
   const [rateSaving, setRateSaving] = useState(false);
   const [userRatings, setUserRatings] = useState<Record<string, number>>({});
 
@@ -117,6 +139,7 @@ export default function DiscoverPage() {
           sort_by: sort,
         });
         if (genres.length) qs.set("with_genres", genres.join(","));
+        if (keywordIds.length) qs.set("with_keywords", keywordIds.join(","));
         const r = await fetch(`/api/tmdb/discover?${qs.toString()}`, { cache: "no-store" });
         const j = (await r.json()) as ApiOk | ApiErr;
         if (ignore) return;
@@ -131,7 +154,7 @@ export default function DiscoverPage() {
     return () => {
       ignore = true;
     };
-  }, [type, sort, genres, page]);
+  }, [type, sort, genres, keywordIds, page]);
 
   useEffect(() => {
     const needle = debouncedQ.trim();
@@ -203,10 +226,17 @@ export default function DiscoverPage() {
     setGenres((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  function toggleKeywordIds(ids: number[]) {
+    setPage(1);
+    setKeywordIds((prev) => toggleKeywordGroup(prev, ids));
+  }
+
   function submitRating(rating: number) {
     const it = rateTarget;
     if (!it) return;
     setRateSaving(true);
+    // Betygsatt titel ska aldrig tillbaka i swipen — rensa ur ev. cachad lek.
+    markTitleRated(it.id, it.mediaType);
     void fetch("/api/ratings/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -275,12 +305,25 @@ export default function DiscoverPage() {
         >
           <Star className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          aria-label="Tipsa en vän"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShareItem(itemToShareItem(it));
+          }}
+          className="absolute right-1.5 top-11 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-cyan-500 hover:text-black"
+        >
+          <Send className="h-4 w-4" />
+        </button>
       </div>
     );
   }
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
+      <div ref={topRef} />
       <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
 
       <MediaFilters
@@ -289,6 +332,7 @@ export default function DiscoverPage() {
           setType(t);
           setPage(1);
           setGenres([]);
+          setKeywordIds([]);
         }}
         sort={sort}
         onSortChange={(s) => {
@@ -297,6 +341,8 @@ export default function DiscoverPage() {
         }}
         genres={genres}
         onToggleGenre={toggleGenre}
+        keywordIds={keywordIds}
+        onToggleKeywordIds={toggleKeywordIds}
         mode="discover"
         layoutId="discover-type"
       />
@@ -327,11 +373,24 @@ export default function DiscoverPage() {
 
       {!isSearching && (
         <div className="mt-4 flex items-center justify-center gap-2">
-          <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setPage((p) => Math.max(1, p - 1));
+              scrollToTop();
+            }}
+            disabled={page === 1}
+          >
             ← Föregående
           </Button>
           <span className="text-sm text-neutral-400">Sida {page}</span>
-          <Button variant="secondary" onClick={() => setPage((p) => p + 1)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setPage((p) => p + 1);
+              scrollToTop();
+            }}
+          >
             Nästa →
           </Button>
         </div>
@@ -437,11 +496,25 @@ export default function DiscoverPage() {
                     ? ` (${userRatings[`${active.mediaType}_${active.id}`]}/10)`
                     : ""}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const it = active;
+                    closeModal();
+                    setShareItem(itemToShareItem(it));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                >
+                  <Send className="h-4 w-4" />
+                  Tipsa en vän
+                </button>
               </div>
             </div>
           </div>
         )}
       </Modal>
+
+      <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
 
       <RatingModal
         open={rateTarget !== null}

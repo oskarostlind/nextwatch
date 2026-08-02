@@ -14,6 +14,7 @@ import {
   type TmdbVideo,
   type Trailer,
 } from "@/lib/tmdbVideos";
+import type { WatchProviders } from "@/lib/watchLinks";
 
 export type TmdbType = "movie" | "tv";
 
@@ -25,7 +26,13 @@ export type TmdbLite = {
   poster?: string;
   rating?: number;
   overview?: string;
-  providers?: { name: string; url: string }[];
+  /**
+   * Rå SE watch-providers (flatrate/rent/buy + TMDB-fallbacklänken) — samma
+   * form som resten av appen använder. Anroparen (t.ex. group/match/route.ts)
+   * bygger tjänste-specifika länkar via lib/watchLinks.ts utifrån
+   * showPaidOptions, precis som swipe/discover/watchlist redan gör.
+   */
+  providers?: WatchProviders;
   /** null när titeln saknar trailer. */
   trailer?: Trailer | null;
 };
@@ -78,17 +85,10 @@ export async function tmdbDetails(
   const overview = (data.overview as string | undefined) ?? undefined;
 
   const provRoot = (data["watch/providers"] as Record<string, unknown> | undefined)?.results as
-    | Record<string, { link?: string }>
+    | Record<string, WatchProviders>
     | undefined;
 
-  const providers: { name: string; url: string }[] = [];
-  if (provRoot) {
-    const countries = ["SE", "GB", "US"];
-    for (const cc of countries) {
-      const node = provRoot[cc];
-      if (node?.link) providers.push({ name: `Stream (${cc})`, url: node.link });
-    }
-  }
+  const providers: WatchProviders | undefined = provRoot?.SE;
 
   const videos = (data.videos as { results?: TmdbVideo[] } | undefined)?.results;
 

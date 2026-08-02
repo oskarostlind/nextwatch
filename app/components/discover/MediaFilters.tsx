@@ -1,6 +1,7 @@
 "use client";
 
-import { Chip, SegmentedTabs } from "@/app/components/ui/kit";
+import { SegmentedTabs } from "@/app/components/ui/kit";
+import GenrePicker from "@/app/components/discover/GenrePicker";
 
 export const MOVIE_GENRES = [
   ["28", "Action"], ["12", "Äventyr"], ["16", "Animerat"], ["35", "Komedi"],
@@ -30,6 +31,14 @@ export const WATCHLIST_SORT_OPTIONS = [
   { value: "year", label: "Nyast" },
 ] as const;
 
+/** Sortering för Betyg-fliken. Betygsraderna saknar popularitet/röstsnitt,
+ *  men bär användarens EGET betyg — det är den intressanta sorteringen här. */
+export const RATED_SORT_OPTIONS = [
+  { value: "userRating", label: "Högst betyg" },
+  { value: "year", label: "Nyast" },
+  { value: "title", label: "Titel A–Ö" },
+] as const;
+
 export type MediaTypeFilter = "movie" | "tv";
 
 type Props = {
@@ -39,8 +48,11 @@ type Props = {
   onSortChange: (s: string) => void;
   genres: string[];
   onToggleGenre: (id: string) => void;
-  /** discover = TMDB sort keys; watchlist = client sort keys */
-  mode?: "discover" | "watchlist";
+  /** Valda sub-genre TMDB keyword-id:n (inline-unfold under markerad genre). Tom lista = ingen sub-genre-filtrering. */
+  keywordIds?: number[];
+  onToggleKeywordIds?: (keywordIds: number[]) => void;
+  /** discover = TMDB sort keys; watchlist/rated = client sort keys */
+  mode?: "discover" | "watchlist" | "rated";
   layoutId?: string;
 };
 
@@ -51,6 +63,8 @@ export default function MediaFilters({
   onSortChange,
   genres,
   onToggleGenre,
+  keywordIds = [],
+  onToggleKeywordIds,
   mode = "discover",
   layoutId = "media-filters-type",
 }: Props) {
@@ -58,6 +72,8 @@ export default function MediaFilters({
   const sortOptions =
     mode === "watchlist"
       ? WATCHLIST_SORT_OPTIONS
+      : mode === "rated"
+      ? RATED_SORT_OPTIONS
       : DISCOVER_SORT_OPTIONS.filter((o) => {
           if (type === "movie") return o.value !== "first_air_date.desc";
           return o.value !== "primary_release_date.desc";
@@ -91,18 +107,13 @@ export default function MediaFilters({
         </select>
       </div>
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {genreList.map(([id, name]) => (
-          <Chip
-            key={id}
-            selected={genres.includes(id)}
-            onClick={() => onToggleGenre(id)}
-            className="shrink-0 whitespace-nowrap"
-          >
-            {name}
-          </Chip>
-        ))}
-      </div>
+      <GenrePicker
+        genres={genreList.map(([id, name]) => ({ id, label: name }))}
+        selectedGenreIds={genres}
+        onToggleGenre={onToggleGenre}
+        selectedKeywordIds={keywordIds}
+        onToggleKeywordIds={onToggleKeywordIds ?? (() => {})}
+      />
     </div>
   );
 }

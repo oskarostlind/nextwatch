@@ -18,6 +18,8 @@ import {
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import RatingModal from "@/app/components/client/RatingModal";
+import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 
@@ -38,12 +40,18 @@ type MatchResp =
 
 export default function GroupSwipePage({ code }: { code: string }) {
   const { deck, popCard, updateCards, unshiftCard } = useGroupSwipeDeck(code);
-  const { cards, loading, error, ready } = deck;
+  const { cards, loading, ready } = deck;
   const showLoading = cards.length === 0 && (loading || !ready);
 
   const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
+
+  // Betygs-popup efter "Sett" (swipe upp), precis som i solo-swipen. Kortet är
+  // redan sparat som "seen" via /api/rate — modalen lägger valfritt ett 1–10-
+  // betyg ovanpå via /api/ratings/save.
+  const [ratePrompt, setRatePrompt] = useState<Card | null>(null);
+  const [ratingSaving, setRatingSaving] = useState(false);
 
   const controls = useAnimation();
 
@@ -126,6 +134,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
             reportSwipeLimitFrom(res);
             return null;
           }
+          emitGroupVoted(); // OverlayMount snabb-pollar matchen (ersatte fetch-patchen)
           return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
             cache: "no-store",
           });
@@ -224,6 +233,29 @@ export default function GroupSwipePage({ code }: { code: string }) {
     popTop();
     saveSeenRating(c);
     sendVote(c, "DISLIKE");
+    setRatePrompt(c);
+  }
+
+  function submitSeenRating(rating: number): void {
+    const c = ratePrompt;
+    if (!c) return;
+    setRatingSaving(true);
+    void fetch("/api/ratings/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, rating }),
+    })
+      .then((res) => {
+        if (!res.ok) notify("Kunde inte spara betyget");
+      })
+      .catch(() => {
+        notify("Kunde inte spara betyget");
+      })
+      .finally(() => {
+        setRatingSaving(false);
+        setRatePrompt(null);
+      });
   }
 
   function handleUndo(): void {
@@ -233,6 +265,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
       return;
     }
     undoStackRef.current = undoStackRef.current.slice(1);
+    setRatePrompt(null);
     unmarkSeen(entry.card.id);
     if (entry.action === "dislike" || entry.action === "seen") {
       unhide(entry.card.tmdbId);
@@ -405,6 +438,25 @@ export default function GroupSwipePage({ code }: { code: string }) {
           onLike={() => void swipeOut("right")}
         />
       </div>
+
+      <RatingModal
+        open={ratePrompt !== null}
+        item={
+          ratePrompt
+            ? {
+                tmdbId: ratePrompt.tmdbId,
+                mediaType: ratePrompt.mediaType,
+                title: ratePrompt.title,
+                year: ratePrompt.year,
+                poster: ratePrompt.poster,
+              }
+            : null
+        }
+        heading="Vad tyckte du?"
+        saving={ratingSaving}
+        onRate={submitSeenRating}
+        onSkip={() => setRatePrompt(null)}
+      />
     </div>
   );
 }

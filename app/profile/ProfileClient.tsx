@@ -7,13 +7,21 @@ import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
+import { AVATARS } from "@/lib/avatars";
+import Avatar from "@/app/components/ui/Avatar";
+import Modal from "@/app/components/ui/Modal";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
+import { getBillingStatus } from "@/lib/billingStore";
+import { clearClientCache } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
-import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
-import CompactGenrePicker from "./CompactGenrePicker";
+import { retrySoloDeck } from "@/lib/swipeDeckStore";
+import GenreSuggestions from "./GenreSuggestions";
 import TasteProfilePanel from "./TasteProfilePanel";
 import { toSvGenres } from "./profileGenres";
+import GenrePicker from "@/app/components/discover/GenrePicker";
+import { GROUP_GENRES } from "@/lib/groupSettings";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 export type FavoriteItem = {
   id: number;
@@ -25,6 +33,8 @@ export type FavoriteItem = {
 // DTO exakt som servern skickar från app/profile/page.tsx
 export type ProfileDTO = {
   displayName: string | null;
+  /** Vald avatar ur lib/avatars.ts, null = ingen vald. */
+  avatarId?: string | null;
   /** User.username */
   username?: string | null;
   dob: string | null;
@@ -33,6 +43,7 @@ export type ProfileDTO = {
   uiLanguage: string | null;
   favoriteGenres: string[];
   dislikedGenres?: string[];
+  favoriteKeywordIds?: number[];
   providers?: string[];
   favoriteMovie?: FavoriteItem | null;
   favoriteShow?: FavoriteItem | null;
@@ -283,6 +294,8 @@ function SearchBox({
 // —————————————————————— Huvudkomponent ——————————————————————
 export default function ProfileClient({ initial }: Props) {
   const [displayName, setDisplayName] = useState<string>(initial?.displayName ?? "");
+  const [avatarId, setAvatarId] = useState<string | null>(initial?.avatarId ?? null);
+  const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [username, setUsername] = useState<string>(initial?.username ?? "");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState<string>(toInputDate(initial?.dob ?? null));
@@ -293,6 +306,9 @@ export default function ProfileClient({ initial }: Props) {
   );
   const [dislikedGenres, setDislikedGenres] = useState<string[]>(
     initial?.dislikedGenres ? toSvGenres(initial.dislikedGenres) : []
+  );
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>(
+    initial?.favoriteKeywordIds ?? []
   );
   const [providers, setProviders] = useState<ProviderId[]>(
     initial?.providers ? toProviderIds(initial.providers) : []
@@ -323,9 +339,14 @@ export default function ProfileClient({ initial }: Props) {
         const p = data.profile as Record<string, unknown>;
         if (Array.isArray(p.favoriteGenres)) setFavoriteGenres(toSvGenres(p.favoriteGenres));
         if (Array.isArray(p.dislikedGenres)) setDislikedGenres(toSvGenres(p.dislikedGenres));
+        if (Array.isArray(p.favoriteKeywordIds)) {
+          setFavoriteKeywordIds(p.favoriteKeywordIds.filter((id): id is number => typeof id === "number"));
+        }
         if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
         if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
         if (typeof p.displayName === "string") setDisplayName(p.displayName);
+        if (typeof p.avatarId === "string") setAvatarId(p.avatarId);
+        else if (p.avatarId === null) setAvatarId(null);
         if (typeof p.username === "string") setUsername(p.username);
         else if (p.username === null) setUsername("");
         if (typeof p.dob === "string") setDob(toInputDate(p.dob));
@@ -381,10 +402,12 @@ export default function ProfileClient({ initial }: Props) {
         cache: "no-store",
         body: JSON.stringify({
           displayName,
+          avatarId,
           dob,
           uiLanguage,
           favoriteGenres,
           dislikedGenres,
+          favoriteKeywordIds,
           providers: providerIdsToLabels(providers),
           favoriteMovie,
           favoriteShow,
@@ -396,6 +419,14 @@ export default function ProfileClient({ initial }: Props) {
         return;
       }
       const message = "Sparat.";
+
+      // Tjänster/genrer/favoriter påverkar rekommendationerna. Den cachade
+      // solo-kortleken (24h TTL) byggdes med de GAMLA värdena, så den måste
+      // slängas och hämtas om — annars låg t.ex. titlar för en nyss avmarkerad
+      // tjänst kvar i swipe-flödet i upp till ett dygn (det var därför Disney+
+      // dök upp fast tjänsten tagits bort). retrySoloDeck rensar cachen och
+      // förladdar en färsk lek med de nya inställningarna.
+      void retrySoloDeck();
 
       const unamePayload = username.trim() === "" ? null : username.trim();
       const ures = await fetch("/api/user/username/update", {
@@ -418,17 +449,21 @@ export default function ProfileClient({ initial }: Props) {
     }
   };
 
-  const toggle = (key: "favoriteGenres" | "dislikedGenres" | "providers", value: string) => {
-    if (key === "favoriteGenres") {
-      setFavoriteGenres((old) => (old.includes(value) ? old.filter((v) => v !== value) : [...old, value]));
-      setDislikedGenres((old) => old.filter((v) => v !== value));
-    } else if (key === "dislikedGenres") {
-      setDislikedGenres((old) => (old.includes(value) ? old.filter((v) => v !== value) : [...old, value]));
-      setFavoriteGenres((old) => old.filter((v) => v !== value));
-    } else {
-      const id = value as ProviderId;
-      setProviders((old) => (old.includes(id) ? old.filter((v) => v !== id) : [...old, id]));
-    }
+  const toggleProvider = (value: string) => {
+    const id = value as ProviderId;
+    setProviders((old) => (old.includes(id) ? old.filter((v) => v !== id) : [...old, id]));
+  };
+
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt (samma
+  // kontrakt som Gruppinställningar) — de här är bara "toggla medlemskap i
+  // respektive lista", ett per läge.
+  const toggleFavoriteGenreMembership = (g: string) =>
+    setFavoriteGenres((old) => (old.includes(g) ? old.filter((v) => v !== g) : [...old, g]));
+  const toggleDislikedGenreMembership = (g: string) =>
+    setDislikedGenres((old) => (old.includes(g) ? old.filter((v) => v !== g) : [...old, g]));
+  const toggleFavoriteKeywordIds = (ids: number[]) => {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   };
 
   return (
@@ -442,6 +477,51 @@ export default function ProfileClient({ initial }: Props) {
       <Card className="overflow-hidden">
         {tab === "bas" && (
           <div className="grid gap-4">
+            {/* Frivillig avatar ur förvalt bibliotek. Griden (16 st) tog för
+                mycket plats inline — nu vald avatar + knapp som öppnar modal. */}
+            <div className="min-w-0">
+              <label className="mb-1 block text-sm text-white/70">Profilbild</label>
+              <div className="flex items-center gap-4">
+                <Avatar avatarId={avatarId} name={displayName} size={56} />
+                <div className="grid gap-1">
+                  <Button variant="secondary" onClick={() => setAvatarModalOpen(true)}>
+                    {avatarId ? "Byt profilbild" : "Välj profilbild"}
+                  </Button>
+                  <p className="text-xs text-white/45">Frivilligt — syns hos vänner och i grupper.</p>
+                </div>
+              </div>
+            </div>
+
+            <Modal open={avatarModalOpen} onClose={() => setAvatarModalOpen(false)} labelledBy="avatar-picker-heading">
+              <h3 id="avatar-picker-heading" className="mb-3 text-lg font-bold text-white">
+                Välj profilbild
+              </h3>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {AVATARS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    title={a.label}
+                    aria-label={a.label}
+                    aria-pressed={avatarId === a.id}
+                    onClick={() => {
+                      // Klick på redan vald avmarkerar (null rensar valet vid spara).
+                      setAvatarId((cur) => (cur === a.id ? null : a.id));
+                      setAvatarModalOpen(false);
+                    }}
+                    className={`relative overflow-hidden rounded-xl border transition ${
+                      avatarId === a.id
+                        ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                        : "border-white/10 opacity-80 hover:border-white/30 hover:opacity-100"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/avatars/${a.id}.svg`} alt={a.label} className="h-auto w-full" draggable={false} />
+                  </button>
+                ))}
+              </div>
+            </Modal>
+
             <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">
                 <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
@@ -519,26 +599,30 @@ export default function ProfileClient({ initial }: Props) {
                   <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
                   <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
                 </div>
-                <CompactGenrePicker
-                  label="Gillar"
-                  tone="like"
-                  selected={favoriteGenres}
-                  excluded={dislikedGenres}
-                  onChange={(next) => {
-                    setFavoriteGenres(next);
-                    setDislikedGenres((old) => old.filter((g) => !next.includes(g)));
+                <GenreSuggestions
+                  favoriteGenres={favoriteGenres}
+                  dislikedGenres={dislikedGenres}
+                  onAddLike={(g) => {
+                    setFavoriteGenres((old) => (old.includes(g) ? old : [...old, g]));
+                    setDislikedGenres((old) => old.filter((x) => x !== g));
                   }}
+                  onRemoveDislike={(g) => setDislikedGenres((old) => old.filter((x) => x !== g))}
                 />
-                <CompactGenrePicker
-                  label="Undviker"
-                  tone="dislike"
-                  selected={dislikedGenres}
-                  excluded={favoriteGenres}
-                  onChange={(next) => {
-                    setDislikedGenres(next);
-                    setFavoriteGenres((old) => old.filter((g) => !next.includes(g)));
-                  }}
-                />
+                <div>
+                  <label className="mb-2 block text-sm text-white/70">Genrer</label>
+                  <GenrePicker
+                    genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                    selectedGenreIds={favoriteGenres}
+                    onToggleGenre={toggleFavoriteGenreMembership}
+                    dislikedGenreIds={dislikedGenres}
+                    onToggleDislikedGenre={toggleDislikedGenreMembership}
+                    selectedKeywordIds={favoriteKeywordIds}
+                    onToggleKeywordIds={toggleFavoriteKeywordIds}
+                    wrap
+                    subLayout="card"
+                    emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -553,7 +637,7 @@ export default function ProfileClient({ initial }: Props) {
                   key={p.id}
                   label={p.label}
                   selected={providers.includes(p.id)}
-                  onClick={() => toggle("providers", p.id)}
+                  onClick={() => toggleProvider(p.id)}
                 />
               ))}
             </div>
@@ -582,6 +666,7 @@ type NotifPrefs = {
   groupMatches: boolean;
   friendRequests: boolean;
   groupInvites: boolean;
+  shares: boolean;
   marketing: boolean;
 };
 
@@ -598,6 +683,7 @@ const NOTIF_LABELS: { key: keyof NotifPrefs; label: string; hint: string }[] = [
   { key: "groupMatches", label: "Gruppmatchningar", hint: "När din grupp hittar en gemensam titel." },
   { key: "friendRequests", label: "Vänförfrågningar", hint: "Nya förfrågningar och accepterade vänner." },
   { key: "groupInvites", label: "Gruppinbjudningar", hint: "När någon bjuder in dig till en grupp." },
+  { key: "shares", label: "Filmtips från vänner", hint: "När en vän skickar dig ett filmtips i chatten." },
   { key: "marketing", label: "Nyheter & erbjudanden", hint: "Enstaka uppdateringar om NextWatch." },
 ];
 
@@ -657,25 +743,24 @@ function SettingsTab() {
     let ignore = false;
     void (async () => {
       try {
-        const [nRes, bRes] = await Promise.all([
+        const [nRes, bj] = await Promise.all([
           fetch("/api/profile/notifications", { cache: "no-store" }),
-          fetch("/api/billing/status", { cache: "no-store" }),
+          // Delad billing-store — men force: efter köp/återställning ska
+          // profilen visa färsk status, inte sessionens cache.
+          getBillingStatus(true),
         ]);
         if (nRes.ok) {
           const nj = (await nRes.json()) as { ok?: boolean; prefs?: NotifPrefs };
           if (!ignore && nj.ok && nj.prefs) setPrefs(nj.prefs);
         }
-        if (bRes.ok) {
-          const bj = (await bRes.json()) as { ok?: boolean } & BillingStatus;
-          if (!ignore && bj.ok) {
-            setBilling({
-              plan: bj.plan,
-              isPremium: bj.isPremium,
-              source: bj.source,
-              status: bj.status,
-              renewsAt: bj.renewsAt,
-            });
-          }
+        if (bj && !ignore && bj.ok) {
+          setBilling({
+            plan: bj.plan,
+            isPremium: bj.isPremium,
+            source: bj.source,
+            status: bj.status,
+            renewsAt: bj.renewsAt,
+          });
         }
       } catch {
         /* noop */
@@ -737,7 +822,10 @@ function SettingsTab() {
       const res = await fetch("/api/user/delete", { method: "POST", cache: "no-store" });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       if (res.ok && j.ok) {
-        // Kontot och sessionen är borta — börja om från landningssidan.
+        // Kontot och sessionen är borta — även den lokala cachen (kortlek,
+        // watchlist, betyg) måste bort, annars ligger raderad data kvar på
+        // enheten.
+        clearClientCache();
         window.location.href = "/";
         return;
       }
@@ -809,26 +897,11 @@ function SettingsTab() {
         )}
       </section>
 
-      {/* Förslag — styr vad swipen visar. Låg tidigare som en toggle i /swipe. */}
+      {/* Förslag — styr vad swipen visar. Film/serie-valet bor numera som en
+          pill direkt på /swipe (där man ser effekten); här finns bara det som
+          inte behöver vara ett svep bort. */}
       <section className="grid gap-3">
         <h3 className="text-sm font-semibold text-white/80">Förslag</h3>
-
-        <div className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-          <div className="text-sm text-white/85">Visa i swipen</div>
-          <div className="text-xs text-white/45">Gäller bara när du swipar själv — grupper har egna inställningar.</div>
-          <div className="mt-1">
-            <SegmentedTabs
-              layoutId="profile-media-filter"
-              tabs={[
-                { id: "both" as SwipeMediaFilter, label: "Båda" },
-                { id: "movie" as SwipeMediaFilter, label: "Film" },
-                { id: "tv" as SwipeMediaFilter, label: "Serier" },
-              ]}
-              value={swipeSettings.mediaFilter}
-              onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
-            />
-          </div>
-        </div>
 
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
@@ -840,6 +913,19 @@ function SettingsTab() {
           <Toggle
             checked={swipeSettings.showPaidOptions}
             onChange={(v) => void saveSwipeSettings({ showPaidOptions: v })}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Visa barn- och familjeinnehåll</div>
+            <div className="text-xs text-white/45">
+              Av som standard. På tar med barnserier (t.ex. My Little Pony) i förslagen.
+            </div>
+          </div>
+          <Toggle
+            checked={swipeSettings.showKidsContent}
+            onChange={(v) => void saveSwipeSettings({ showKidsContent: v })}
           />
         </div>
       </section>
@@ -911,6 +997,86 @@ function SettingsTab() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Genomgång — låter användaren titta på swipe-tutorialen igen på begäran. */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Genomgång</h3>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Swipe-genomgången</div>
+            <div className="text-xs text-white/45">
+              Gilla, ogilla, mer info och sett + betygsätt — så funkar korten.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/swipe?tour=swipe-gestures"; }}>
+            Visa igen
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Vän-genomgången</div>
+            <div className="text-xs text-white/45">
+              Lägg till vänner, förfrågningar och vad vänner låser upp.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=friends-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Grupp-genomgången</div>
+            <div className="text-xs text-white/45">
+              Skapa eller gå med, bjud in, inställningar och gruppswipe.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=groups-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm text-white/85">Watchlist-genomgången</div>
+            <div className="text-xs text-white/45">
+              Sparade titlar, betygsätt det du sett och Kolla nu.
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/watchlist?tour=watchlist-tour"; }}>
+            Visa igen
+          </Button>
+        </div>
+      </section>
+
+      {/* Om — legal/support-länkarna Apple kräver + TMDB-attribution (TMDB:s villkor). */}
+      <section className="grid gap-3">
+        <h3 className="text-sm font-semibold text-white/80">Om NextWatch</h3>
+        <div className="grid gap-1 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm">
+          <a href="/legal/privacy" className="py-1.5 text-white/85 transition hover:text-white">
+            Integritetspolicy
+          </a>
+          <a href="/legal/terms" className="py-1.5 text-white/85 transition hover:text-white">
+            Användarvillkor
+          </a>
+          <a href="/support" className="py-1.5 text-white/85 transition hover:text-white">
+            Support &amp; vanliga frågor
+          </a>
+          <a href="mailto:support@nextwatch.se" className="py-1.5 text-white/85 transition hover:text-white">
+            Kontakta oss
+          </a>
+        </div>
+        <p className="px-1 text-xs leading-relaxed text-white/40">
+          Film- och seriedata från{" "}
+          <a
+            href="https://www.themoviedb.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#01b4e4]"
+          >
+            TMDB
+          </a>
+          . Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB.
+        </p>
       </section>
 
       {note && <p className="text-sm text-rose-300">{note}</p>}

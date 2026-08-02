@@ -35,10 +35,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
   }
 
-  // Spara rating (upsert så upprepade swipes inte kraschar; rensa gammalt numeriskt betyg).
+  // Spara beslutet (upsert så upprepade swipes inte kraschar). rating rörs INTE:
+  // att nolla den här raderade nysatta betyg i sett-flödet (race mot
+  // /api/ratings/save) — betyget ägs av betygsflödena, svepet bara beslutet.
   await prisma.rating.upsert({
     where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
-    update: { decision, decidedAt: new Date(), rating: null },
+    update: { decision, decidedAt: new Date() },
     create: {
       id: crypto.randomUUID(),
       userId: uid,

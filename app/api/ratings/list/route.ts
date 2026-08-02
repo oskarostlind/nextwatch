@@ -8,6 +8,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { tmdbFetch } from "@/lib/tmdbClient";
+import { extractKeywordIds } from "@/lib/subgenres";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,10 @@ type RatedCard = {
   title: string;
   year: string | null;
   poster: string | null;
+  /** TMDB-genre-id:n, för genrefiltret på Betyg-fliken. */
+  genreIds: number[];
+  /** TMDB keyword-id:n, för sub-genre-filtret på Betyg-fliken (lib/subgenres.ts). */
+  keywordIds: number[];
   /** Användarens eget betyg 1–10. */
   userRating: number;
 };
@@ -30,6 +36,9 @@ type TmdbTitle = {
   poster_path?: string | null;
   release_date?: string | null;
   first_air_date?: string | null;
+  genres?: { id: number }[];
+  /** Med av `append_to_response=keywords` — filmer under `keywords`, serier under `results`. */
+  keywords?: { keywords?: { id: number }[]; results?: { id: number }[] };
 };
 
 const V4_TOKEN =
@@ -51,51 +60,84 @@ async function tmdbGet<T>(path: string): Promise<T> {
   } else {
     throw new Error("TMDB credentials missing");
   }
-  const res = await fetch(url.toString(), { headers, cache: "no-store" });
+  // Titelmetadata är stabil — dygnscache (samma resonemang som lib/watchlistCards).
+  const res = await tmdbFetch(url.toString(), { headers, next: { revalidate: 60 * 60 * 24 } });
   if (!res.ok) throw new Error(`TMDB ${res.status} on ${path}`);
   return (await res.json()) as T;
 }
 
-export async function POST() {
+/** Skydd mot orimligt långa query-strängar. */
+const MAX_IDS = 200;
+
+export async function POST(req: Request) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) return NextResponse.json({ ok: false, items: [], message: "Ingen session" }, { status: 401 });
 
-    const rows = await prisma.rating.findMany({
+    const allRows = await prisma.rating.findMany({
       where: { userId: uid, rating: { not: null } },
       select: { tmdbId: true, mediaType: true, rating: true },
       orderBy: { decidedAt: "desc" },
       take: 200,
     });
 
+    const url = new URL(req.url);
+
+    // ?meta=0 → bara raderna. Klienten har titelmetadatan i lib/titleCache och
+    // behöver bara veta VILKA titlar som är betygsatta, plus betyget.
+    if (url.searchParams.get("meta") === "0") {
+      return NextResponse.json({
+        ok: true,
+        rows: allRows.map((r) => ({
+          tmdbId: r.tmdbId,
+          mediaType: r.mediaType as "movie" | "tv",
+          userRating: r.rating as number,
+        })),
+      });
+    }
+
+    // ?ids=… → berika bara de titlar klientens cache saknar.
+    const idsParam = url.searchParams.get("ids");
+    const onlyIds = idsParam
+      ? new Set(idsParam.split(",").map((s) => s.trim()).filter(Boolean).slice(0, MAX_IDS))
+      : null;
+
+    const rows = onlyIds
+      ? allRows.filter((r) => onlyIds.has(`${r.mediaType}_${r.tmdbId}`))
+      : allRows;
+
     if (rows.length === 0) return NextResponse.json({ ok: true, items: [] });
 
-    const BATCH_SIZE = 10;
-    const items: RatedCard[] = [];
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (r): Promise<RatedCard | null> => {
-          const mediaType = r.mediaType as "movie" | "tv";
-          const path = mediaType === "movie" ? `movie/${r.tmdbId}` : `tv/${r.tmdbId}`;
-          const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
-          if (!t) return null; // titel borttagen från TMDB — hoppa över
-          const title = mediaType === "movie" ? t.title ?? "" : t.name ?? "";
-          const date = mediaType === "movie" ? t.release_date : t.first_air_date;
-          return {
-            id: `${mediaType}_${r.tmdbId}`,
-            tmdbId: r.tmdbId,
-            mediaType,
-            title,
-            year: date && date.length >= 4 ? date.slice(0, 4) : null,
-            poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
-            userRating: r.rating as number,
-          };
-        })
-      );
-      for (const it of batchResults) if (it) items.push(it);
-    }
+    // Parallellt i stället för sekventiella 10-batchar (upp till 20 vänte-
+    // omgångar för 200 betyg). Concurrency-taket i lib/tmdbClient håller
+    // trycket nere — 200 samtidiga anrop gav 429:or som `.catch(() => null)`
+    // nedan svalde, vilket tyst tömde delar av betygslistan.
+    const results = await Promise.all(
+      rows.map(async (r): Promise<RatedCard | null> => {
+        const mediaType = r.mediaType as "movie" | "tv";
+        const path =
+          mediaType === "movie"
+            ? `movie/${r.tmdbId}?append_to_response=keywords`
+            : `tv/${r.tmdbId}?append_to_response=keywords`;
+        const t = await tmdbGet<TmdbTitle>(path).catch(() => null);
+        if (!t) return null; // titel borttagen från TMDB — hoppa över
+        const title = mediaType === "movie" ? t.title ?? "" : t.name ?? "";
+        const date = mediaType === "movie" ? t.release_date : t.first_air_date;
+        return {
+          id: `${mediaType}_${r.tmdbId}`,
+          tmdbId: r.tmdbId,
+          mediaType,
+          title,
+          year: date && date.length >= 4 ? date.slice(0, 4) : null,
+          poster: t.poster_path ? `https://image.tmdb.org/t/p/w500${t.poster_path}` : null,
+          genreIds: (t.genres ?? []).map((g) => g.id),
+          keywordIds: extractKeywordIds(t.keywords),
+          userRating: r.rating as number,
+        };
+      })
+    );
+    const items = results.filter((it): it is RatedCard => it !== null);
 
     return NextResponse.json({ ok: true, items });
   } catch {

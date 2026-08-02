@@ -6,6 +6,7 @@ import {
   ensureGroupDeck,
   ensureSoloDeck,
   getGroupDeckSnapshot,
+  getSoloDeckServerSnapshot,
   getSoloDeckSnapshot,
   popGroupCard,
   popSoloCard,
@@ -24,6 +25,16 @@ import {
 } from "@/lib/swipeDeckStore";
 import type { SwipeCard } from "@/lib/swipeDeck";
 import { adsFeatureEnabled } from "@/lib/ads";
+import { getBillingStatus } from "@/lib/billingStore";
+import { Capacitor } from "@capacitor/core";
+
+function isNativeApp(): boolean {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
 
 export type { SoloDeckState, GroupDeckState };
 
@@ -37,20 +48,26 @@ export function SwipeDeckPreloader() {
   // Avgör om annonser ska visas (gratisanvändare + feature-flagga på).
   // Körs före däcket hinner ladda flera sidor, så annonser injiceras stabilt.
   useEffect(() => {
+    // I native-appen sköts annonser av AdMob (lib/admobAds) — AdSense-korten
+    // hör hemma på webben och skulle dessutom bryta AdSense-policyn i WebView.
+    if (isNativeApp()) {
+      setSwipeAdsEnabled(false);
+      return;
+    }
     if (!adsFeatureEnabled()) {
       setSwipeAdsEnabled(false);
       return;
     }
     let cancelled = false;
-    void fetch("/api/billing/status", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { isPremium?: boolean } | null) => {
+    // Delad billing-store: en fetch per session i stället för att varje yta
+    // hämtar sin egen status.
+    void getBillingStatus()
+      .then((j) => {
         if (cancelled) return;
-        // Annonser bara för icke-premium.
-        setSwipeAdsEnabled(!(j?.isPremium ?? false));
+        // Annonser bara för icke-premium; vid fel (null) hellre inga annonser.
+        setSwipeAdsEnabled(j ? !j.isPremium : false);
       })
       .catch(() => {
-        /* vid fel: visa hellre inga annonser */
         if (!cancelled) setSwipeAdsEnabled(false);
       });
     return () => {
@@ -81,7 +98,9 @@ export function useSoloSwipeDeck() {
   const solo = useSyncExternalStore(
     subscribeSwipeDeck,
     getSoloDeckSnapshot,
-    getSoloDeckSnapshot
+    // Stabil tom snapshot vid hydrering — klientens snapshot innehåller redan
+    // den cachade leken och skulle annars räknas som hydration-mismatch.
+    getSoloDeckServerSnapshot
   );
 
   useEffect(() => {

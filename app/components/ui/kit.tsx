@@ -64,7 +64,7 @@ export function Card({
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
-const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-cyan-500 text-black hover:bg-cyan-400 disabled:hover:bg-cyan-500",
   secondary: "border border-white/10 bg-white/5 text-white hover:bg-white/10",
   ghost: "text-neutral-300 hover:text-white",

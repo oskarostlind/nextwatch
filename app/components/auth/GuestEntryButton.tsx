@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { replayAnonLikes } from "@/lib/anonLikes";
 
 /**
  * Ett klick in i gästläge: skapar en minimal profil (utan onboarding) och
@@ -24,6 +25,10 @@ export default function GuestEntryButton({
       const res = await fetch("/api/profile/guest", { method: "POST", cache: "no-store" });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       if (res.ok && j.ok) {
+        // Startsidans hero lovar att swipesen "följer med". Gästen får en riktig
+        // profil här, så löftet infrias direkt — best-effort, precis som i
+        // onboardingen.
+        await replayAnonLikes().catch(() => 0);
         window.location.href = "/swipe";
         return;
       }

@@ -23,7 +23,7 @@ import {
 } from "@/lib/groupSettings";
 import { Button, Chip, SegmentedTabs } from "@/app/components/ui/kit";
 import GenrePicker from "@/app/components/discover/GenrePicker";
-import { ProviderLogoTile } from "@/app/components/ui/ProviderChip";
+import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { PROVIDERS } from "@/lib/providers";
 import { toggleKeywordGroup } from "@/lib/subgenres";
 
@@ -226,9 +226,9 @@ export default function GroupSettingsModal({
               </SettingsSection>
 
               <SettingsSection title="Streamingtjänster" hint="Tomt = alla tjänster som någon medlem har.">
-                <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-5">
+                <div className="flex flex-wrap gap-2">
                   {PROVIDERS.map((p) => (
-                    <ProviderLogoTile
+                    <ProviderChip
                       key={p.key}
                       label={p.label}
                       selected={providers.includes(p.label)}

@@ -70,6 +70,7 @@ export type TasteInput = {
     userId: string;
     favoriteGenres: string[];
     dislikedGenres: string[];
+    favoriteKeywordIds?: number[];
     providers: unknown;
     favoriteMovie: unknown;
     favoriteShow: unknown;

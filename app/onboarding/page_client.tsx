@@ -10,6 +10,9 @@ import Link from "next/link";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import GuestEntryButton from "@/app/components/auth/GuestEntryButton";
 import { replayAnonLikes } from "@/lib/anonLikes";
+import GenrePicker from "@/app/components/discover/GenrePicker";
+import { GROUP_GENRES } from "@/lib/groupSettings";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -168,21 +171,6 @@ const STEPS = [
   { id: 3, title: "Konto", subtitle: "Gäst eller registrera dig" },
 ] as const;
 
-const GENRES = [
-  "Action",
-  "Äventyr",
-  "Animerat",
-  "Komedi",
-  "Kriminal",
-  "Drama",
-  "Fantasy",
-  "Skräck",
-  "Romantik",
-  "Sci-Fi",
-  "Thriller",
-  "Dokumentär",
-] as const;
-
 export default function Client() {
   const router = useRouter();
 
@@ -206,6 +194,7 @@ export default function Client() {
   const [favoriteShow, setFavoriteShow] = useState<Fav | null>(null);
   const [likeGenres, setLikeGenres] = useState<string[]>([]);
   const [dislikeGenres, setDislikeGenres] = useState<string[]>([]);
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [searchLocale, setSearchLocale] = useState<string>("sv-SE");
@@ -221,11 +210,14 @@ export default function Client() {
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
     );
   }
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt (samma
+  // kontrakt som Gruppinställningar/Profil) — de här är bara "toggla
+  // medlemskap i respektive lista", ett per läge.
   function toggleLike(g: string) {
     setLikeGenres((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
     );
-    setDislikeGenres((prev) => prev.filter((x) => x !== g));
   }
   function onUsernameChange(e: ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
@@ -298,7 +290,9 @@ export default function Client() {
     setDislikeGenres((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
     );
-    setLikeGenres((prev) => prev.filter((x) => x !== g));
+  }
+  function toggleFavoriteKeywordIds(ids: number[]) {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   }
 
   async function saveAndContinue(redirect: string) {
@@ -320,6 +314,7 @@ export default function Client() {
       favoriteShow,
       favoriteGenres: likeGenres,
       dislikedGenres: dislikeGenres,
+      favoriteKeywordIds,
     };
 
     try {
@@ -560,47 +555,20 @@ export default function Client() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <div>
-                  <div className="mb-2 text-sm text-neutral-300">Gillar</div>
-                  <div className="flex flex-wrap gap-2">
-                    {GENRES.map((g) => (
-                      <button
-                        key={`like-${g}`}
-                        type="button"
-                        onClick={() => toggleLike(g)}
-                        className={[
-                          "rounded-full border px-3 py-1 text-sm transition",
-                          likeGenres.includes(g)
-                            ? "border-emerald-400 bg-emerald-400/10 text-emerald-300"
-                            : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 text-sm text-neutral-300">Ogillar</div>
-                  <div className="flex flex-wrap gap-2">
-                    {GENRES.map((g) => (
-                      <button
-                        key={`dislike-${g}`}
-                        type="button"
-                        onClick={() => toggleDislike(g)}
-                        className={[
-                          "rounded-full border px-3 py-1 text-sm transition",
-                          dislikeGenres.includes(g)
-                            ? "border-rose-400 bg-rose-400/10 text-rose-300"
-                            : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div>
+                <div className="mb-2 text-sm text-neutral-300">Genrer</div>
+                <GenrePicker
+                  genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                  selectedGenreIds={likeGenres}
+                  onToggleGenre={toggleLike}
+                  dislikedGenreIds={dislikeGenres}
+                  onToggleDislikedGenre={toggleDislike}
+                  selectedKeywordIds={favoriteKeywordIds}
+                  onToggleKeywordIds={toggleFavoriteKeywordIds}
+                  wrap
+                  subLayout="card"
+                  emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                />
               </div>
             </div>
           )}

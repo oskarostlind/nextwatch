@@ -48,12 +48,12 @@ model User {
   // Sign in with Apple (unikt Apple-användar-id)
   appleSub String? @unique @map("apple_sub")
 
-  profile   Profile?
-  ratings   Rating[]
+  profile        Profile?
+  ratings        Rating[]
   sharesSent     SharedTitle[] @relation("sharesSent")
   sharesReceived SharedTitle[] @relation("sharesReceived")
-  watchlist watchlist[]
-  purchases Purchase[]
+  watchlist      watchlist[]
+  purchases      Purchase[]
 
   appleIapTransactions AppleIapTransaction[]
 
@@ -72,8 +72,8 @@ model User {
   groupInvitesReceived GroupInvite[]    @relation("GroupInvitesTo")
   groupMatchesSeen     GroupMatchSeen[]
 
-  verifications Verification[]
-  pushTokens    PushToken[]
+  verifications   Verification[]
+  pushTokens      PushToken[]
   onboardingTours OnboardingTour[]
 
   @@map("users")
@@ -105,25 +105,30 @@ model Profile {
   updatedAt        DateTime @default(now()) @map("updated_at")
 
   // Smakprofil
-  displayName    String?  @map("display_name")
+  displayName        String?  @map("display_name")
   /// Vald avatar ur det förvalda biblioteket (lib/avatars.ts), t.ex. "popcorn".
   /// Null = ingen vald (frivilligt val — UI faller tillbaka på initial).
-  avatarId       String?  @map("avatar_id")
-  favoriteMovie  Json?    @map("favorite_movie")
-  favoriteShow   Json?    @map("favorite_show")
-  favoriteGenres String[] @default([]) @map("favorite_genres")
-  dislikedGenres String[] @default([]) @map("disliked_genres")
+  avatarId           String?  @map("avatar_id")
+  favoriteMovie      Json?    @map("favorite_movie")
+  favoriteShow       Json?    @map("favorite_show")
+  favoriteGenres     String[] @default([]) @map("favorite_genres")
+  dislikedGenres     String[] @default([]) @map("disliked_genres")
+  /// Valda sub-genrer (TMDB keyword-id:n, se lib/subgenres.ts) för de gillade
+  /// genrerna ovan. Tomt = ingen sub-genre-filtrering. Appliceras som HÅRT
+  /// filter (with_keywords) i lib/unifiedRecs.ts för solo-läget, precis som
+  /// Group.favoriteKeywordIds gör för grupper.
+  favoriteKeywordIds Int[]    @default([]) @map("favorite_keyword_ids")
 
   // Swipe-inställningar (styrs från profilen).
   /// Visa hyr-/köpalternativ på titelkort. Av som standard: annars tror användaren
   /// att titeln går att streama fritt och länkas till en betalsida.
-  showPaidOptions Boolean @default(false) @map("show_paid_options")
+  showPaidOptions  Boolean @default(false) @map("show_paid_options")
   /// movie | tv | both — vilken typ av titlar solo-swipen visar (standard: both).
   /// Grupper har sitt eget filter på Group.mediaFilter.
-  swipeMediaFilter String @default("both") @map("swipe_media_filter")
+  swipeMediaFilter String  @default("both") @map("swipe_media_filter")
   /// Visa barn-/familjeinnehåll (TV-Kids-genren) i förslagen. Av som standard:
   /// vuxna vill sällan ha t.ex. My Little Pony i flödet. Se lib/unifiedRecs.ts.
-  showKidsContent Boolean @default(false) @map("show_kids_content")
+  showKidsContent  Boolean @default(false) @map("show_kids_content")
 
   // Notisinställningar (per användare). Default: allt på.
   notifyDailyRecs      Boolean @default(true) @map("notify_daily_recs")
@@ -275,19 +280,19 @@ model Group {
   // genrer/providers unionas från medlemmarnas profiler, åldersgräns från
   // yngsta medlemmen och matchtröskeln är 60 % av gruppens storlek.
   // Se lib/groupSettings.ts.
-  favoriteGenres String[] @default([]) @map("favorite_genres")
-  dislikedGenres String[] @default([]) @map("disliked_genres")
+  favoriteGenres     String[] @default([]) @map("favorite_genres")
+  dislikedGenres     String[] @default([]) @map("disliked_genres")
   /// Valda sub-genrer (TMDB keyword-id:n, se lib/subgenres.ts) för de gillade
   /// genrerna ovan. Tomt = ingen sub-genre-filtrering. Appliceras som HÅRT
   /// filter (with_keywords) i lib/unifiedRecs.ts, precis som favoriteGenres.
-  favoriteKeywordIds Int[]  @default([]) @map("favorite_keyword_ids")
-  providers      Json     @default("[]")
-  maxCert        String?  @map("max_cert")
+  favoriteKeywordIds Int[]    @default([]) @map("favorite_keyword_ids")
+  providers          Json     @default("[]")
+  maxCert            String?  @map("max_cert")
   /// Antal PERSONER (≥2) som krävs för match. null = automatik (60 % av storlek).
   /// Klamras till aktuell gruppstorlek vid matchberäkning, se groupMatchNeed().
-  matchThreshold Int?     @map("match_threshold")
+  matchThreshold     Int?     @map("match_threshold")
   /// movie | tv | both — vilken typ av titlar gruppen swipar (standard: both).
-  mediaFilter    String   @default("both") @map("media_filter")
+  mediaFilter        String   @default("both") @map("media_filter")
 
   members     GroupMember[]
   votes       GroupVote[]      @relation("GroupVotes")

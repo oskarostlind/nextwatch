@@ -4,6 +4,7 @@ import { prisma } from "../../../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { signUid } from "../../../../lib/session";
+import { sanitizeKeywordIds } from "@/lib/groupSettings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,6 +153,7 @@ export async function POST(req: NextRequest) {
     const dobStr = extractDob(body);
     const favoriteGenres = asStringArray(body.favoriteGenres);
     const dislikedGenres = asStringArray(body.dislikedGenres);
+    const favoriteKeywordIds = sanitizeKeywordIds(body.favoriteKeywordIds) ?? [];
     const providersJson = toProvidersJson(body.providers);
     const favMovieJson = normalizeFavorite(body.favoriteMovie);
     const favShowJson = normalizeFavorite(body.favoriteShow);
@@ -196,6 +198,7 @@ export async function POST(req: NextRequest) {
       uiLanguage,
       favoriteGenres,
       dislikedGenres,
+      favoriteKeywordIds,
       providers: providersJson,
       favoriteMovie: favMovieJson ?? Prisma.DbNull,
       favoriteShow: favShowJson ?? Prisma.DbNull,
@@ -215,6 +218,7 @@ export async function POST(req: NextRequest) {
         uiLanguage: true,
         favoriteGenres: true,
         dislikedGenres: true,
+        favoriteKeywordIds: true,
         providers: true,
         favoriteMovie: true,
         favoriteShow: true,

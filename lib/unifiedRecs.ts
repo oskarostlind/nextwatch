@@ -564,12 +564,16 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const withGenresTv = hardFilterTvGenres.length > 0 ? hardFilterTvGenres.join("|") : undefined;
 
     // Sub-genrer (lib/subgenres.ts): samma HÅRDA-filter-princip som genrerna
-    // ovan, fast som TMDB keywords. Bara satt när gruppen (kugghjulet) själv
-    // valt sub-genrer på Group.favoriteKeywordIds — automatik-läget (ingen
-    // grupp-inställning) har inga keyword-id:n att filtrera på.
-    const groupExplicitKeywordIds = isGroup ? groupRow?.favoriteKeywordIds ?? [] : [];
+    // ovan, fast som TMDB keywords — och till skillnad från genrerna gäller
+    // det HÄR även solo: sub-genre-valet i Profil (Profile.favoriteKeywordIds)
+    // är precis lika explicit ett användarval som gruppens kugghjul, så det
+    // ska begränsa TMDB-kandidatpoolen på riktigt i båda lägena. Tomt (inget
+    // valt, varken solo eller grupp) = ingen keyword-filtrering alls.
+    const explicitKeywordIds = isGroup
+      ? groupRow?.favoriteKeywordIds ?? []
+      : profile.favoriteKeywordIds ?? [];
     const withKeywords =
-      groupExplicitKeywordIds.length > 0 ? groupExplicitKeywordIds.join("|") : undefined;
+      explicitKeywordIds.length > 0 ? explicitKeywordIds.join("|") : undefined;
 
     // Startas här och inväntas efter discover-loopen, så uppslagen löper
     // parallellt med sidhämtningen i stället för att lägga sig ovanpå den.

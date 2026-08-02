@@ -25,6 +25,7 @@ export type ProfileDTO = {
   uiLanguage: string | null;
   favoriteGenres: string[];
   dislikedGenres?: string[]; // valfri – klient hydr. ändå
+  favoriteKeywordIds?: number[]; // valfri – klient hydr. ändå
   providers?: string[];      // valfri – klient hydr. ändå
   favoriteMovie?: FavoriteItem | null;
   favoriteShow?: FavoriteItem | null;
@@ -75,6 +76,7 @@ export default async function Page() {
         uiLanguage: true,
         favoriteGenres: true,
         dislikedGenres: true,
+        favoriteKeywordIds: true,
         providers: true,
         favoriteMovie: true,
         favoriteShow: true,
@@ -93,6 +95,11 @@ export default async function Page() {
             (g): g is string => typeof g === "string"
           )
         : [];
+      const favoriteKeywordIds = Array.isArray(prof.favoriteKeywordIds)
+        ? (prof.favoriteKeywordIds as unknown[]).filter(
+            (id): id is number => typeof id === "number"
+          )
+        : [];
       const providers = Array.isArray(prof.providers)
         ? (prof.providers as unknown[]).filter(
             (g): g is string => typeof g === "string"
@@ -109,6 +116,7 @@ export default async function Page() {
         uiLanguage: prof.uiLanguage ?? null,
         favoriteGenres,
         dislikedGenres,
+        favoriteKeywordIds,
         providers,
         favoriteMovie: asFavoriteItem(prof.favoriteMovie as unknown),
         favoriteShow: asFavoriteItem(prof.favoriteShow as unknown),

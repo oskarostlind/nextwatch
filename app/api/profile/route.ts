@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import prisma from "../../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { isValidAvatarId } from "@/lib/avatars";
+import { sanitizeKeywordIds } from "@/lib/groupSettings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export async function GET() {
       uiLanguage: true,
       favoriteGenres: true,
       dislikedGenres: true,
+      favoriteKeywordIds: true,
       providers: true,
       favoriteMovie: true,
       favoriteShow: true,
@@ -87,6 +89,7 @@ export async function PUT(req: Request) {
     body.avatarId === null ? null : isValidAvatarId(body.avatarId) ? body.avatarId : undefined;
   const favoriteGenres = arr(body.favoriteGenres);
   const dislikedGenres = arr(body.dislikedGenres);
+  const favoriteKeywordIds = sanitizeKeywordIds(body.favoriteKeywordIds) ?? [];
   const providers = arr(body.providers);
   const favMovie = (body.favoriteMovie ?? null) as Prisma.InputJsonValue | null;
   const favShow = (body.favoriteShow ?? null) as Prisma.InputJsonValue | null;
@@ -108,6 +111,7 @@ export async function PUT(req: Request) {
         locale,
         favoriteGenres,
         dislikedGenres,
+        favoriteKeywordIds,
         providers,
         favoriteMovie: (favMovie ?? undefined) as Prisma.InputJsonValue | undefined,
         favoriteShow: (favShow ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -135,6 +139,7 @@ export async function PUT(req: Request) {
       locale,
       favoriteGenres,
       dislikedGenres,
+      favoriteKeywordIds,
       providers,
       favoriteMovie: favMovie as Prisma.InputJsonValue,
       favoriteShow: favShow as Prisma.InputJsonValue,

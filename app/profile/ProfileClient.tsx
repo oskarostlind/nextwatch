@@ -16,10 +16,12 @@ import { clearClientCache } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import { retrySoloDeck } from "@/lib/swipeDeckStore";
-import CompactGenrePicker from "./CompactGenrePicker";
 import GenreSuggestions from "./GenreSuggestions";
 import TasteProfilePanel from "./TasteProfilePanel";
 import { toSvGenres } from "./profileGenres";
+import GenrePicker from "@/app/components/discover/GenrePicker";
+import { GROUP_GENRES } from "@/lib/groupSettings";
+import { toggleKeywordGroup } from "@/lib/subgenres";
 
 export type FavoriteItem = {
   id: number;
@@ -41,6 +43,7 @@ export type ProfileDTO = {
   uiLanguage: string | null;
   favoriteGenres: string[];
   dislikedGenres?: string[];
+  favoriteKeywordIds?: number[];
   providers?: string[];
   favoriteMovie?: FavoriteItem | null;
   favoriteShow?: FavoriteItem | null;
@@ -304,6 +307,9 @@ export default function ProfileClient({ initial }: Props) {
   const [dislikedGenres, setDislikedGenres] = useState<string[]>(
     initial?.dislikedGenres ? toSvGenres(initial.dislikedGenres) : []
   );
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>(
+    initial?.favoriteKeywordIds ?? []
+  );
   const [providers, setProviders] = useState<ProviderId[]>(
     initial?.providers ? toProviderIds(initial.providers) : []
   );
@@ -333,6 +339,9 @@ export default function ProfileClient({ initial }: Props) {
         const p = data.profile as Record<string, unknown>;
         if (Array.isArray(p.favoriteGenres)) setFavoriteGenres(toSvGenres(p.favoriteGenres));
         if (Array.isArray(p.dislikedGenres)) setDislikedGenres(toSvGenres(p.dislikedGenres));
+        if (Array.isArray(p.favoriteKeywordIds)) {
+          setFavoriteKeywordIds(p.favoriteKeywordIds.filter((id): id is number => typeof id === "number"));
+        }
         if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
         if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
         if (typeof p.displayName === "string") setDisplayName(p.displayName);
@@ -398,6 +407,7 @@ export default function ProfileClient({ initial }: Props) {
           uiLanguage,
           favoriteGenres,
           dislikedGenres,
+          favoriteKeywordIds,
           providers: providerIdsToLabels(providers),
           favoriteMovie,
           favoriteShow,
@@ -439,17 +449,21 @@ export default function ProfileClient({ initial }: Props) {
     }
   };
 
-  const toggle = (key: "favoriteGenres" | "dislikedGenres" | "providers", value: string) => {
-    if (key === "favoriteGenres") {
-      setFavoriteGenres((old) => (old.includes(value) ? old.filter((v) => v !== value) : [...old, value]));
-      setDislikedGenres((old) => old.filter((v) => v !== value));
-    } else if (key === "dislikedGenres") {
-      setDislikedGenres((old) => (old.includes(value) ? old.filter((v) => v !== value) : [...old, value]));
-      setFavoriteGenres((old) => old.filter((v) => v !== value));
-    } else {
-      const id = value as ProviderId;
-      setProviders((old) => (old.includes(id) ? old.filter((v) => v !== id) : [...old, id]));
-    }
+  const toggleProvider = (value: string) => {
+    const id = value as ProviderId;
+    setProviders((old) => (old.includes(id) ? old.filter((v) => v !== id) : [...old, id]));
+  };
+
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt (samma
+  // kontrakt som Gruppinställningar) — de här är bara "toggla medlemskap i
+  // respektive lista", ett per läge.
+  const toggleFavoriteGenreMembership = (g: string) =>
+    setFavoriteGenres((old) => (old.includes(g) ? old.filter((v) => v !== g) : [...old, g]));
+  const toggleDislikedGenreMembership = (g: string) =>
+    setDislikedGenres((old) => (old.includes(g) ? old.filter((v) => v !== g) : [...old, g]));
+  const toggleFavoriteKeywordIds = (ids: number[]) => {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   };
 
   return (
@@ -594,26 +608,21 @@ export default function ProfileClient({ initial }: Props) {
                   }}
                   onRemoveDislike={(g) => setDislikedGenres((old) => old.filter((x) => x !== g))}
                 />
-                <CompactGenrePicker
-                  label="Gillar"
-                  tone="like"
-                  selected={favoriteGenres}
-                  excluded={dislikedGenres}
-                  onChange={(next) => {
-                    setFavoriteGenres(next);
-                    setDislikedGenres((old) => old.filter((g) => !next.includes(g)));
-                  }}
-                />
-                <CompactGenrePicker
-                  label="Undviker"
-                  tone="dislike"
-                  selected={dislikedGenres}
-                  excluded={favoriteGenres}
-                  onChange={(next) => {
-                    setDislikedGenres(next);
-                    setFavoriteGenres((old) => old.filter((g) => !next.includes(g)));
-                  }}
-                />
+                <div>
+                  <label className="mb-2 block text-sm text-white/70">Genrer</label>
+                  <GenrePicker
+                    genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                    selectedGenreIds={favoriteGenres}
+                    onToggleGenre={toggleFavoriteGenreMembership}
+                    dislikedGenreIds={dislikedGenres}
+                    onToggleDislikedGenre={toggleDislikedGenreMembership}
+                    selectedKeywordIds={favoriteKeywordIds}
+                    onToggleKeywordIds={toggleFavoriteKeywordIds}
+                    wrap
+                    subLayout="card"
+                    emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -628,7 +637,7 @@ export default function ProfileClient({ initial }: Props) {
                   key={p.id}
                   label={p.label}
                   selected={providers.includes(p.id)}
-                  onClick={() => toggle("providers", p.id)}
+                  onClick={() => toggleProvider(p.id)}
                 />
               ))}
             </div>

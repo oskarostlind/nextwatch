@@ -320,6 +320,9 @@ export default function ProfileClient({ initial }: Props) {
   const [msg, setMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<"bas" | "smak" | "tjanster" | "installningar">("bas");
 
+  const [tasteSuggestBusy, setTasteSuggestBusy] = useState(false);
+  const [tasteSuggestMsg, setTasteSuggestMsg] = useState<string | null>(null);
+
   const TABS = [
     { id: "bas" as const, label: "Profil" },
     { id: "smak" as const, label: "Smak" },
@@ -466,6 +469,41 @@ export default function ProfileClient({ initial }: Props) {
     setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
   };
 
+  // Auto-fyll ("Fyll i från mina betyg"): hämtar genrer/sub-genrer härledda ur
+  // betygshistoriken och MERGAR in dem i nuvarande val — skriver aldrig över
+  // manuella val, och användaren spar (eller inte) som vanligt efteråt.
+  const applyTasteSuggestion = async () => {
+    setTasteSuggestBusy(true);
+    setTasteSuggestMsg(null);
+    try {
+      const res = await fetch("/api/profile/taste-suggestion", { cache: "no-store" });
+      const data = (await res.json()) as
+        | { ok: true; lowConfidence: boolean; genres: string[]; keywordIds: number[] }
+        | { ok: false; message?: string };
+      if (!res.ok || !data.ok) {
+        setTasteSuggestMsg((!data.ok && data.message) || "Kunde inte hämta förslag.");
+        return;
+      }
+      if (data.lowConfidence) {
+        setTasteSuggestMsg("Betygsätt fler titlar först så kan vi föreslå åt dig.");
+        return;
+      }
+      if (data.genres.length === 0 && data.keywordIds.length === 0) {
+        setTasteSuggestMsg("Hittade inget tydligt mönster i din historik än.");
+        return;
+      }
+      const suggestedGenres = data.genres;
+      setFavoriteGenres((old) => Array.from(new Set([...old, ...suggestedGenres])));
+      setDislikedGenres((old) => old.filter((g) => !suggestedGenres.includes(g)));
+      setFavoriteKeywordIds((old) => Array.from(new Set([...old, ...data.keywordIds])));
+      setTasteSuggestMsg("Förslag ifyllt nedan — justera vid behov och spara.");
+    } catch {
+      setTasteSuggestMsg("Nätverksfel.");
+    } finally {
+      setTasteSuggestBusy(false);
+    }
+  };
+
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
       <PageHeader eyebrow="Ditt konto" title="Profil" right={<LogoutButton />} />
@@ -609,7 +647,23 @@ export default function ProfileClient({ initial }: Props) {
                   onRemoveDislike={(g) => setDislikedGenres((old) => old.filter((x) => x !== g))}
                 />
                 <div>
-                  <label className="mb-2 block text-sm text-white/70">Genrer</label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm text-white/70">Genrer</label>
+                    <button
+                      type="button"
+                      onClick={applyTasteSuggestion}
+                      disabled={tasteSuggestBusy}
+                      className="shrink-0 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-200 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {tasteSuggestBusy ? "Analyserar…" : "Fyll i från mina betyg"}
+                    </button>
+                  </div>
+                  <p className="mb-2 text-[11px] text-white/40">
+                    Automatiskt baserat på din betygshistorik — du väljer alltid det sista ordet.
+                  </p>
+                  {tasteSuggestMsg && (
+                    <p className="mb-2 text-xs text-cyan-200/80">{tasteSuggestMsg}</p>
+                  )}
                   <GenrePicker
                     genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
                     selectedGenreIds={favoriteGenres}

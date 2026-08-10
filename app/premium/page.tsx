@@ -88,11 +88,44 @@ export default function PremiumPage() {
             >
               {restoring ? "Återställer…" : "Återställ tidigare köp"}
             </button>
-            <p className="text-center text-xs text-neutral-500">
-              Betalningen hanteras av App Store och kan avslutas i dina Apple-inställningar.
-            </p>
           </>
         )}
+
+        {/* App Store-riktlinje 3.1.2 kräver att själva appen — inte bara
+            App Store-beskrivningen — visar prenumerationens namn, längd och pris
+            samt nåbara länkar till användarvillkor (EULA) och integritetspolicy
+            vid köptillfället. */}
+        <div className="space-y-2 border-t border-white/10 pt-4 text-xs leading-relaxed text-neutral-500">
+          <p>
+            <span className="font-medium text-neutral-300">NextWatch Premium</span> — 19 kr per
+            månad. Prenumerationen förnyas automatiskt varje månad tills du säger upp den.
+          </p>
+          {onIos ? (
+            <p>
+              Betalningen dras från ditt Apple-konto när du bekräftar köpet. Förnyelsen sker
+              inom 24 timmar före periodens slut om du inte säger upp innan dess. Du hanterar
+              och avslutar prenumerationen i Inställningar på din enhet.
+            </p>
+          ) : (
+            <p>Betalningen hanteras av Stripe. Du kan avsluta prenumerationen när som helst.</p>
+          )}
+          <p className="flex flex-wrap gap-x-3 gap-y-1">
+            <a
+              href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 transition hover:text-neutral-300"
+            >
+              Användarvillkor (EULA)
+            </a>
+            <a href="/legal/terms" className="underline underline-offset-2 transition hover:text-neutral-300">
+              Våra villkor
+            </a>
+            <a href="/legal/privacy" className="underline underline-offset-2 transition hover:text-neutral-300">
+              Integritetspolicy
+            </a>
+          </p>
+        </div>
         {err && <Note tone="error">{err}</Note>}
       </Card>
     </div>

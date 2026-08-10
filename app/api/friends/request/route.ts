@@ -53,6 +53,22 @@ export async function POST(req: NextRequest) {
     });
     if (friendship) return json({ ok: true, requestId: "already_friends" });
 
+    // Blockering i någon riktning stoppar nya förfrågningar (App Store 1.2).
+    // Blockeringen lagras som en friend_requests-rad med status "blocked".
+    const blocked = await prisma.friendRequest.findFirst({
+      where: {
+        status: "blocked",
+        OR: [
+          { fromUserId: me, toUserId },
+          { fromUserId: toUserId, toUserId: me },
+        ],
+      },
+      select: { id: true },
+    });
+    if (blocked) {
+      return json({ ok: false, message: "Det går inte att skicka en förfrågan till den här användaren." }, { status: 403 });
+    }
+
     // Pending i någon riktning?
     const existing = await prisma.friendRequest.findFirst({
       where: {

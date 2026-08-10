@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus, Users, UserPlus, Check, ChevronRight, MessageCircle } from "lucide-react";
+import { Search, Plus, Users, UserPlus, Check, ChevronRight, MessageCircle, MoreHorizontal } from "lucide-react";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
@@ -48,6 +48,9 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const { friends, pendingIn, pendingOut } = social;
 
   const [searchQuery, setSearchQuery] = useState("");
+  // Vilken vän som har raden med Ta bort/Blockera utfälld.
+  const [manageId, setManageId] = useState<string | null>(null);
+  const [managing, setManaging] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchRow[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
@@ -134,6 +137,28 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const declineRequest = async (requestId: string) => {
     const res = await apiCall<{ ok: boolean }>("/api/friends/decline", { requestId });
     if (!("error" in res)) {
+      void refreshSocial();
+    }
+  };
+
+  // App Store-riktlinje 1.2: den som lagt till en vän — och därmed öppnat en
+  // filmchatt — måste kunna ta sig ur kontakten igen.
+  const removeFriend = async (userId: string) => {
+    setManaging(true);
+    const res = await apiCall<{ ok: boolean }>("/api/friends/remove", { userId });
+    setManaging(false);
+    if (!("error" in res)) {
+      setManageId(null);
+      void refreshSocial();
+    }
+  };
+
+  const blockFriend = async (userId: string) => {
+    setManaging(true);
+    const res = await apiCall<{ ok: boolean }>("/api/friends/block", { userId, block: true });
+    setManaging(false);
+    if (!("error" in res)) {
+      setManageId(null);
       void refreshSocial();
     }
   };
@@ -228,7 +253,8 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
             {visibleFriends.map((f) => {
               const unseen = unseenByFriend[f.id] ?? 0;
               return (
-                <li key={f.id} className="flex items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 transition hover:bg-white/10">
+                <li key={f.id} className="rounded-xl bg-white/5 transition hover:bg-white/10">
+                  <div className="flex items-center gap-2 px-2 py-1.5">
                   <button
                     type="button"
                     onClick={() => setOpenFriendId(f.id)}
@@ -254,6 +280,38 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                       </span>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    aria-label={`Hantera ${displayName(f)}`}
+                    onClick={() => setManageId(manageId === f.id ? null : f.id)}
+                    className="shrink-0 rounded-full p-2.5 text-white/40 transition hover:bg-white/10 hover:text-white/80"
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </button>
+                  </div>
+                  {manageId === f.id && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-3 py-2">
+                      <button
+                        type="button"
+                        disabled={managing}
+                        onClick={() => removeFriend(f.id)}
+                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/20 disabled:opacity-50"
+                      >
+                        Ta bort vän
+                      </button>
+                      <button
+                        type="button"
+                        disabled={managing}
+                        onClick={() => blockFriend(f.id)}
+                        className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                      >
+                        Blockera
+                      </button>
+                      <span className="text-[11px] text-white/40">
+                        Blockering tar bort vänskapen och stoppar nya förfrågningar.
+                      </span>
+                    </div>
+                  )}
                 </li>
               );
             })}

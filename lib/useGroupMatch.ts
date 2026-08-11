@@ -118,7 +118,9 @@ export function useGroupMatchPolling() {
     if (timerRef.current !== null) return;
     // gör en första koll direkt
     void fetchOnce();
-    timerRef.current = window.setInterval(fetchOnce, 8_000);
+    // 12 s räcker: röstarens egen klient kollar /api/group/match direkt efter
+    // varje röst, så intervallet behöver bara fånga ANDRA medlemmars röster.
+    timerRef.current = window.setInterval(fetchOnce, 12_000);
   }, [fetchOnce]);
 
   // Starta/stoppa polling beroende på om vi har gruppkod

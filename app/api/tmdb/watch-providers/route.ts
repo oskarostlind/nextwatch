@@ -73,7 +73,13 @@ export async function GET(req: Request) {
         region,
         providers: result ?? null,
       },
-      { status: 200 }
+      {
+        status: 200,
+        // force-dynamic gör att Next annars skickar no-store och slår ut
+        // WKWebView:s HTTP-cache. Providers per titel ändras sällan (se
+        // kommentaren i tmdbGet) — låt klienten cacha privat i en timme.
+        headers: { "Cache-Control": "private, max-age=3600" },
+      }
     );
   } catch (e) {
     console.error('[providers GET] ', e);

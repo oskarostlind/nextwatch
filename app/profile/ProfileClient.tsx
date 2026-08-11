@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import nextDynamic from "next/dynamic";
 import Image from "next/image";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
@@ -9,19 +10,22 @@ import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } f
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 import { AVATARS } from "@/lib/avatars";
 import Avatar from "@/app/components/ui/Avatar";
-import Modal from "@/app/components/ui/Modal";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { getBillingStatus } from "@/lib/billingStore";
-import { clearClientCache } from "@/lib/clientCache";
+import { clearClientCache, getCached, setCached } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import { retrySoloDeck } from "@/lib/swipeDeckStore";
-import GenreSuggestions from "./GenreSuggestions";
-import TasteProfilePanel from "./TasteProfilePanel";
 import { toSvGenres } from "./profileGenres";
-import GenrePicker from "@/app/components/discover/GenrePicker";
 import { GROUP_GENRES } from "@/lib/groupSettings";
 import { toggleKeywordGroup } from "@/lib/subgenres";
+
+// Kod-splittade paneler/modaler — laddas först när panelen/modalen öppnas
+// (de renderas bakom flik-/modal-state), så förstamålningen slipper deras JS.
+const Modal = nextDynamic(() => import("@/app/components/ui/Modal"), { ssr: false });
+const GenreSuggestions = nextDynamic(() => import("./GenreSuggestions"), { ssr: false });
+const TasteProfilePanel = nextDynamic(() => import("./TasteProfilePanel"), { ssr: false });
+const GenrePicker = nextDynamic(() => import("@/app/components/discover/GenrePicker"), { ssr: false });
 
 export type FavoriteItem = {
   id: number;
@@ -50,6 +54,11 @@ export type ProfileDTO = {
 };
 
 const FIELD_CLASS = fieldClass;
+
+// Klientcache för /api/profile-svaret — återbesök målar direkt ur cachen
+// medan hämtningen revaliderar i bakgrunden (samma mönster som WL_CACHE_KEY).
+const PROFILE_CACHE_KEY = "profile_v1";
+const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 type Props = { initial: ProfileDTO | null };
 type Fav = FavoriteItem | null;
@@ -330,9 +339,54 @@ export default function ProfileClient({ initial }: Props) {
     { id: "installningar" as const, label: "Inställningar" },
   ];
 
-  // Bakåtkompatibel hydrering om initial saknar fält
+  // Bakåtkompatibel hydrering om initial saknar fält.
+  // Klientcache (samma mönster som WatchlistClient): senaste /api/profile-svaret
+  // ligger i localStorage så att återbesök målar direkt ur cachen medan
+  // nätverkshämtningen revaliderar i bakgrunden.
   useEffect(() => {
     let ignore = false;
+
+    const applyProfile = (p: Record<string, unknown>) => {
+      if (Array.isArray(p.favoriteGenres)) setFavoriteGenres(toSvGenres(p.favoriteGenres));
+      if (Array.isArray(p.dislikedGenres)) setDislikedGenres(toSvGenres(p.dislikedGenres));
+      if (Array.isArray(p.favoriteKeywordIds)) {
+        setFavoriteKeywordIds(p.favoriteKeywordIds.filter((id): id is number => typeof id === "number"));
+      }
+      if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
+      if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
+      if (typeof p.displayName === "string") setDisplayName(p.displayName);
+      if (typeof p.avatarId === "string") setAvatarId(p.avatarId);
+      else if (p.avatarId === null) setAvatarId(null);
+      if (typeof p.username === "string") setUsername(p.username);
+      else if (p.username === null) setUsername("");
+      if (typeof p.dob === "string") setDob(toInputDate(p.dob));
+      if (p.favoriteMovie && typeof p.favoriteMovie === "object") {
+        const o = p.favoriteMovie as Record<string, unknown>;
+        const id = typeof o.id === "number" ? o.id : null;
+        const title = typeof o.title === "string" ? o.title : null;
+        if (id && title) setFavoriteMovie({
+          id, title,
+          year: typeof o.year === "string" ? o.year : null,
+          poster: typeof o.poster === "string" ? o.poster : null
+        });
+      }
+      if (p.favoriteShow && typeof p.favoriteShow === "object") {
+        const o = p.favoriteShow as Record<string, unknown>;
+        const id = typeof o.id === "number" ? o.id : null;
+        const title = typeof o.title === "string" ? o.title : null;
+        if (id && title) setFavoriteShow({
+          id, title,
+          year: typeof o.year === "string" ? o.year : null,
+          poster: typeof o.poster === "string" ? o.poster : null
+        });
+      }
+    };
+
+    // 1) Måla direkt ur cachen om den finns (stale-while-revalidate).
+    const cached = getCached<Record<string, unknown>>(PROFILE_CACHE_KEY);
+    if (cached) applyProfile(cached);
+
+    // 2) Hämta färskt och revalidera i bakgrunden.
     (async () => {
       try {
         const res = await fetch("/api/profile", { cache: "no-store" });
@@ -340,39 +394,8 @@ export default function ProfileClient({ initial }: Props) {
         const data = (await res.json()) as { ok: boolean; profile?: Record<string, unknown> | null };
         if (!data.ok || !data.profile || ignore) return;
         const p = data.profile as Record<string, unknown>;
-        if (Array.isArray(p.favoriteGenres)) setFavoriteGenres(toSvGenres(p.favoriteGenres));
-        if (Array.isArray(p.dislikedGenres)) setDislikedGenres(toSvGenres(p.dislikedGenres));
-        if (Array.isArray(p.favoriteKeywordIds)) {
-          setFavoriteKeywordIds(p.favoriteKeywordIds.filter((id): id is number => typeof id === "number"));
-        }
-        if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
-        if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
-        if (typeof p.displayName === "string") setDisplayName(p.displayName);
-        if (typeof p.avatarId === "string") setAvatarId(p.avatarId);
-        else if (p.avatarId === null) setAvatarId(null);
-        if (typeof p.username === "string") setUsername(p.username);
-        else if (p.username === null) setUsername("");
-        if (typeof p.dob === "string") setDob(toInputDate(p.dob));
-        if (p.favoriteMovie && typeof p.favoriteMovie === "object") {
-          const o = p.favoriteMovie as Record<string, unknown>;
-          const id = typeof o.id === "number" ? o.id : null;
-          const title = typeof o.title === "string" ? o.title : null;
-          if (id && title) setFavoriteMovie({
-            id, title,
-            year: typeof o.year === "string" ? o.year : null,
-            poster: typeof o.poster === "string" ? o.poster : null
-          });
-        }
-        if (p.favoriteShow && typeof p.favoriteShow === "object") {
-          const o = p.favoriteShow as Record<string, unknown>;
-          const id = typeof o.id === "number" ? o.id : null;
-          const title = typeof o.title === "string" ? o.title : null;
-          if (id && title) setFavoriteShow({
-            id, title,
-            year: typeof o.year === "string" ? o.year : null,
-            poster: typeof o.poster === "string" ? o.poster : null
-          });
-        }
+        applyProfile(p);
+        setCached(PROFILE_CACHE_KEY, p, PROFILE_CACHE_TTL_MS);
       } catch { /* noop */ }
     })();
     return () => { ignore = true; };
@@ -530,35 +553,39 @@ export default function ProfileClient({ initial }: Props) {
               </div>
             </div>
 
-            <Modal open={avatarModalOpen} onClose={() => setAvatarModalOpen(false)} labelledBy="avatar-picker-heading">
-              <h3 id="avatar-picker-heading" className="mb-3 text-lg font-bold text-white">
-                Välj profilbild
-              </h3>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                {AVATARS.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    title={a.label}
-                    aria-label={a.label}
-                    aria-pressed={avatarId === a.id}
-                    onClick={() => {
-                      // Klick på redan vald avmarkerar (null rensar valet vid spara).
-                      setAvatarId((cur) => (cur === a.id ? null : a.id));
-                      setAvatarModalOpen(false);
-                    }}
-                    className={`relative overflow-hidden rounded-xl border transition ${
-                      avatarId === a.id
-                        ? "border-cyan-400 ring-2 ring-cyan-400/60"
-                        : "border-white/10 opacity-80 hover:border-white/30 hover:opacity-100"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/avatars/${a.id}.svg`} alt={a.label} className="h-auto w-full" draggable={false} />
-                  </button>
-                ))}
-              </div>
-            </Modal>
+            {/* Monteras först när den öppnas — Modal renderar ändå null när open=false,
+                så beteendet är identiskt men den lat-laddade chunken hämtas inte i onödan. */}
+            {avatarModalOpen && (
+              <Modal open onClose={() => setAvatarModalOpen(false)} labelledBy="avatar-picker-heading">
+                <h3 id="avatar-picker-heading" className="mb-3 text-lg font-bold text-white">
+                  Välj profilbild
+                </h3>
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                  {AVATARS.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      title={a.label}
+                      aria-label={a.label}
+                      aria-pressed={avatarId === a.id}
+                      onClick={() => {
+                        // Klick på redan vald avmarkerar (null rensar valet vid spara).
+                        setAvatarId((cur) => (cur === a.id ? null : a.id));
+                        setAvatarModalOpen(false);
+                      }}
+                      className={`relative overflow-hidden rounded-xl border transition ${
+                        avatarId === a.id
+                          ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                          : "border-white/10 opacity-80 hover:border-white/30 hover:opacity-100"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/avatars/${a.id}.svg`} alt={a.label} className="h-auto w-full" draggable={false} />
+                    </button>
+                  ))}
+                </div>
+              </Modal>
+            )}
 
             <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">

@@ -66,6 +66,65 @@ function clearPersistedSoloDeck() {
 }
 
 /**
+ * Gruppleken persistas per grupp — samma motivering som solo_deck_v2 ovan
+ * (kall ombyggnad mätt till ~4 s, och varje iOS-start är en kallstart), men
+ * med KORT TTL: gruppsammansättningen ändrar leken, så 45 min räcker.
+ * Kandidaterna är rekommendationer, inte behörighetsstate — ett inaktuellt
+ * kort rättas server-side vid rösttillfället. Se lib/clientCache.ts.
+ */
+const GROUP_DECK_CACHE_PREFIX = "group_deck_v1:";
+const GROUP_DECK_TTL_MS = 45 * 60 * 1000;
+
+const groupDeckWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function groupDeckCacheKey(key: string): string {
+  return `${GROUP_DECK_CACHE_PREFIX}${key}`;
+}
+
+/** Debouncad skrivning per grupp — samma skäl som persistSoloDeckSoon. */
+function persistGroupDeckSoon(key: string) {
+  if (typeof window === "undefined") return;
+  const timer = groupDeckWriteTimers.get(key);
+  if (timer) clearTimeout(timer);
+  groupDeckWriteTimers.set(
+    key,
+    setTimeout(() => {
+      groupDeckWriteTimers.delete(key);
+      const s = groupDecks[key];
+      if (!s) return;
+      // Annonskort hör till en session och ska inte återuppstå ur cachen.
+      const cards = s.cards.filter((c) => c.kind !== "ad");
+      if (cards.length === 0) {
+        removeCached(groupDeckCacheKey(key));
+        return;
+      }
+      const payload: PersistedDeck = {
+        cards,
+        nextTmdbPage: s.nextTmdbPage,
+        mediaFilter: s.mediaFilter,
+      };
+      setCached(groupDeckCacheKey(key), payload, GROUP_DECK_TTL_MS);
+    }, DECK_WRITE_DEBOUNCE_MS),
+  );
+}
+
+/**
+ * Slänger den sparade gruppleken. Anropas vid tvingad omhämtning (ändrade
+ * gruppinställningar), och från lib/socialStore.ts när /api/group/members
+ * svarar 404 (gruppen borta/utsparkad) — leken byggdes på en grupp som inte
+ * längre gäller.
+ */
+export function clearPersistedGroupDeck(code: string) {
+  const key = code.toUpperCase();
+  const timer = groupDeckWriteTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    groupDeckWriteTimers.delete(key);
+  }
+  removeCached(groupDeckCacheKey(key));
+}
+
+/**
  * Läser sparad lek vid modulinit — inte i en effekt. En effekt hade gett en
  * bildruta skelett innan korten dök upp, vilket är precis den blinkning det
  * här ska ta bort.
@@ -509,6 +568,7 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
       ready: true,
       broadened: data.broadened ?? { keywords: false, genres: false },
     });
+    persistGroupDeckSoon(key);
   } catch {
     if (replace) setGroupDeck(key, { loading: false, error: "Nätverksfel.", ready: true });
   } finally {
@@ -516,11 +576,53 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
   }
 }
 
+/** Grupplekar som hydrerats ur cachen och ännu inte fyllts på i bakgrunden. */
+const groupHydratedNeedsRevalidate = new Set<string>();
+
+/**
+ * Läser sparad grupplek in i store:n — samma mönster som hydrateSoloDeck, men
+ * lazy per grupp (vi vet inte gruppkoden vid modulinit). Swipat sedan leken
+ * sparades filtreras bort via seen-listan, precis som för solo.
+ */
+function hydrateGroupDeck(key: string): void {
+  if (typeof window === "undefined") return;
+  const saved = getCached<PersistedDeck>(groupDeckCacheKey(key));
+  if (!saved || !Array.isArray(saved.cards) || saved.cards.length === 0) return;
+  const cards = filterSwipeCards(saved.cards);
+  if (cards.length === 0) return;
+  setGroupDeck(key, {
+    cards,
+    page: 1,
+    nextTmdbPage: saved.nextTmdbPage > 0 ? saved.nextTmdbPage : 1,
+    mediaFilter: saved.mediaFilter ?? "both",
+    ready: true,
+  });
+  groupHydratedNeedsRevalidate.add(key);
+}
+
 export async function ensureGroupDeck(code: string, opts?: { force?: boolean }) {
   const key = code.toUpperCase();
   if (!key) return;
+  if (opts?.force) {
+    // Tvingad omhämtning (t.ex. ändrade gruppinställningar): den sparade leken
+    // byggdes på gamla premisser — släng den innan den färska hämtas.
+    clearPersistedGroupDeck(key);
+    groupHydratedNeedsRevalidate.delete(key);
+    await loadGroupPage(key, 1, true);
+    return;
+  }
+  if (!groupDecks[key]) hydrateGroupDeck(key);
   const existing = groupDecks[key];
-  if (!opts?.force && existing?.ready && existing.cards.length > 0) return;
+  if (existing?.ready && existing.cards.length > 0) {
+    // Leken kom ur cachen: visa den direkt och fyll på i bakgrunden (samma
+    // mönster som hydratedNeedsRevalidate för solo). replace=false lägger
+    // påfyllningen underifrån — toppkortet byts aldrig under fingret.
+    if (groupHydratedNeedsRevalidate.has(key)) {
+      groupHydratedNeedsRevalidate.delete(key);
+      void loadGroupPage(key, existing.page + 1, false);
+    }
+    return;
+  }
   await loadGroupPage(key, 1, true);
 }
 
@@ -537,6 +639,7 @@ export function popGroupCard(code: string) {
   const key = code.toUpperCase();
   const cur = groupDecks[key] ?? emptyGroup();
   setGroupDeck(key, { cards: cur.cards.slice(1) });
+  persistGroupDeckSoon(key);
   // Toppkortet lämnade — fyll på i bakgrunden så leken inte tar slut mitt i.
   maybePrefetchGroupPages(key);
 }
@@ -545,12 +648,14 @@ export function unshiftGroupCard(code: string, card: SwipeCard) {
   const key = code.toUpperCase();
   const cur = groupDecks[key] ?? emptyGroup();
   setGroupDeck(key, { cards: [card, ...cur.cards] });
+  persistGroupDeckSoon(key);
 }
 
 export function updateGroupCards(code: string, fn: (cards: SwipeCard[]) => SwipeCard[]) {
   const key = code.toUpperCase();
   const cur = groupDecks[key] ?? emptyGroup();
   setGroupDeck(key, { cards: fn(cur.cards) });
+  persistGroupDeckSoon(key);
 }
 
 /** Förladda första sidan när appen startar — körs in idle time, inte på kritisk väg. */

@@ -86,5 +86,14 @@ export async function GET() {
     if (unique.size >= 24) break; // färre initialt → snabbare första render
   }
 
-  return NextResponse.json({ ok: true, posters: Array.from(unique.values()) });
+  // `private` med flit, INTE `public, s-maxage`: resolveRegionLocale() läser
+  // nw_region/nw_locale (och accept-language) medan URL:en alltid är densamma,
+  // så ett delat CDN-svar hade serverat den första besökarens region/språk till
+  // alla i 15 minuter. TMDB-anropen är redan datacachade server-side
+  // (revalidate 15 min); private ger klientens egen HTTP-cache utan att blanda
+  // ihop besökare.
+  return NextResponse.json(
+    { ok: true, posters: Array.from(unique.values()) },
+    { headers: { "Cache-Control": "private, max-age=900" } },
+  );
 }

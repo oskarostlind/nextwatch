@@ -7,6 +7,7 @@ import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
 import Avatar from "@/app/components/ui/Avatar";
+import { fieldClass } from "@/app/components/ui/kit";
 import { refreshThreads, useShareThreads } from "@/lib/threadsStore";
 import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
 import { FRIENDS_TOUR_STEPS } from "@/lib/tours/coachSteps";
@@ -171,13 +172,13 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
           <input
-            className="w-full rounded-xl border border-white/10 bg-black/30 py-3 pl-10 pr-10 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-white/25 focus:ring-2 focus:ring-white/10"
+            className={`${fieldClass} pl-10 pr-10 text-sm`}
             placeholder="Sök användarnamn för att lägga till vän"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {isSearching && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/40">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
               Söker…
             </span>
           )}
@@ -246,7 +247,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                 value={friendFilter}
                 onChange={(e) => setFriendFilter(e.target.value)}
                 placeholder="Filtrera dina vänner…"
-                className="mb-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+                className={`${fieldClass} mb-2 text-sm`}
               />
             )}
           <ul className="flex flex-col gap-2">
@@ -275,7 +276,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   >
                     <MessageCircle className="h-5 w-5" />
                     {unseen > 0 && (
-                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold text-black">
+                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold tabular-nums text-black">
                         {unseen}
                       </span>
                     )}
@@ -303,11 +304,11 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                         type="button"
                         disabled={managing}
                         onClick={() => blockFriend(f.id)}
-                        className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/25 disabled:opacity-50"
+                        className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
                       >
                         Blockera
                       </button>
-                      <span className="text-[11px] text-white/40">
+                      <span className="text-[11px] text-white/60">
                         Blockering tar bort vänskapen och stoppar nya förfrågningar.
                       </span>
                     </div>
@@ -356,14 +357,14 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   <button
                     type="button"
                     onClick={() => void declineRequest(r.requestId)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5"
+                    className="rounded-xl border border-white/15 px-3 py-2 text-xs text-white/70 hover:bg-white/5"
                   >
                     Avvisa
                   </button>
                   <button
                     type="button"
                     onClick={() => void acceptRequest(r.requestId)}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white"
+                    className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-medium text-white"
                   >
                     Acceptera
                   </button>
@@ -379,7 +380,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   <Avatar avatarId={r.to.avatarId} name={displayName(r.to)} size={30} />
                   <span className="truncate text-sm font-medium text-white/90">{displayName(r.to)}</span>
                 </span>
-                <span className="text-xs text-white/40">Väntar…</span>
+                <span className="text-xs text-white/60">Väntar…</span>
               </li>
             ))}
           </ul>

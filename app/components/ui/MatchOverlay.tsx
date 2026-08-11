@@ -12,7 +12,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Info, Play, Undo2 } from "lucide-react";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { Trailer } from "@/lib/tmdbVideos";
@@ -127,6 +127,8 @@ export default function MatchOverlay({
   savedBy,
 }: Props) {
   const [flipped, setFlipped] = useState(false);
+  // Konfettin är ren vestibulär dekor — hoppa över den vid "Minska rörelse".
+  const reduce = useReducedMotion();
 
   const posterSrc = useMemo(() => normalizePoster(item?.poster), [item?.poster]);
   const titleLine = useMemo(() => {
@@ -143,21 +145,19 @@ export default function MatchOverlay({
 
   const onFlip = useCallback(() => setFlipped((f) => !f), []);
 
-  const close = useCallback(async () => {
-    try {
-      // Bara gruppmatchen har något att kvittera.
-      if (variant === "group" && item) {
-        await fetch("/api/group/match/ack", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code, tmdbId: item.tmdbId, tmdbType: item.tmdbType }),
-        });
-      }
-    } catch {
-      // tyst
-    } finally {
-      setFlipped(false);
-      onClose();
+  const close = useCallback(() => {
+    // Stäng först: "Fortsätt swipa" ska aldrig vänta på nätverket. Ack:en är
+    // best-effort ändå — värsta fall visas matchen en gång till.
+    setFlipped(false);
+    onClose();
+
+    // Bara gruppmatchen har något att kvittera.
+    if (variant === "group" && item) {
+      void fetch("/api/group/match/ack", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, tmdbId: item.tmdbId, tmdbType: item.tmdbType }),
+      }).catch(() => {});
     }
   }, [code, item, onClose, variant]);
 
@@ -205,7 +205,7 @@ export default function MatchOverlay({
             transition={{ type: "spring", stiffness: 260, damping: 22, mass: 0.9 }}
           >
             <div className="relative">
-              <Confetti />
+              {!reduce ? <Confetti /> : null}
               <motion.div
                 className="mb-2 text-center text-base font-bold tracking-tight text-white"
                 initial={{ y: -10, opacity: 0 }}
@@ -244,7 +244,7 @@ export default function MatchOverlay({
             >
               {/* Front (bild) */}
               <div
-                className={`absolute inset-0 rounded-2xl bg-neutral-900 shadow-xl transition-transform duration-500 [backface-visibility:hidden] ${
+                className={`absolute inset-0 rounded-2xl bg-neutral-900 shadow-xl transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] [backface-visibility:hidden] ${
                   flipped ? "rotate-y-180" : "rotate-y-0"
                 }`}
                 style={{ transformStyle: "preserve-3d" as const }}
@@ -273,14 +273,14 @@ export default function MatchOverlay({
 
               {/* Back (beskrivning + providers) */}
               <div
-                className={`absolute inset-0 rounded-2xl bg-neutral-900 p-4 text-neutral-100 shadow-xl transition-transform duration-500 [backface-visibility:hidden] ${
+                className={`absolute inset-0 rounded-2xl bg-neutral-900 p-4 text-neutral-100 shadow-xl transition-transform duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] [backface-visibility:hidden] ${
                   flipped ? "rotate-y-0" : "rotate-y-180"
                 }`}
                 style={{ transformStyle: "preserve-3d" as const }}
               >
                 <div className="flex h-full flex-col">
                   <div className="mb-2 text-sm font-semibold">{titleLine}</div>
-                  <div className="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral-700 grow overflow-auto text-sm leading-5">
+                  <div className="scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral-700 grow overflow-auto overscroll-contain text-sm leading-5">
                     {item.overview ? (
                       <p className="whitespace-pre-line">{item.overview}</p>
                     ) : (

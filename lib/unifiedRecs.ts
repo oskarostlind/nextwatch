@@ -5,7 +5,7 @@
 // dagliga rekommendations-jobbet (app/api/cron/daily-recs) kan återanvända
 // exakt samma scoring/MMR-pipeline utan att duplicera logik.
 
-import { prisma } from "@/lib/prisma";
+import { prisma, withDbRetry } from "@/lib/prisma";
 import { parseProvidersJson } from "@/lib/groupSettings";
 import {
   SWIPE_REASONS_SHOW_RATE,
@@ -347,8 +347,21 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
   const { uid, region, locale, groupCode, page = 1, fromTmdbPage, forceAllMedia = false } = params;
 
   try {
-    // 1. Hämta data från databasen direkt via Prisma
-    const [profile, ratings, watchlist, groupMembers, groupRow] = await Promise.all([
+    // Genre-listorna beror bara på locale — starta dem redan här, parallellt
+    // med DB-läsningen, i stället för efter discover-skanningen. .catch-vakten
+    // hindrar en obehandlad rejection om något tidigare steg kastar innan
+    // promisen inväntas; felet kastas ändå vid await längre ner.
+    const genreListsPromise = Promise.all([
+      tmdbGet<TMDBGenreList>("/genre/movie/list", { language: locale }, "force-cache"),
+      tmdbGet<TMDBGenreList>("/genre/tv/list", { language: locale }, "force-cache"),
+    ]);
+    genreListsPromise.catch(() => {});
+
+    // 1. Hämta data från databasen direkt via Prisma.
+    // withDbRetry: Neon skalar till noll — utan retry blir en kallstart (P1001)
+    // "Internt fel vid rekommendation." i stället för en sekunds extra väntan.
+    const [profile, ratings, watchlist, groupMembers, groupRow] = await withDbRetry(() =>
+      Promise.all([
       prisma.profile.findUnique({ where: { userId: uid } }),
       prisma.rating.findMany({
         where: { userId: uid },
@@ -374,7 +387,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
             },
           })
         : Promise.resolve(null),
-    ]);
+      ]),
+    );
 
     if (!profile) return fail("Ingen profil hittades.");
 
@@ -436,6 +450,17 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       groupRatings,
       groupWatchlist,
     };
+
+    // Seeds behöver bara DB-datan ovan — bygg dem direkt och starta
+    // smakmodellens TMDB-uppslag NU, så de löper parallellt med
+    // discover-skanningen nedan i stället för att lägga sig ovanpå den
+    // (samma mönster som watchlistCandidatesPromise). Sparar ungefär en hel
+    // TMDB-våg (~0,5–1,5 s kallt) per lek-hämtning.
+    const seeds = buildSeeds(tasteInput).filter(
+      (s) => effectiveFilter === "both" || s.type === effectiveFilter,
+    );
+    const tastePromise = buildTasteMaps(seeds, locale);
+    tastePromise.catch(() => {}); // vakt mot obehandlad rejection före await
 
     const providerStringList = resolveProviderStrings(tasteInput);
     const usedProviderIds = getProviderIds(providerStringList);
@@ -539,11 +564,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // Nyast sparat först — färskast avsikt, och taket nedan ska träffa rätt.
     soloSaved.sort((a, b) => b.addedAt.getTime() - a.addedAt.getTime());
 
-    // Genres
-    const [movieGenres, tvGenres] = await Promise.all([
-      tmdbGet<TMDBGenreList>("/genre/movie/list", { language: locale }, "force-cache"),
-      tmdbGet<TMDBGenreList>("/genre/tv/list", { language: locale }, "force-cache"),
-    ]);
+    // Genres — startade parallellt med DB-läsningen ovan.
+    const [movieGenres, tvGenres] = await genreListsPromise;
     const movieIdToName = new Map(movieGenres.genres.map((g) => [g.id, g.name] as const));
     const tvIdToName = new Map(tvGenres.genres.map((g) => [g.id, g.name] as const));
     const { liked: likedGenres, disliked: dislikedGenres } = resolveGenreSets(tasteInput);
@@ -818,10 +840,6 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       injected += 1;
     }
 
-    const seeds = buildSeeds(tasteInput).filter(
-      (s) => effectiveFilter === "both" || s.type === effectiveFilter,
-    );
-
     // Dedupe + index
     const uniq = dedupe(baseRaw);
 
@@ -842,8 +860,9 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     }
     scoredV1.sort((a, b) => b.scoreV1 - a.scoreV1);
 
-    // V2 taste
-    const taste = await buildTasteMaps(seeds, locale);
+    // V2 taste — uppslagen startades direkt efter DB-läsningen (tastePromise)
+    // och har fått löpa parallellt med discover-skanningen ovan.
+    const taste = await tastePromise;
     const N = Math.min(50, scoredV1.length);
     const topItems = scoredV1.slice(0, N);
 

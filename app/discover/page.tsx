@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Send, Star } from "lucide-react";
-import { PageHeader, Button, Note } from "../components/ui/kit";
+import dynamic from "next/dynamic";
+import { Search, Send, Star } from "lucide-react";
+import { PageHeader, Button, Note, fieldClass } from "../components/ui/kit";
 import MediaFilters, { type MediaTypeFilter } from "../components/discover/MediaFilters";
-import RatingModal from "../components/client/RatingModal";
-import ShareTitleModal, { type ShareItem } from "../components/client/ShareTitleModal";
-import Modal from "../components/ui/Modal";
+import type { ShareItem } from "../components/client/ShareTitleModal";
+import PosterImage from "../components/ui/PosterImage";
+import { PosterGridSkeleton } from "../components/ui/Skeletons";
 import WatchNowButton from "../components/watch/WatchNowButton";
 import {
   bestWatchUrl,
@@ -20,6 +21,12 @@ import {
 import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
 import { markTitleRated } from "@/lib/swipeDeckStore";
 import { toggleKeywordGroup } from "@/lib/subgenres";
+
+// Modalerna renderas bara bakom booleskt state — håll dem utanför
+// förstaladdningens bundle. ssr:false: rena klientkomponenter.
+const RatingModal = dynamic(() => import("../components/client/RatingModal"), { ssr: false });
+const ShareTitleModal = dynamic(() => import("../components/client/ShareTitleModal"), { ssr: false });
+const Modal = dynamic(() => import("../components/ui/Modal"), { ssr: false });
 
 type Item = {
   id: number;
@@ -268,12 +275,12 @@ export default function DiscoverPage() {
       >
         <button type="button" onClick={() => openItem(it)} className="relative block w-full text-left" title={it.title}>
           {src ? (
-            <Image
+            <PosterImage
               src={src}
               alt={it.title}
               width={342}
               height={513}
-              className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+              className="aspect-[2/3] w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
             />
           ) : (
             <div className="flex aspect-[2/3] w-full items-center justify-center bg-white/5 p-2 text-center text-xs text-neutral-400">
@@ -301,7 +308,7 @@ export default function DiscoverPage() {
             e.stopPropagation();
             setRateTarget(it);
           }}
-          className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-amber-300 backdrop-blur transition hover:bg-amber-500/30 hover:text-amber-200"
+          className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2.5 text-amber-300 backdrop-blur transition after:absolute after:-inset-1 hover:bg-amber-500/30 hover:text-amber-200"
         >
           <Star className="h-4 w-4" />
         </button>
@@ -313,7 +320,7 @@ export default function DiscoverPage() {
             e.stopPropagation();
             setShareItem(itemToShareItem(it));
           }}
-          className="absolute right-1.5 top-11 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-cyan-500 hover:text-black"
+          className="absolute right-1.5 top-12 z-10 rounded-full bg-black/60 p-2.5 text-neutral-300 backdrop-blur transition after:absolute after:-inset-1 hover:bg-cyan-500 hover:text-black"
         >
           <Send className="h-4 w-4" />
         </button>
@@ -352,7 +359,7 @@ export default function DiscoverPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Sök titel…"
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+          className={`${fieldClass} text-sm`}
         />
       </div>
 
@@ -361,10 +368,18 @@ export default function DiscoverPage() {
           <Note tone="error">{err}</Note>
         </div>
       )}
-      {(busy || searchBusy) && <div className="mb-3 text-sm text-neutral-400">Laddar…</div>}
+      {(busy || searchBusy) && displayItems.length > 0 && (
+        <div className="mb-3 text-sm text-neutral-400">Laddar…</div>
+      )}
 
-      {isSearching && !searchBusy && displayItems.length === 0 ? (
-        <p className="text-neutral-400">Inga träffar för &quot;{debouncedQ.trim()}&quot;.</p>
+      {/* Förstaladdning (och tom sökning) får skelett i stället för naken text. */}
+      {(busy || searchBusy) && displayItems.length === 0 ? (
+        <PosterGridSkeleton />
+      ) : isSearching && !searchBusy && displayItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
+          <Search className="mx-auto mb-2 h-10 w-10 text-white/20" />
+          <p className="text-neutral-400">Inga träffar för &quot;{debouncedQ.trim()}&quot;.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {displayItems.map((it) => renderCard(it))}

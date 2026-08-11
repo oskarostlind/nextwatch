@@ -1,16 +1,15 @@
 'use client';
 
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Star } from 'lucide-react';
+import { Film, Search, Send, Star } from 'lucide-react';
 import Modal from '@/app/components/ui/Modal';
+import PosterImage from '@/app/components/ui/PosterImage';
 import WatchNowButton from '@/app/components/watch/WatchNowButton';
-import RatingModal from '@/app/components/client/RatingModal';
-import ImdbImportModal from '@/app/components/client/ImdbImportModal';
-import ShareTitleModal, { type ShareItem } from '@/app/components/client/ShareTitleModal';
-import SharedTipsInbox from '@/app/components/client/SharedTipsInbox';
+import type { ShareItem } from '@/app/components/client/ShareTitleModal';
 import MediaFilters, { type MediaTypeFilter } from '@/app/components/discover/MediaFilters';
-import { Button } from '@/app/components/ui/kit';
+import { Button, fieldClass } from '@/app/components/ui/kit';
 import {
   bestWatchUrl,
   isPaidOnly,
@@ -24,9 +23,17 @@ import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
 import { getCached, setCached } from '@/lib/clientCache';
 import { markTitleRated } from '@/lib/swipeDeckStore';
 import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
-import CoachMarkTour from '@/app/components/client/tours/CoachMarkTour';
 import { WATCHLIST_TOUR_STEPS } from '@/lib/tours/coachSteps';
 import { toggleKeywordGroup } from '@/lib/subgenres';
+
+// Allt nedan renderas bakom ett booleskt state (eller bara när det finns data),
+// så det behöver inte ligga i förstaladdningens bundle. ssr:false — de är
+// klientkomponenter utan serveryta.
+const RatingModal = dynamic(() => import('@/app/components/client/RatingModal'), { ssr: false });
+const ImdbImportModal = dynamic(() => import('@/app/components/client/ImdbImportModal'), { ssr: false });
+const ShareTitleModal = dynamic(() => import('@/app/components/client/ShareTitleModal'), { ssr: false });
+const SharedTipsInbox = dynamic(() => import('@/app/components/client/SharedTipsInbox'), { ssr: false });
+const CoachMarkTour = dynamic(() => import('@/app/components/client/tours/CoachMarkTour'), { ssr: false });
 
 type WatchItem = {
   id: number;
@@ -669,7 +676,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Sök titel…"
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
+          className={`${fieldClass} text-sm`}
         />
       </div>
 
@@ -677,9 +684,16 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         ratedLoading ? (
           <p className="text-neutral-400">Laddar dina betyg…</p>
         ) : filteredRated.length === 0 ? (
-          <p className="text-neutral-400">
-            {rated && rated.length > 0 ? 'Inga träffar.' : 'Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.'}
-          </p>
+          <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
+            {rated && rated.length > 0 ? (
+              <Search className="mx-auto mb-2 h-10 w-10 text-white/20" />
+            ) : (
+              <Star className="mx-auto mb-2 h-10 w-10 text-white/20" />
+            )}
+            <p className="text-neutral-400">
+              {rated && rated.length > 0 ? 'Inga träffar.' : 'Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.'}
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {filteredRated.map((it) => (
@@ -690,19 +704,19 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                 className="group relative block overflow-hidden rounded-xl border border-white/10 text-left transition hover:ring-2 hover:ring-cyan-500/60"
               >
                 {it.poster ? (
-                  <Image
+                  <PosterImage
                     src={it.poster}
                     alt={it.title}
                     width={342}
                     height={513}
-                    className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                    className="aspect-[2/3] w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                   />
                 ) : (
                   <div className="flex aspect-[2/3] w-full items-center justify-center bg-neutral-800 p-2 text-center text-xs text-neutral-400">
                     {it.title}
                   </div>
                 )}
-                <div className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-emerald-300 backdrop-blur">
+                <div className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold tabular-nums text-emerald-300 backdrop-blur">
                   {it.userRating}/10
                 </div>
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2 text-[12px]">
@@ -719,15 +733,22 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       ) : wlLoading ? (
         <PosterGridSkeleton />
       ) : filtered.length === 0 ? (
-        <p className="text-neutral-400">
-          {items.length === 0
-            ? 'Din watchlist är tom. Swipa höger på titlar du vill se, så hamnar de här.'
-            : items.some((it) => it.tmdbType === wlType)
-            ? 'Inga träffar.'
-            : wlType === 'movie'
-            ? 'Inga filmer i listan — men du har serier. Byt till Serier ovanför.'
-            : 'Inga serier i listan — men du har filmer. Byt till Film ovanför.'}
-        </p>
+        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
+          {items.length === 0 ? (
+            <Film className="mx-auto mb-2 h-10 w-10 text-white/20" />
+          ) : (
+            <Search className="mx-auto mb-2 h-10 w-10 text-white/20" />
+          )}
+          <p className="text-neutral-400">
+            {items.length === 0
+              ? 'Din watchlist är tom. Swipa höger på titlar du vill se, så hamnar de här.'
+              : items.some((it) => it.tmdbType === wlType)
+              ? 'Inga träffar.'
+              : wlType === 'movie'
+              ? 'Inga filmer i listan — men du har serier. Byt till Serier ovanför.'
+              : 'Inga serier i listan — men du har filmer. Byt till Film ovanför.'}
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" data-tour="watchlist-grid">
           {filtered.map((it) => (
@@ -747,7 +768,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                     poster: it.posterUrl.startsWith('data:') ? null : it.posterUrl,
                   })
                 }
-                className="absolute left-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-cyan-500 hover:text-black"
+                className="absolute left-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2.5 text-neutral-300 backdrop-blur transition after:absolute after:-inset-1 hover:bg-cyan-500 hover:text-black"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>
@@ -755,7 +776,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                 type="button"
                 aria-label="Ta bort från watchlist"
                 onClick={() => remove(it)}
-                className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2 text-neutral-300 backdrop-blur transition hover:bg-rose-600 hover:text-white"
+                className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2.5 text-neutral-300 backdrop-blur transition after:absolute after:-inset-1 hover:bg-rose-600 hover:text-white"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 6h18M9 6v-.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V6m-8 0v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -764,12 +785,12 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               </button>
 
               <button type="button" onClick={() => open(it)} className="relative block w-full text-left">
-                <Image
+                <PosterImage
                   src={it.posterUrl}
                   alt={it.title}
                   width={342}
                   height={513}
-                  className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                  className="aspect-[2/3] w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                 />
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2 text-[12px]">
                   <div className="truncate font-medium text-white">{it.title}</div>

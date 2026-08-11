@@ -9,6 +9,8 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import Modal from "@/app/components/ui/Modal";
+import PosterImage from "@/app/components/ui/PosterImage";
+import { PosterGridSkeleton } from "@/app/components/ui/Skeletons";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import {
@@ -64,7 +66,9 @@ export default function MatchesTab({
   }
 
   if (items === null) {
-    return <p className="text-white/40">Laddar matchningar…</p>;
+    // Skelett i posterformat i stället för en naken textrad — samma yta som
+    // det färdiga gridet, så listan inte hoppar när datan landar.
+    return <PosterGridSkeleton count={4} />;
   }
 
   if (items.length === 0) {
@@ -86,12 +90,12 @@ export default function MatchesTab({
             className="group relative overflow-hidden rounded-xl border border-white/10 text-left transition hover:ring-2 hover:ring-cyan-500/60"
           >
             {posterUrl(it.poster) ? (
-              <Image
+              <PosterImage
                 src={posterUrl(it.poster)!}
                 alt={it.title}
                 width={342}
                 height={513}
-                className="h-auto w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                className="aspect-[2/3] w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
               />
             ) : (
               <div className="flex aspect-[2/3] w-full items-center justify-center bg-neutral-800 p-2 text-center text-xs text-neutral-400">

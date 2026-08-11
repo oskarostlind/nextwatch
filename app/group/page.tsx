@@ -39,14 +39,32 @@ const EMPTY_FRIENDS: FriendsInitial = { friends: [], pendingIn: [], pendingOut: 
 async function loadFriendsInitial(me: string | null): Promise<FriendsInitial> {
   if (!me) return EMPTY_FRIENDS;
 
-  const friendships = await prisma.friendship.findMany({
-    where: { OR: [{ userId: me }, { friendId: me }] },
-    include: {
-      user: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-      friend: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  // Parallella frågor — de tre är oberoende av varandra, så kör dem samtidigt
+  // i stället för seriellt (1 DB-rundresa i tid i stället för 3).
+  const [friendships, pendingIn, pendingOut] = await Promise.all([
+    prisma.friendship.findMany({
+      where: { OR: [{ userId: me }, { friendId: me }] },
+      include: {
+        user: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+        friend: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.friendRequest.findMany({
+      where: { toUserId: me, status: "pending" },
+      include: {
+        fromUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.friendRequest.findMany({
+      where: { fromUserId: me, status: "pending" },
+      include: {
+        toUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   const friends = friendships.map((f) => {
     const other = f.userId === me ? f.friend : f.user;
@@ -56,22 +74,6 @@ async function loadFriendsInitial(me: string | null): Promise<FriendsInitial> {
       displayName: other.profile?.displayName ?? null,
       avatarId: other.profile?.avatarId ?? null,
     };
-  });
-
-  const pendingIn = await prisma.friendRequest.findMany({
-    where: { toUserId: me, status: "pending" },
-    include: {
-      fromUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const pendingOut = await prisma.friendRequest.findMany({
-    where: { fromUserId: me, status: "pending" },
-    include: {
-      toUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-    },
-    orderBy: { createdAt: "desc" },
   });
 
   return {
@@ -101,23 +103,28 @@ export default async function GroupPage() {
   const cookieStore = await cookies();
   const me = cookieStore.get("nw_uid")?.value ?? null;
   const code = cookieStore.get("nw_group")?.value ?? null;
-  const friends = await loadFriendsInitial(me);
 
   if (!code) {
+    const friends = await loadFriendsInitial(me);
     const initial: GroupInitial = { code: null, members: [], meUserId: me, friends };
     return <GroupClient initial={initial} />;
   }
 
-  const rows = await prisma.$queryRaw<
-    Array<{ user_id: string; joined_at: Date; username: string | null; display_name: string | null }>
-  >`
-    SELECT gm.user_id, gm.joined_at, p.username, pr.display_name
-    FROM group_members gm
-    LEFT JOIN users p   ON p.id = gm.user_id
-    LEFT JOIN profiles pr ON pr.user_id = gm.user_id
-    WHERE gm.group_code = ${code}
-    ORDER BY gm.joined_at ASC
-  `;
+  // Parallella frågor — vänlistan och medlemslistan är oberoende, så kör dem
+  // samtidigt (1 DB-rundresa i tid i stället för 4 seriella).
+  const [friends, rows] = await Promise.all([
+    loadFriendsInitial(me),
+    prisma.$queryRaw<
+      Array<{ user_id: string; joined_at: Date; username: string | null; display_name: string | null }>
+    >`
+      SELECT gm.user_id, gm.joined_at, p.username, pr.display_name
+      FROM group_members gm
+      LEFT JOIN users p   ON p.id = gm.user_id
+      LEFT JOIN profiles pr ON pr.user_id = gm.user_id
+      WHERE gm.group_code = ${code}
+      ORDER BY gm.joined_at ASC
+    `,
+  ]);
 
   const initial: GroupInitial = {
     code,

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { MotionConfig } from "framer-motion";
 
 import BottomTabs from "../navigation/BottomTabs";
 import InviteToasts from "../InviteToasts";
@@ -60,6 +61,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (hideChrome) {
     return (
+      // reducedMotion="user" följer iOS "Minska rörelse": framer-motion byter
+      // transform-animationer mot korta toningar (dragningar fungerar ändå).
+      <MotionConfig reducedMotion="user">
       <AuthGateProvider initiallyReady={!isLandingRoute}>
         <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
           <SplashScreenHide />
@@ -70,10 +74,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <main className="min-h-[100dvh] pt-[env(safe-area-inset-top)]">{children}</main>
         </div>
       </AuthGateProvider>
+      </MotionConfig>
     );
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <AuthGateProvider initiallyReady={!isLandingRoute}>
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100">
         <SplashScreenHide />
@@ -106,5 +112,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         />
       </div>
     </AuthGateProvider>
+    </MotionConfig>
   );
 }

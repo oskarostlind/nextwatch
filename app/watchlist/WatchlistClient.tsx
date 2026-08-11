@@ -20,9 +20,16 @@ import {
 } from '@/lib/watchLinks';
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
 import { PosterGridSkeleton } from '@/app/components/ui/Skeletons';
-import { getCached, setCached } from '@/lib/clientCache';
 import { markTitleRated } from '@/lib/swipeDeckStore';
-import { putTitles, readTitleCache, titleKey, type CachedTitle } from '@/lib/titleCache';
+import {
+  loadRated,
+  loadWatchlist,
+  readCachedRated,
+  readCachedWatchlist,
+  PLACEHOLDER_POSTER,
+  type RatedItem,
+  type WatchItem,
+} from '@/lib/watchlistData';
 import { WATCHLIST_TOUR_STEPS } from '@/lib/tours/coachSteps';
 import { toggleKeywordGroup } from '@/lib/subgenres';
 
@@ -35,81 +42,15 @@ const ShareTitleModal = dynamic(() => import('@/app/components/client/ShareTitle
 const SharedTipsInbox = dynamic(() => import('@/app/components/client/SharedTipsInbox'), { ssr: false });
 const CoachMarkTour = dynamic(() => import('@/app/components/client/tours/CoachMarkTour'), { ssr: false });
 
-type WatchItem = {
-  id: number;
-  tmdbType: 'movie' | 'tv';
-  title: string;
-  year?: string;
-  rating?: number;
-  posterUrl: string;
-  addedAt?: string;
-  voteAverage?: number | null;
-  popularity?: number | null;
-  genreIds?: number[];
-  /** TMDB keyword-id:n. `undefined` = inte cachat än (se refetchWatchlist), inte "inga". */
-  keywordIds?: number[];
-};
-
-// Titlar med eget betyg (Betyg-fliken) — från POST /api/ratings/list.
-type RatedItem = {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  title: string;
-  year: string | null;
-  poster: string | null;
-  genreIds: number[];
-  /** TMDB keyword-id:n. `undefined` = inte cachat än (se refetchRated), inte "inga". */
-  keywordIds?: number[];
-  userRating: number;
-};
-
-type RatedListResp = { ok: boolean; items: RatedItem[] };
+// WatchItem/RatedItem, hämtningen och klientcachen bor i lib/watchlistData.ts
+// så att WatchlistPreloader (AppShell) kan fylla samma cache vid appstart utan
+// en andra kopia av logiken. Se filhuvudet där.
 
 type Tab = 'watchlist' | 'ratings';
 
 type ProvidersResp = { ok: boolean; region?: string; providers: Providers | null };
 
 type Detail = { overview?: string };
-
-type WatchlistApiItem = {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  title: string;
-  year: string | null;
-  poster: string | null;
-  rating?: number | null;
-  addedAt?: string;
-  voteAverage?: number | null;
-  popularity?: number | null;
-  genreIds?: number[];
-  keywordIds?: number[];
-};
-
-const PLACEHOLDER_POSTER =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
-
-// Listorna är användarens egen data och ändras sällan mellan appstarter, så de
-// ritas ur cache direkt och ersätts tyst när det färska svaret kommer. Utan det
-// mötte varje besök ett skelett medan servern satte ihop listan på nytt.
-// Cachen skrivs vid varje lyckad hämtning, så den självläker efter mutationer
-// (gilla i swipe, betygsätt, ta bort) utan separat invalidering.
-const WL_CACHE_KEY = 'watchlist_items';
-const RATED_CACHE_KEY = 'rated_items';
-const LIST_TTL_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Routerna tar max 200 id per anrop. Vid kall cache och en lång lista måste
- * saknade titlar därför delas upp — annars kapas resten och visas som
- * platshållare. (Verifierat i produktion: 222 titlar gav 22 utan metadata när
- * berikningen kapades i stället för att delas upp.)
- */
-const ENRICH_CHUNK = 200;
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
 
 /** Betyg-flikens kort öppnar samma detaljmodal som watchlisten — inte bara betyget. */
 function ratedToWatchItem(it: RatedItem): WatchItem {
@@ -119,56 +60,6 @@ function ratedToWatchItem(it: RatedItem): WatchItem {
     title: it.title,
     year: it.year ?? undefined,
     posterUrl: it.poster ?? PLACEHOLDER_POSTER,
-  };
-}
-
-/** DB-rad utan TMDB-berikning, från `?meta=0`. */
-type WatchlistRowApi = {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  addedAt: string;
-};
-
-/** Motsvarande för betyg. */
-type RatedRowApi = {
-  tmdbId: number;
-  mediaType: 'movie' | 'tv';
-  userRating: number;
-};
-
-function toCachedTitle(raw: WatchlistApiItem): CachedTitle {
-  return {
-    title: raw.title,
-    year: raw.year,
-    poster: raw.poster,
-    voteAverage: raw.voteAverage ?? null,
-    popularity: raw.popularity ?? null,
-    genreIds: raw.genreIds ?? [],
-    keywordIds: raw.keywordIds ?? [],
-  };
-}
-
-/**
- * Slår ihop en DB-rad med cachad metadata. Saknas metadatan visas titeln ändå,
- * med platshållare — raden är sanningen om vad som ligger i listan, cachen är
- * bara utsmyckning.
- */
-function rowToWatchItem(row: WatchlistRowApi, meta: CachedTitle | undefined): WatchItem {
-  return {
-    id: row.tmdbId,
-    tmdbType: row.mediaType,
-    title: meta?.title ?? '…',
-    year: meta?.year ?? undefined,
-    rating: meta?.voteAverage ?? undefined,
-    posterUrl: meta?.poster ?? PLACEHOLDER_POSTER,
-    addedAt: row.addedAt,
-    voteAverage: meta?.voteAverage ?? null,
-    popularity: meta?.popularity ?? null,
-    genreIds: meta?.genreIds ?? [],
-    // Ingen `?? []` här med flit: `undefined` (metadata inte hämtad/cachad än)
-    // ska tolkas annorlunda än en TOM lista (hämtat, titeln har inga keywords)
-    // av sub-genre-filtret nedan.
-    keywordIds: meta?.keywordIds,
   };
 }
 
@@ -225,58 +116,12 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
 
   const refetchWatchlist = useCallback(() => {
     void (async () => {
-      try {
-        // Steg 1: bara raderna. En Prisma-fråga server-side i stället för ett
-        // TMDB-uppslag per titel.
-        const rowsRes = await fetch('/api/watchlist/list?meta=0', { method: 'POST', cache: 'no-store' });
-        if (!rowsRes.ok) return;
-        const rowsData = (await rowsRes.json()) as { ok?: boolean; rows?: WatchlistRowApi[] };
-        if (!rowsData.ok || !Array.isArray(rowsData.rows)) return;
-        const rows = rowsData.rows;
-
-        // Steg 2: fyll i metadata från cachen, hämta bara det som saknas.
-        // "Saknas" inkluderar poster skrivna FÖRE keywordIds-fältet fanns —
-        // annars fick de aldrig sub-genre-data och sub-genre-filtret skulle
-        // permanent falla tillbaka till "okänt" för hela den befintliga
-        // watchlisten. Självläker en gång per titel, sedan är cachen komplett.
-        const cache = readTitleCache();
-        const missing = rows
-          .map((r) => titleKey(r.mediaType, r.tmdbId))
-          .filter((k) => !cache[k] || cache[k].keywordIds === undefined);
-
-        if (missing.length > 0) {
-          const add: Record<string, CachedTitle> = {};
-          // Klumpvis: en lista längre än ENRICH_CHUNK skulle annars kapas och
-          // resten fastna som platshållare.
-          await Promise.all(
-            chunk(missing, ENRICH_CHUNK).map(async (del) => {
-              const enrichRes = await fetch(
-                `/api/watchlist/list?ids=${encodeURIComponent(del.join(','))}`,
-                { method: 'POST', cache: 'no-store' },
-              );
-              if (!enrichRes.ok) return;
-              const enriched = (await enrichRes.json()) as { ok?: boolean; items?: WatchlistApiItem[] };
-              if (!enriched.ok || !Array.isArray(enriched.items)) return;
-              for (const it of enriched.items) {
-                const meta = toCachedTitle(it);
-                add[titleKey(it.mediaType, it.tmdbId)] = meta;
-                cache[titleKey(it.mediaType, it.tmdbId)] = meta;
-              }
-            }),
-          );
-          putTitles(add);
-        }
-
-        // Raderna bestämmer vilka titlar som finns; cachen dekorerar bara. En
-        // titel utan metadata visas hellre med platshållare än utelämnas.
-        const mapped = rows.map((r) => rowToWatchItem(r, cache[titleKey(r.mediaType, r.tmdbId)]));
-        setItems(mapped);
-        setCached(WL_CACHE_KEY, mapped, LIST_TTL_MS);
-      } catch {
-        /* best-effort — ev. cachad lista står kvar */
-      } finally {
-        setWlLoading(false);
-      }
+      // Hämtning + cacheskrivning i lib/watchlistData.ts — samma funktion som
+      // WatchlistPreloader kör vid appstart. `null` = misslyckades, då står den
+      // ev. cachade listan kvar.
+      const mapped = await loadWatchlist();
+      if (mapped) setItems(mapped);
+      setWlLoading(false);
     })();
   }, []);
 
@@ -286,7 +131,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
     // localStorage, så en läsning i render hade gett hydration-mismatch.
     // Kostar en bildruta skelett — men tar bort de sekunder som annars gick åt
     // till nätverket plus serverns hopsättning av listan.
-    const cached = getCached<WatchItem[]>(WL_CACHE_KEY);
+    const cached = readCachedWatchlist();
     if (cached && cached.length > 0) {
       setItems(cached);
       setWlLoading(false);
@@ -300,75 +145,12 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
   const refetchRated = useCallback(() => {
     setRatedLoading(true);
     void (async () => {
-      try {
-        // Samma tvåstegsupplägg som watchlisten: rader först, metadata ur cachen.
-        const rowsRes = await fetch('/api/ratings/list?meta=0', { method: 'POST', cache: 'no-store' });
-        if (!rowsRes.ok) { setRated((prev) => prev ?? []); return; }
-        const rowsData = (await rowsRes.json()) as { ok?: boolean; rows?: RatedRowApi[] };
-        if (!rowsData.ok || !Array.isArray(rowsData.rows)) { setRated((prev) => prev ?? []); return; }
-        const rows = rowsData.rows;
-
-        const cache = readTitleCache();
-        // Se refetchWatchlist: poster utan keywordIds (skrivna före fältet
-        // fanns) räknas som saknade så de självläker en gång.
-        const missing = rows
-          .map((r) => titleKey(r.mediaType, r.tmdbId))
-          .filter((k) => !cache[k] || cache[k].keywordIds === undefined);
-
-        if (missing.length > 0) {
-          const add: Record<string, CachedTitle> = {};
-          await Promise.all(
-            chunk(missing, ENRICH_CHUNK).map(async (del) => {
-              const enrichRes = await fetch(
-                `/api/ratings/list?ids=${encodeURIComponent(del.join(','))}`,
-                { method: 'POST', cache: 'no-store' },
-              );
-              if (!enrichRes.ok) return;
-              const enriched = (await enrichRes.json()) as RatedListResp;
-              if (!enriched.ok || !Array.isArray(enriched.items)) return;
-              for (const it of enriched.items) {
-                const meta: CachedTitle = {
-                  title: it.title,
-                  year: it.year,
-                  poster: it.poster,
-                  // Betygsrouten returnerar inte betyg/popularitet; watchlisten
-                  // fyller på dem för samma titel när den passerar. Genrer och
-                  // keywords ger den däremot nu, för (sub-)genrefiltret på
-                  // Betyg-fliken.
-                  voteAverage: null,
-                  popularity: null,
-                  genreIds: it.genreIds ?? [],
-                  keywordIds: it.keywordIds ?? [],
-                };
-                add[titleKey(it.mediaType, it.tmdbId)] = meta;
-                cache[titleKey(it.mediaType, it.tmdbId)] = meta;
-              }
-            }),
-          );
-          putTitles(add);
-        }
-
-        const mapped: RatedItem[] = rows.map((r) => {
-          const meta = cache[titleKey(r.mediaType, r.tmdbId)];
-          return {
-            tmdbId: r.tmdbId,
-            mediaType: r.mediaType,
-            title: meta?.title ?? '…',
-            year: meta?.year ?? null,
-            poster: meta?.poster ?? null,
-            genreIds: meta?.genreIds ?? [],
-            // undefined = inte cachat än, skiljs från tom lista — se rowToWatchItem.
-            keywordIds: meta?.keywordIds,
-            userRating: r.userRating,
-          };
-        });
-        setRated(mapped);
-        setCached(RATED_CACHE_KEY, mapped, LIST_TTL_MS);
-      } catch {
-        setRated((prev) => prev ?? []);
-      } finally {
-        setRatedLoading(false);
-      }
+      // Se refetchWatchlist — samma delade hämtning. Misslyckas den faller vi
+      // tillbaka på tom lista bara om vi inte redan visar något.
+      const mapped = await loadRated();
+      if (mapped) setRated(mapped);
+      else setRated((prev) => prev ?? []);
+      setRatedLoading(false);
     })();
   }, []);
 
@@ -386,7 +168,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       if (next === 'ratings' && !ratedFetchedRef.current && !ratedLoading) {
         ratedFetchedRef.current = true;
         // Visa cachat direkt så fliken inte står tom medan hämtningen pågår.
-        const cached = getCached<RatedItem[]>(RATED_CACHE_KEY);
+        const cached = readCachedRated();
         if (cached && cached.length > 0) setRated(cached);
         refetchRated();
       }

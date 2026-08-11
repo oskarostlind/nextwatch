@@ -45,19 +45,18 @@ input[type="date"].nw-date::-webkit-date-and-time-value {
   text-align: left;
 }
 
-/* Respektera iOS "Minska rörelse" även för ren CSS-animation/transition.
-   Framer Motion hanteras separat via <MotionConfig reducedMotion="user">. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  ::before,
-  ::after {
-    animation-duration: 0.01ms !important;
-    /* Utan detta löper ändlösa animationer (animate-pulse på skeletten,
-       animate-spin) vidare med 0,01 ms per varv — de samplas då i en ny,
-       godtycklig fas varje bildruta och FLIMRAR i stället för att stå still.
-       Klamra till ett varv så de landar på slutläget direkt. */
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* MEDVETET INGEN global `@media (prefers-reduced-motion: reduce)`-regel här.
+ *
+ * En sådan fanns kort (transition-duration: 0.01ms !important på `*`), men den
+ * träffade även kortets vändning i swipe-vyn — och den är informationsbärande,
+ * inte dekor: vändningen ÄR hur man kommer till detaljvyn. Med iOS "Minska
+ * rörelse" påslaget snappade kortet i stället för att vända, vilket lästes som
+ * en trasig app. En `*`-regel kan inte skilja de två fallen åt.
+ *
+ * Produktbeslutet är att appens animationer ska köras oavsett systeminställning.
+ * Lägg alltså inte tillbaka en global regel här; behöver en enskild dekorativ
+ * animation dämpas, gör det på just den selektorn.
+ *
+ * Not: Framer Motion styrs separat av <MotionConfig> i
+ * app/components/layouts/AppShell.tsx och följer fortfarande systemvalet.
+ */

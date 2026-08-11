@@ -18,6 +18,7 @@ import { AuthGateProvider } from "@/lib/authGateContext";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 import { SocialPreloader } from "../client/SocialProvider";
 import { SwipeSettingsPreloader } from "../client/SwipeSettingsProvider";
+import WatchlistPreloader from "../client/WatchlistPreloader";
 
 const PUBLIC_ROUTES = [
   /^\/$/,
@@ -88,6 +89,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <SwipeDeckPreloader />
         <SocialPreloader />
         <SwipeSettingsPreloader />
+        <WatchlistPreloader />
         <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col border-x border-white/10 bg-neutral-950 shadow-[0_0_80px_rgba(0,0,0,0.5)] pt-[env(safe-area-inset-top)]">
           <main className={`relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${MAIN_BOTTOM_PADDING}`}>
             {children}

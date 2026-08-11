@@ -7,6 +7,7 @@
 // OBS: behåller match-routens tokenkonvention (TMDB_TOKEN/TMDB_BEARER +
 // TMDB_API_KEY) — se CLAUDE.md om de inkonsekventa TMDB-konventionerna.
 
+import { tmdbFetch } from "@/lib/tmdbClient";
 import {
   pickTrailer,
   VIDEO_APPEND_PARAMS,
@@ -61,9 +62,14 @@ export async function tmdbDetails(
     `&include_video_language=${encodeURIComponent(VIDEO_LANGUAGE_PARAM)}`;
   const url = apiKey ? `${base}${common}&api_key=${apiKey}` : `${base}${common}`;
 
-  const res = await fetch(url, {
+  // Titelmetadata/providers är stabila på timskala (samma resonemang som
+  // lib/watchlistCards.ts) — revalidate i stället för no-store, annars slår
+  // /api/group/matches upp till 50 kalla anrop per /group-besök och
+  // match-pollen (var 12:e sekund) betalar samma pris om och om igen.
+  // tmdbFetch = concurrency-grind + retry på 429/5xx, se lib/tmdbClient.ts.
+  const res = await tmdbFetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    cache: "no-store",
+    next: { revalidate: 3600 },
   });
   if (!res.ok) return null;
 

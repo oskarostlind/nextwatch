@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry } from "@/lib/prisma";
 
 type MemberDto = {
   id: string;
@@ -36,36 +36,43 @@ export async function GET(req: NextRequest) {
 
     // Gruppen kan ha gallrats bort av cron/cleanup (ett dygn utan aktivitet)
     // medan nw_group-cookien lever i 14 dagar. Utan den här kontrollen skulle
-    // klienten fortsätta polla en spökgrupp: matchpollningen var 8:e sekund och
-    // en GroupBar som visar en grupp med noll medlemmar. Rensa cookien i stället
-    // så klienten faller tillbaka till solo av sig själv.
-    const groupExists = await prisma.group.findUnique({
-      where: { code },
-      select: { code: true },
-    });
-    if (!groupExists) {
+    // klienten fortsätta polla en spökgrupp: matchpollningen och en GroupBar
+    // som visar en grupp med noll medlemmar. Rensa cookien i stället så
+    // klienten faller tillbaka till solo av sig själv.
+    //
+    // Spökkollen och medlemslistan hämtas i EN query (findUnique + nästlad
+    // members-select) i stället för två seriella — det här är den hetast
+    // pollade endpointen (var 5:e sekund på gruppytorna) och varje sparad
+    // Neon-rundresa märks. withDbRetry fångar Neon-kallstart (P1001).
+    const group = await withDbRetry(() =>
+      prisma.group.findUnique({
+        where: { code },
+        select: {
+          code: true,
+          // Minimalt fälturval, bakåtkompatibelt mot UI:t.
+          members: {
+            select: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  profile: { select: { displayName: true } },
+                },
+              },
+            },
+            orderBy: { joinedAt: "asc" },
+          },
+        },
+      }),
+    );
+    if (!group) {
       if (jar.get("nw_group")?.value === code) {
         jar.set("nw_group", "", { path: "/", maxAge: 0, sameSite: "lax", secure: true, httpOnly: false });
       }
       return bad("Group no longer exists.", 404);
     }
 
-    // Hämta alla medlemmar med minimalt fälturval (bakåtkompatibelt mot UI:t)
-    const rows = await prisma.groupMember.findMany({
-      where: { groupCode: code },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            profile: { select: { displayName: true } },
-          },
-        },
-      },
-      orderBy: { joinedAt: "asc" },
-    });
-
-    const members: MemberDto[] = rows.map((r) => ({
+    const members: MemberDto[] = group.members.map((r) => ({
       id: r.user.id,
       displayName: r.user.profile?.displayName ?? null,
       username: r.user.username ?? null,

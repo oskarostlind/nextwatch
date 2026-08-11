@@ -42,6 +42,8 @@ function RoundBtn({
       ? "border-amber-500/40 bg-amber-600/20 hover:bg-amber-600/30"
       : "border-green-500/40 bg-green-600/20 hover:bg-green-600/30";
 
+  // active:scale-90 ger tryckrespons på touch — hover finns inte på iPhone.
+  // `transition` (inte transition-transform) behålls så färgövergångarna lever kvar.
   return (
     <button
       type="button"
@@ -49,7 +51,7 @@ function RoundBtn({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition disabled:opacity-60 ${cls}`}
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-white shadow-md backdrop-blur transition duration-100 active:scale-90 disabled:opacity-60 ${cls}`}
     >
       {children}
     </button>

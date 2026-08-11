@@ -53,7 +53,16 @@ export async function GET() {
         overview: m.overview ?? "",
       }));
 
-    return NextResponse.json({ ok: true, region, items });
+    // `private` med flit, INTE `public, s-maxage`: svaret varierar med
+    // nw_region/nw_locale (cookies) men URL:en är alltid densamma, så ett delat
+    // CDN-svar hade serverat den första besökarens region/språk till alla i sex
+    // timmar. TMDB-hämtningen ovan är redan datacachad server-side (revalidate
+    // 6 h), så det som återstår att vinna är WKWebView:s egen HTTP-cache — och
+    // den får vi med private.
+    return NextResponse.json(
+      { ok: true, region, items },
+      { headers: { "Cache-Control": "private, max-age=21600, stale-while-revalidate=3600" } },
+    );
   } catch {
     return NextResponse.json({ ok: false, items: [] }, { status: 200 });
   }

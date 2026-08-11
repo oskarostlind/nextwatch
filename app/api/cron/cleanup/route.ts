@@ -87,6 +87,21 @@ export async function GET(req: Request) {
       where: { status: { not: "pending" } },
     });
 
+    // Föräldralösa inbjudningar: pending vars grupp inte längre finns. Låg
+    // tidigare i invite/list-GET:en och kördes på varje poll — hör hemma här.
+    // Relationen GroupInvite→Group är obligatorisk i Prisma-schemat (går inte
+    // att filtrera på `group: { is: null }`), därför rå SQL enligt samma
+    // mönster som gruppstädningen ovan. FK-kaskaden gör normalt jobbet redan
+    // vid gruppradering; det här är hängslen för rader från tiden före den.
+    const orphanInvites = await prisma.$executeRaw`
+      DELETE FROM "group_invites" gi
+      WHERE gi."status" = 'pending'
+        AND NOT EXISTS (SELECT 1 FROM "groups" g WHERE g."code" = gi."group_code")
+    `;
+    if (orphanInvites > 0) {
+      console.log(`[cron/cleanup] rensade ${orphanInvites} föräldralösa inbjudningar.`);
+    }
+
     const verifications = await prisma.verification.deleteMany({
       where: { expiresAt: { lt: verificationCutoff } },
     });

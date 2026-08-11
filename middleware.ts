@@ -69,6 +69,12 @@ export async function middleware(req: NextRequest) {
   // cookies(): de ska alltid se det verifierade bare-uid:t, aldrig "<uid>.<sig>".
   req.cookies.set("nw_uid", uid);
 
+  // Router-prefetch (Link prefetch / <Link> vid idle): prefetch-svar ska inte
+  // rotera cookies — de kan komma i bursts och racea med riktiga navigeringar.
+  // Verifiering/normalisering ovan och signedToSet nedan körs alltid ändå.
+  const isPrefetch =
+    req.headers.get("next-router-prefetch") === "1" || req.headers.get("purpose") === "prefetch";
+
   const headerRegion = req.headers.get("x-vercel-ip-country") ?? "";
   const region = /^[A-Z]{2}$/.test(headerRegion) ? headerRegion : "SE";
   const locale = pickLocale(req.headers.get("accept-language"), region);
@@ -83,7 +89,7 @@ export async function middleware(req: NextRequest) {
 
   if (signedToSet) {
     res.cookies.set("nw_uid", signedToSet, UID_COOKIE);
-  } else if (renewValid && rawUid) {
+  } else if (renewValid && rawUid && !isPrefetch) {
     // Samma redan-signerade värde, bara färsk maxAge. UID_COOKIE:s
     // httpOnly:false med flit (samma resonemang som för anonyma, rad 18-20):
     // hasAuthCookie() behöver se att cookien finns, och signaturen — inte
@@ -91,10 +97,10 @@ export async function middleware(req: NextRequest) {
     res.cookies.set("nw_uid", rawUid, UID_COOKIE);
     res.cookies.set("nw_last", String(Date.now()), { ...UID_COOKIE, httpOnly: true, maxAge: 60 * 5 });
   }
-  if (mustSetRegion) {
+  if (mustSetRegion && !isPrefetch) {
     res.cookies.set("nw_region", region, FLAG_COOKIE);
   }
-  if (mustSetLocale) {
+  if (mustSetLocale && !isPrefetch) {
     res.cookies.set("nw_locale", locale, FLAG_COOKIE);
   }
 
@@ -104,4 +110,10 @@ export async function middleware(req: NextRequest) {
 // session/restore undantas likt session/init: när cookien är helt borta skulle
 // middleware annars mynta en anonym nw_uid på SAMMA svar som restore sätter den
 // återställda — två Set-Cookie för samma namn, och fel kan vinna.
-export const config = { matcher: ["/((?!_next/|api/session/init|api/session/restore|favicon.ico).*)"] };
+// Statiska assets (bilder/ikoner/manifest m.m.) behöver ingen cookie-logik —
+// hoppa över dem via filändelse så middleware inte kör på varje asset-request.
+export const config = {
+  matcher: [
+    "/((?!_next/|api/session/init|api/session/restore|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webmanifest|txt|xml)$).*)",
+  ],
+};

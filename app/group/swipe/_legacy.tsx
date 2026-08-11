@@ -17,11 +17,13 @@ import {
 } from "../../swipe/page_client";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
-import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import SwipeLimitWall from "@/app/components/client/SwipeLimitWall";
+import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import RatingModal from "@/app/components/client/RatingModal";
 import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
+import { CardSkeleton } from "@/app/components/ui/Skeletons";
 
 type MediaType = "movie" | "tv";
 
@@ -343,10 +345,18 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   /* ---------- render (identisk med solo-swipen) ---------- */
 
-  const DIST_THRESHOLD = 110;
+  // Höjd från 110 eftersom dragElastic numera är 1:1 i de tre riktningarna —
+  // kortet följer fingret hela vägen, så samma fysiska rörelse ger längre
+  // offset än förut. 130 håller släppkänslan kalibrerad.
+  const DIST_THRESHOLD = 130;
   const VELOCITY_THRESHOLD = 700;
 
-  async function swipeOut(dir: "left" | "right" | "up") {
+  /**
+   * Kastar ut toppkortet. `releaseVelocity` är fingrets hastighet vid släpp —
+   * fjädern ärver den, så en snabb flick lämnar skärmen fortare än ett
+   * knapptryck. Kortet känns kastat i stället för uppspelat.
+   */
+  async function swipeOut(dir: "left" | "right" | "up", releaseVelocity = 0) {
     const c = cards[0];
     if (!c) return;
     const target =
@@ -355,7 +365,28 @@ export default function GroupSwipePage({ code }: { code: string }) {
         : dir === "left"
         ? { x: -560, opacity: 0 }
         : { y: -760, opacity: 0 };
-    await controls.start({ ...target, transition: { duration: 0.22 } });
+    await controls.start({
+      ...target,
+      transition: {
+        x: {
+          type: "spring",
+          stiffness: 200,
+          damping: 26,
+          velocity: releaseVelocity,
+          restDelta: 1,
+          restSpeed: 10,
+        },
+        y: {
+          type: "spring",
+          stiffness: 200,
+          damping: 26,
+          velocity: releaseVelocity,
+          restDelta: 1,
+          restSpeed: 10,
+        },
+        opacity: { duration: 0.18, ease: "easeOut" },
+      },
+    });
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
@@ -377,7 +408,9 @@ export default function GroupSwipePage({ code }: { code: string }) {
   if (showLoading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center">
-        <p className="text-neutral-400">Laddar förslag…</p>
+        {/* Samma geometri som kortet (2/3, max 420 px, rounded-2xl) — övergången
+            skelett → poster blir en ren korsning utan hopp i layouten. */}
+        <CardSkeleton />
       </div>
     );
   }
@@ -407,22 +440,26 @@ export default function GroupSwipePage({ code }: { code: string }) {
                     animate={controls}
                     drag
                     dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-                    dragElastic={0.8}
+                    // 1:1-följning i de tre riktningar som har en handling. Med 0.8
+                    // tolkade nollstora dragConstraints all rörelse som översläng och
+                    // kortet följde bara 80 % av fingret. Nedåt finns ingen handling —
+                    // där får det studsa som gummiband.
+                    dragElastic={{ left: 1, right: 1, top: 1, bottom: 0.4 }}
                     onDragEnd={(_, info) => {
                       const { offset, velocity } = info;
                       const up =
                         (offset.y < -DIST_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD) &&
                         Math.abs(offset.y) > Math.abs(offset.x);
                       if (up) {
-                        void swipeOut("up");
+                        void swipeOut("up", velocity.y);
                         return;
                       }
                       if (offset.x > DIST_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
-                        void swipeOut("right");
+                        void swipeOut("right", velocity.x);
                         return;
                       }
                       if (offset.x < -DIST_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
-                        void swipeOut("left");
+                        void swipeOut("left", velocity.x);
                         return;
                       }
                       void controls.start({
@@ -432,12 +469,22 @@ export default function GroupSwipePage({ code }: { code: string }) {
                       });
                     }}
                   >
-                    <StaticCard
-                      card={card}
-                      flipped={flippedId === card.id}
-                      interactive
-                      onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
-                    />
+                    {/* Nya toppkortet växer från exakt den skala/position det hade
+                        som kort #2 i stacken, i stället för att snäppa till full
+                        storlek på en bildruta. Bara transform — ingen layoutkostnad. */}
+                    <motion.div
+                      className="h-full max-h-full w-full min-h-0"
+                      initial={{ scale: 0.95, y: 10 }}
+                      animate={{ scale: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    >
+                      <StaticCard
+                        card={card}
+                        flipped={flippedId === card.id}
+                        interactive
+                        onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                      />
+                    </motion.div>
 
                     <SwipeStampOverlays
                       likeOpacity={likeOpacity}
@@ -456,7 +503,9 @@ export default function GroupSwipePage({ code }: { code: string }) {
               return (
                 <div
                   key={card.id}
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92]"
+                  // transition-transform: när toppkortet försvinner flyttas #3 upp
+                  // till #2:s plats — utan detta hoppar den ett steg på en bildruta.
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92] transition-transform duration-200 ease-out"
                   style={{
                     zIndex: z,
                     transform: `translateY(${translateY}px) scale(${scale})`,
@@ -498,13 +547,15 @@ export default function GroupSwipePage({ code }: { code: string }) {
       <div data-guide="action-dock">
         <ActionDock
           disabled={!cards[0] || showLoading}
-          onNope={() => void swipeOut("left")}
+          // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
+          // så knappen känns som ett bestämt kast i stället för en avspelning.
+          onNope={() => void swipeOut("left", -900)}
           onInfo={() => {
             const c = cards[0];
             if (c) setFlippedId((p) => (p === c.id ? null : c.id));
           }}
           onUndo={handleUndo}
-          onLike={() => void swipeOut("right")}
+          onLike={() => void swipeOut("right", 900)}
         />
       </div>
 

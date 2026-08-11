@@ -68,17 +68,27 @@ export async function GET(req: Request) {
       .join("|");
     const useMyProviders = url.searchParams.get("myProviders") === "1";
 
-    // Default region/language; override from profile if available
+    // Default region/language; override från cookies (i första hand) eller profil
     let region = "SE";
     let language = "sv-SE";
     let withProviders = "";
 
     const c = await cookies();
     const uid = c.get("nw_uid")?.value;
-    if (uid) {
-      const p = await prisma.profile.findUnique({ where: { userId: uid } });
-      if (p?.region) region = p.region;
-      if (p?.locale) language = p.locale;
+    // Cookie-först: middleware.ts stämplar nw_locale/nw_region på VARJE
+    // request, så Prisma-uppslaget behövs bara när cookies saknas (t.ex. en
+    // gammal klient). Sparar en Neon-rundresa per discover-sida.
+    const cookieRegion = c.get("nw_region")?.value || "";
+    const cookieLocale = c.get("nw_locale")?.value || "";
+    if (cookieRegion) region = cookieRegion;
+    if (cookieLocale) language = cookieLocale;
+    if (uid && (!cookieRegion || !cookieLocale)) {
+      const p = await prisma.profile.findUnique({
+        where: { userId: uid },
+        select: { locale: true, region: true, providers: true },
+      });
+      if (!cookieRegion && p?.region) region = p.region;
+      if (!cookieLocale && p?.locale) language = p.locale;
       if (useMyProviders && Array.isArray(p?.providers) && p.providers.length > 0) {
         // NOTE: TMDb expects provider IDs; we have names. We use name filtering client-side,
         // but here we still forward monetization + region hints for better results.

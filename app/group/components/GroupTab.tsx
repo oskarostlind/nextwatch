@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Copy, LogOut, UserPlus, Users, Plus, Check, Play, Settings, Sparkles, X } from "lucide-react";
 import Modal from "@/app/components/ui/Modal";
+import PosterImage from "@/app/components/ui/PosterImage";
+import { fieldClass } from "@/app/components/ui/kit";
 import GroupSettingsModal from "./GroupSettingsModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
@@ -75,7 +76,7 @@ function CommonWatchlistSection({ code, memberCount }: { code: string; memberCou
       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
         <Sparkles className="h-4 w-4" /> Gemensamt i era watchlists
       </h3>
-      <p className="mb-2 text-xs text-white/40">
+      <p className="mb-2 text-xs text-white/60">
         Titlar som flera av er redan sparat — börja kvällen här.
       </p>
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -83,7 +84,7 @@ function CommonWatchlistSection({ code, memberCount }: { code: string; memberCou
           <div key={`${it.mediaType}-${it.tmdbId}`} className="w-[100px] shrink-0">
             <div className="relative overflow-hidden rounded-lg border border-white/10">
               {it.poster ? (
-                <Image
+                <PosterImage
                   src={it.poster}
                   alt={it.title}
                   width={100}
@@ -95,7 +96,7 @@ function CommonWatchlistSection({ code, memberCount }: { code: string; memberCou
                   {it.title}
                 </div>
               )}
-              <span className="absolute right-1 top-1 rounded-full bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              <span className="absolute right-1 top-1 rounded-full bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
                 {it.count}/{memberCount}
               </span>
             </div>
@@ -114,6 +115,9 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Kort visuell kvittens på Kopiera (ikonen växlar till en bock) — toasten
+  // gör själva jobbet, den här bara bekräftar på knappen man just tryckte på.
+  const [copied, setCopied] = useState(false);
 
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
 
@@ -147,6 +151,12 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   useEffect(() => {
     setInvitedIds(new Set());
   }, [code]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
 
   const members: PublicMember[] =
     social.membersReady && social.groupCode === code
@@ -285,7 +295,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   if (code) {
     return (
       <div className="space-y-4">
-        {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
+        {error && <div className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-400">{error}</div>}
 
         <button
           type="button"
@@ -299,7 +309,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-start justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-white/40">Gruppkod</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-white/60">Gruppkod</p>
             {isCreator && (
               <button
                 type="button"
@@ -307,7 +317,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 title="Gruppinställningar"
                 data-tour="group-settings"
                 onClick={() => setSettingsOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition after:absolute after:-inset-1.5 hover:bg-white/10 hover:text-white"
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -315,28 +325,36 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <h2 className="font-mono text-3xl font-bold tracking-wider text-white">{code}</h2>
-            {region && <span className="text-xs text-white/40">{region}</span>}
+            {region && <span className="text-xs text-white/60">{region}</span>}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void navigator.clipboard.writeText(code).catch(() => {})}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm hover:bg-white/5"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(code)
+                  .then(() => {
+                    setCopied(true);
+                    window.dispatchEvent(new CustomEvent("app:toast", { detail: "Kod kopierad!" }));
+                  })
+                  .catch(() => {})
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-white/5"
             >
-              <Copy className="h-4 w-4" /> Kopiera
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Kopiera
             </button>
             <button
               type="button"
               data-tour="group-invite"
               onClick={openInviteModal}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
             >
               <UserPlus className="h-4 w-4" /> Bjud in
             </button>
             <button
               type="button"
               onClick={handleLeave}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10"
             >
               <LogOut className="h-4 w-4" /> Lämna
             </button>
@@ -345,7 +363,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <div>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
-            <Users className="h-4 w-4" /> Medlemmar ({members.length})
+            <Users className="h-4 w-4" /> Medlemmar (<span className="tabular-nums">{members.length}</span>)
           </h3>
           <ul className="space-y-2">
             {members.map((m) => (
@@ -355,14 +373,14 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
               >
                 <span className="font-medium text-white/90">{m.displayName ?? m.username ?? "Okänd"}</span>
                 {meUserId === m.userId ? (
-                  <span className="text-xs text-white/40">Du</span>
+                  <span className="text-xs text-white/60">Du</span>
                 ) : isCreator ? (
                   <button
                     type="button"
                     aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
                     title="Ta bort ur gruppen"
                     onClick={() => void removeMember(m.userId)}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-red-500/20 text-red-400 transition hover:bg-red-500/10"
+                    className="relative flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/20 text-rose-400 transition after:absolute after:-inset-1.5 hover:bg-rose-500/10"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -386,7 +404,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                   ) : invitedIds.has(f.id) ? (
                     <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400"><Check className="h-3 w-3" /> Inbjuden</span>
                   ) : (
-                    <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black hover:bg-white/80">Bjud in</button>
+                    <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-white/80">Bjud in</button>
                   )}
                 </li>
               ))}
@@ -405,7 +423,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   return (
     <div className="space-y-4" data-guide="group-create-join" data-tour="group-join-create">
-      {error && <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">{error}</div>}
+      {error && <div className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
         <h3 className="mb-1 font-semibold">Gå med i grupp</h3>
@@ -421,7 +439,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           <input
             name="code"
             placeholder="ABC123"
-            className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 font-mono text-sm uppercase outline-none focus:border-white/25"
+            className={`${fieldClass} font-mono text-sm uppercase`}
             required
           />
           <button

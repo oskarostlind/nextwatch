@@ -7,6 +7,7 @@
 // samma tillstånd, så accept/decline syns överallt direkt via refreshSocial().
 
 import { readGroupCodeFromCookie } from "@/lib/swipeDeck";
+import { clearPersistedGroupDeck } from "@/lib/swipeDeckStore";
 
 export type SocialUser = {
   id: string;
@@ -182,7 +183,9 @@ async function fetchMembers(): Promise<void> {
       // Servern har redan nollställt nw_group-cookien (gruppen borta, eller vi
       // är inte längre medlem — t.ex. utsparkade). Följ med lokalt så
       // GroupBar/GroupTab faller tillbaka till solo direkt i stället för att
-      // vänta på nästa full sidladdning.
+      // vänta på nästa full sidladdning. Släng även den sparade gruppleken —
+      // den byggdes för en grupp vi inte längre tillhör.
+      clearPersistedGroupDeck(code);
       if (state.groupCode !== null || state.members.length > 0) {
         setState({ groupCode: null, members: [], membersReady: true });
       } else if (!state.membersReady) {
@@ -243,6 +246,20 @@ export function setSocialPollProfile(profile: "active" | "idle") {
   }
 }
 
+// Tick-räknare för pollern: vänner/inbjudningar ändras sällan — det är
+// medlemslistan som driver det synliga grupp-UI:t. Hämta därför friends +
+// invites bara var TREDJE tick (~15 s i aktivt läge) även i "active"-profilen,
+// för att spara batteri/nät i WKWebView. Mutationer och visibilitychange går
+// fortfarande via refreshSocial() som hämtar allt direkt.
+let pollTick = 0;
+
+function pollRefresh(): Promise<void> {
+  pollTick += 1;
+  if (pollTick % 3 === 0) return refreshSocial();
+  if (refreshInFlight) return refreshInFlight;
+  return fetchMembers();
+}
+
 function scheduleNext() {
   if (pollTimer !== null) return;
   pollTimer = setTimeout(() => {
@@ -252,7 +269,7 @@ function scheduleNext() {
       // Flik i bakgrunden: pausa — visibilitychange återupptar.
       return;
     }
-    void refreshSocial().finally(() => {
+    void pollRefresh().finally(() => {
       if (pollTickets > 0) scheduleNext();
     });
   }, currentPollMs);

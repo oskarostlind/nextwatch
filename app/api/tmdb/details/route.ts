@@ -110,12 +110,20 @@ export async function GET(req: Request) {
     }
 
     const langOverride = url.searchParams.get("language") || url.searchParams.get("locale");
-    let language = langOverride || "sv-SE";
-    let region = "SE";
-    if (uid) {
-      const profile = await prisma.profile.findUnique({ where: { userId: uid } });
-      if (!langOverride && profile?.locale) language = profile.locale;
-      if (profile?.region) region = profile.region;
+    // Cookie-först: middleware.ts stämplar nw_locale/nw_region på VARJE
+    // request, så Prisma-uppslaget behövs bara när cookies saknas (t.ex. en
+    // gammal klient). Det tar bort en Neon-rundresa från varje kortöppning.
+    const cookieLocale = c.get("nw_locale")?.value || null;
+    const cookieRegion = c.get("nw_region")?.value || null;
+    let language = langOverride || cookieLocale || "sv-SE";
+    let region = cookieRegion || "SE";
+    if (uid && ((!langOverride && !cookieLocale) || !cookieRegion)) {
+      const profile = await prisma.profile.findUnique({
+        where: { userId: uid },
+        select: { locale: true, region: true },
+      });
+      if (!langOverride && !cookieLocale && profile?.locale) language = profile.locale;
+      if (!cookieRegion && profile?.region) region = profile.region;
     }
 
     const qs = new URLSearchParams({
@@ -131,9 +139,17 @@ export async function GET(req: Request) {
     });
     if (!r.ok) return NextResponse.json({ ok: false, error: `tmdb ${r.status}` }, { status: 502 });
 
+    // Routen är force-dynamic → Next skickar annars no-store, vilket slår ut
+    // WKWebView:s HTTP-cache trots att klienten ber om force-cache. Query-
+    // strängen (type/id/language) nycklar redan svaret, och detaljerna är
+    // stabila på timskala — låt klienten cacha privat i en timme.
+    const CACHE_HEADERS = { "Cache-Control": "private, max-age=3600" } as const;
+
     if (type === "movie") {
       const d = (await r.json()) as MovieDetails;
-      const blurDataURL = await buildBlurDataURL(d.poster_path);
+      // Starta blur-hämtningen (extra TMDB-bildanrop) direkt och invänta den
+      // sist, så den överlappar övrigt arbete i stället för att blockera svaret.
+      const blurPromise = buildBlurDataURL(d.poster_path);
       const res: NormalizedDetails = {
         ok: true,
         id: d.id,
@@ -148,13 +164,14 @@ export async function GET(req: Request) {
         voteAverage: typeof d.vote_average === "number" ? d.vote_average : null,
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
         genres: genreNames(d.genres),
-        blurDataURL,
+        blurDataURL: await blurPromise,
         trailer: pickTrailer(d.videos?.results),
       };
-      return NextResponse.json(res);
+      return NextResponse.json(res, { headers: CACHE_HEADERS });
     } else {
       const d = (await r.json()) as TvDetails;
-      const blurDataURL = await buildBlurDataURL(d.poster_path);
+      // Se kommentaren i movie-grenen — blur får inte blockera svaret.
+      const blurPromise = buildBlurDataURL(d.poster_path);
       const res: NormalizedDetails = {
         ok: true,
         id: d.id,
@@ -169,10 +186,10 @@ export async function GET(req: Request) {
         voteAverage: typeof d.vote_average === "number" ? d.vote_average : null,
         voteCount: typeof d.vote_count === "number" ? d.vote_count : null,
         genres: genreNames(d.genres),
-        blurDataURL,
+        blurDataURL: await blurPromise,
         trailer: pickTrailer(d.videos?.results),
       };
-      return NextResponse.json(res);
+      return NextResponse.json(res, { headers: CACHE_HEADERS });
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -22,33 +22,24 @@ type Payload = {
   outgoing: InviteItem[];
 };
 
-async function cleanup(): Promise<void> {
-  // expired pending
-  await prisma.groupInvite.deleteMany({
-    where: { status: "pending", expiresAt: { lt: new Date() } },
-  });
-
-  // invites vars grupp saknas
-  const groups = await prisma.group.findMany({ select: { code: true } });
-  const existing = new Set(groups.map((g) => g.code));
-  await prisma.groupInvite.deleteMany({
-    where: {
-      status: "pending",
-      NOT: { groupCode: { in: Array.from(existing) } },
-    },
-  });
-}
-
 export async function GET(): Promise<ReturnType<typeof NextResponse.json<Payload>>> {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? "";
 
-  await cleanup();
+  // Städningen (radera utgångna + föräldralösa invites) låg tidigare HÄR och
+  // kördes på varje poll (var 5–15 s per klient): två deleteMany-skrivningar
+  // plus en OBEGRÄNSAD group.findMany över alla grupper — tre Neon-queries per
+  // tick. Den sköts nu av app/api/cron/cleanup i stället; utgångna invites
+  // filtreras bort i where-klausulerna nedan så de aldrig visas ändå.
+  const now = new Date();
+  // Speglar cleanup():s gamla radering (expiresAt < nu): utgångna döljs, men
+  // äldre rader utan TTL (expiresAt null) visas precis som förut.
+  const notExpired = { OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] };
 
   // Returnera ENDAST pending – gamla accepted/declined visas inte längre i listan
   const [incoming, outgoing] = await Promise.all([
     prisma.groupInvite.findMany({
-      where: { toUserId: uid, status: "pending" },
+      where: { toUserId: uid, status: "pending", ...notExpired },
       orderBy: { createdAt: "desc" },
       take: 50,
       include: {
@@ -62,7 +53,7 @@ export async function GET(): Promise<ReturnType<typeof NextResponse.json<Payload
       },
     }),
     prisma.groupInvite.findMany({
-      where: { fromUserId: uid, status: "pending" },
+      where: { fromUserId: uid, status: "pending", ...notExpired },
       orderBy: { createdAt: "desc" },
       take: 50,
       include: {

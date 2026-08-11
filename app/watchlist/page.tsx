@@ -4,8 +4,8 @@
 // anrop (lib/watchlistCards) och blockerade tidigare förstamålningen — det var
 // den värsta "knapptryck tar lång tid"-ytan i appen. Skalet renderar direkt,
 // klienten hämtar via /api/watchlist/list och visar skelett under tiden.
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// Sidan är därför statiskt prerenderad och fullt prefetchbar — flikbytet
+// serveras direkt ur router-cachen utan serverrundresa.
 
 import WatchlistClient from "./WatchlistClient";
 import { PageHeader } from "../components/ui/kit";

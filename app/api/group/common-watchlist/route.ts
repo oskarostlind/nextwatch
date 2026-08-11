@@ -30,27 +30,33 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code")?.trim().toUpperCase() ?? "";
   if (!code) return NextResponse.json({ ok: false, message: "Kod saknas." }, { status: 400 });
 
-  // Authz: bara medlemmar får se gruppens gemensamma titlar.
-  const members = await prisma.groupMember.findMany({
-    where: { groupCode: code },
-    select: { userId: true },
-  });
+  // Authz-kollen och överlappen är oberoende (groupBy:n filtrerar relationellt
+  // på gruppmedlemskap i stället för på en id-lista) — kör dem i EN parallell
+  // våg så GroupTab-monteringen betalar en Neon-rundresa i stället för två.
+  // Medlemskapet kontrolleras FÖRST nedan: är anroparen inte medlem kastas
+  // överlappsresultatet bort utan att någonsin skickas, så inget läcker.
+  const [members, overlaps] = await Promise.all([
+    prisma.groupMember.findMany({
+      where: { groupCode: code },
+      select: { userId: true },
+    }),
+    // Överlapp i DB:n: gruppera på titel, kräve ≥2 sparare. groupBy håller det
+    // till EN query oavsett gruppstorlek.
+    prisma.watchlist.groupBy({
+      by: ["tmdbId", "mediaType"],
+      where: { user: { groupMembers: { some: { groupCode: code } } } },
+      _count: { userId: true },
+      having: { userId: { _count: { gte: 2 } } },
+      orderBy: { _count: { userId: "desc" } },
+      take: MAX_ITEMS,
+    }),
+  ]);
   const memberIds = members.map((m) => m.userId);
+  // Authz: bara medlemmar får se gruppens gemensamma titlar.
   if (!memberIds.includes(me)) {
     return NextResponse.json({ ok: false, message: "Inte medlem i gruppen." }, { status: 403 });
   }
   if (memberIds.length < 2) return NextResponse.json({ ok: true, memberCount: memberIds.length, items: [] });
-
-  // Överlapp i DB:n: gruppera på titel, kräve ≥2 sparare. groupBy håller det
-  // till EN query oavsett gruppstorlek.
-  const overlaps = await prisma.watchlist.groupBy({
-    by: ["tmdbId", "mediaType"],
-    where: { userId: { in: memberIds } },
-    _count: { userId: true },
-    having: { userId: { _count: { gte: 2 } } },
-    orderBy: { _count: { userId: "desc" } },
-    take: MAX_ITEMS,
-  });
 
   if (overlaps.length === 0) {
     return NextResponse.json({ ok: true, memberCount: memberIds.length, items: [] });

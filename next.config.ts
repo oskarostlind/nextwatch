@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Tab-tillbaka-navigering serveras ur klientens router-cache i 60s i stället
+  // för en ny serverrendering (Next 15 defaultar staleTimes.dynamic till 0, så
+  // varje flik-tryck gick till servern). Varje flik re-hämtar ändå sin data
+  // klient-side via modul-stores, så innehållet blir aldrig gammalt.
+  experimental: { staleTimes: { dynamic: 60, static: 300 } },
   images: {
     // Ingen Vercel-bildoptimering. Mätt på produktion 2026-07-22 svarade
     // /_next/image 402 OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED — kvoten är

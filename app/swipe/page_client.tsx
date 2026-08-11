@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
@@ -12,9 +13,9 @@ import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
-import SwipeLimitWall, { reportSwipeLimitFrom } from "@/app/components/client/SwipeLimitWall";
+import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
-import ShareTitleModal, { type ShareItem } from "@/app/components/client/ShareTitleModal";
+import type { ShareItem } from "@/app/components/client/ShareTitleModal";
 import { registerSwipeForAds } from "@/lib/admobAds";
 import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
@@ -31,12 +32,29 @@ import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
-import MatchOverlay, { type GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
-import PremiumUpsellModal, { maybeTriggerAdUpsell } from "@/app/components/client/PremiumUpsellModal";
-import RatingModal from "@/app/components/client/RatingModal";
-import GuideOverlay from "@/app/components/client/GuideOverlay";
+import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
+import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
+import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
+
+/* ---------- overlays som bara syns efter en interaktion ----------
+   Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
+   första målningen. Med dynamic(..., { ssr: false }) laddas koden först när
+   overlayn öppnas — den här filen är ~43 kB källkod och parsningen av den
+   dominerar swipe-flikens första mount i WKWebView. */
+const MatchOverlay = dynamic(() => import("@/app/components/ui/MatchOverlay"), { ssr: false });
+const PremiumUpsellModal = dynamic(() => import("@/app/components/client/PremiumUpsellModal"), {
+  ssr: false,
+});
+const RatingModal = dynamic(() => import("@/app/components/client/RatingModal"), { ssr: false });
+const GuideOverlay = dynamic(() => import("@/app/components/client/GuideOverlay"), { ssr: false });
+const ShareTitleModal = dynamic(() => import("@/app/components/client/ShareTitleModal"), {
+  ssr: false,
+});
+const SwipeLimitWall = dynamic(() => import("@/app/components/client/SwipeLimitWall"), {
+  ssr: false,
+});
 
 /* ---------- types ---------- */
 
@@ -198,20 +216,26 @@ export async function fetchWatchProviders(
 }
 
 export async function fetchDetailsWithFallback(type: MediaType, id: number) {
+  // Båda språken skjuts iväg direkt. Tidigare inväntades sv-SE innan en-US ens
+  // startade — två seriella turer på mobilnät för varje titel som saknar svensk
+  // beskrivning. Nu ligger reservsvaret redan i luften när vi behöver det, och
+  // med Cache-Control på /api/tmdb/details kostar den extra förfrågan i princip
+  // ingenting vid återbesök.
   const p1 = fetch(`/api/tmdb/details?type=${type}&id=${id}`, {
     cache: "force-cache",
   })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
-  const d1 = await p1;
-  let parsed = parseDetails(d1);
-  if (parsed && parsed.overview) return parsed;
-
   const p2 = fetch(`/api/tmdb/details?type=${type}&id=${id}&language=en-US`, {
     cache: "force-cache",
   })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
+
+  const d1 = await p1;
+  let parsed = parseDetails(d1);
+  if (parsed && parsed.overview) return parsed;
+
   const d2 = await p2;
   parsed = parseDetails(d2) ?? parsed;
   return parsed;
@@ -582,10 +606,18 @@ export default function SwipePageClient() {
 
   /* ---------- render ---------- */
 
-  const DIST_THRESHOLD = 110;
+  // Höjd från 110 eftersom dragElastic numera är 1:1 i de tre riktningarna —
+  // kortet följer fingret hela vägen, så samma fysiska rörelse ger längre
+  // offset än förut. 130 håller släppkänslan kalibrerad.
+  const DIST_THRESHOLD = 130;
   const VELOCITY_THRESHOLD = 700;
 
-  async function swipeOut(dir: "left" | "right" | "up") {
+  /**
+   * Kastar ut toppkortet. `releaseVelocity` är fingrets hastighet vid släpp —
+   * fjädern ärver den, så en snabb flick lämnar skärmen fortare än ett
+   * knapptryck. Kortet känns kastat i stället för uppspelat.
+   */
+  async function swipeOut(dir: "left" | "right" | "up", releaseVelocity = 0) {
     const c = cards[0];
     if (!c) return;
     const target =
@@ -594,7 +626,28 @@ export default function SwipePageClient() {
         : dir === "left"
         ? { x: -560, opacity: 0 }
         : { y: -760, opacity: 0 };
-    await controls.start({ ...target, transition: { duration: 0.22 } });
+    await controls.start({
+      ...target,
+      transition: {
+        x: {
+          type: "spring",
+          stiffness: 200,
+          damping: 26,
+          velocity: releaseVelocity,
+          restDelta: 1,
+          restSpeed: 10,
+        },
+        y: {
+          type: "spring",
+          stiffness: 200,
+          damping: 26,
+          velocity: releaseVelocity,
+          restDelta: 1,
+          restSpeed: 10,
+        },
+        opacity: { duration: 0.18, ease: "easeOut" },
+      },
+    });
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
@@ -682,7 +735,9 @@ export default function SwipePageClient() {
       <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
       {feedLoading ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-neutral-400">Laddar förslag…</p>
+          {/* Samma geometri som kortet (2/3, max 420 px, rounded-2xl) — övergången
+              skelett → poster blir en ren korsning utan hopp i layouten. */}
+          <CardSkeleton />
         </div>
       ) : feedError ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
@@ -709,22 +764,26 @@ export default function SwipePageClient() {
                   animate={controls}
                   drag
                   dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-                  dragElastic={0.8}
+                  // 1:1-följning i de tre riktningar som har en handling. Med 0.8
+                  // tolkade nollstora dragConstraints all rörelse som översläng och
+                  // kortet följde bara 80 % av fingret. Nedåt finns ingen handling —
+                  // där får det studsa som gummiband.
+                  dragElastic={{ left: 1, right: 1, top: 1, bottom: 0.4 }}
                   onDragEnd={(_, info) => {
                     const { offset, velocity } = info;
                     const up =
                       (offset.y < -DIST_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD) &&
                       Math.abs(offset.y) > Math.abs(offset.x);
                     if (up) {
-                      void swipeOut("up");
+                      void swipeOut("up", velocity.y);
                       return;
                     }
                     if (offset.x > DIST_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
-                      void swipeOut("right");
+                      void swipeOut("right", velocity.x);
                       return;
                     }
                     if (offset.x < -DIST_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
-                      void swipeOut("left");
+                      void swipeOut("left", velocity.x);
                       return;
                     }
                     void controls.start({
@@ -734,13 +793,23 @@ export default function SwipePageClient() {
                     });
                   }}
                 >
-                  <StaticCard
-                    card={card}
-                    flipped={flippedId === card.id}
-                    interactive
-                    onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
-                    onShare={shareCard}
-                  />
+                  {/* Nya toppkortet växer från exakt den skala/position det hade
+                      som kort #2 i stacken, i stället för att snäppa till full
+                      storlek på en bildruta. Bara transform — ingen layoutkostnad. */}
+                  <motion.div
+                    className="h-full max-h-full w-full min-h-0"
+                    initial={{ scale: 0.95, y: 10 }}
+                    animate={{ scale: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  >
+                    <StaticCard
+                      card={card}
+                      flipped={flippedId === card.id}
+                      interactive
+                      onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                      onShare={shareCard}
+                    />
+                  </motion.div>
 
                   <SwipeStampOverlays
                     likeOpacity={likeOpacity}
@@ -759,7 +828,9 @@ export default function SwipePageClient() {
             return (
               <div
                 key={card.id}
-                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92]"
+                // transition-transform: när toppkortet försvinner flyttas #3 upp
+                // till #2:s plats — utan detta hoppar den ett steg på en bildruta.
+                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92] transition-transform duration-200 ease-out"
                 style={{
                   zIndex: z,
                   transform: `translateY(${translateY}px) scale(${scale})`,
@@ -781,13 +852,15 @@ export default function SwipePageClient() {
       <div data-guide="action-dock">
         <ActionDock
           disabled={!cards[0] || feedLoading}
-          onNope={() => void swipeOut("left")}
+          // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
+          // så knappen känns som ett bestämt kast i stället för en avspelning.
+          onNope={() => void swipeOut("left", -900)}
           onInfo={() => {
             const c = cards[0];
             if (c) setFlippedId((p) => (p === c.id ? null : c.id));
           }}
           onUndo={handleUndo}
-          onLike={() => void swipeOut("right")}
+          onLike={() => void swipeOut("right", 900)}
         />
       </div>
 
@@ -841,9 +914,10 @@ export function SwipeStampOverlays({
         style={{ opacity: seenOpacity, scale: seenScale, rotate: seenRotate }}
         className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
       >
-        <motion.div style={{ opacity: seenOpacity }}>
-          <ChevronUp className="h-8 w-8 text-sky-400" strokeWidth={3} />
-        </motion.div>
+        {/* Ingen egen opacity här — föräldern driver redan seenOpacity. Med en
+            extra wrapper blev det opacity² och riktningspilen var nästan osynlig
+            tills gesten redan var färdig. */}
+        <ChevronUp className="h-8 w-8 text-sky-400" strokeWidth={3} />
         <div className="flex items-center gap-2 rounded-lg border-4 border-sky-400 px-4 py-2 text-xl font-black uppercase tracking-widest text-sky-400">
           <Eye className="h-7 w-7" strokeWidth={2.5} />
           Sett
@@ -883,7 +957,9 @@ export function StaticCard({
       onClick={interactive ? onFlip : undefined}
     >
       <div
-        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 [transform-style:preserve-3d]"
+        // Egen easing + will-change: rotateY:n ska ligga kvar på kompositören hela
+        // 3D-rotationen (se WKWebView-kommentaren om preserve-3d längre ned).
+        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-transform [transform-style:preserve-3d]"
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
@@ -1074,7 +1150,9 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
+      {/* overscroll-contain: iOS studs-scroll ska stanna i beskrivningen och inte
+          kedjas vidare till body när texten tar slut. */}
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
         {card.overview || "Ingen beskrivning tillgänglig."}
       </div>
 

@@ -19,6 +19,12 @@
 // eller behörighetsstyrande — en gammal cache där ger fel svar, inte bara ett
 // långsammare.
 //
+// Viktig distinktion: grupp-STATE (medlemmar, röster, matchningar) cachas
+// fortfarande aldrig, men grupp-DECKENS kandidater (group_deck_v1:<KOD> i
+// lib/swipeDeckStore.ts) får cachas KORT. Kandidater är rekommendationer, inte
+// behörighetsstate — ett inaktuellt kort rättas server-side vid rösttillfället,
+// och kort TTL begränsar hur länge en gammal gruppsammansättning kan synas.
+//
 // localStorage och inte @capacitor/preferences med flit: en cache som ITP
 // vräker är ofarlig, och samma kod fungerar då på webb och native. Preferences
 // är rätt för sessionstoken (app/components/client/SessionPersistence.tsx) just

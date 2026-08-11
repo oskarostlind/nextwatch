@@ -81,7 +81,7 @@ export function Button({
     <button
       {...rest}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
         BUTTON_VARIANTS[variant],
         className
       )}
@@ -118,7 +118,7 @@ export function Chip({
       type="button"
       onClick={onClick}
       className={cx(
-        "rounded-full border px-3 py-1.5 text-sm transition",
+        "relative rounded-full border px-3 py-1.5 text-sm transition after:absolute after:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40",
         selected ? on : "border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
         className
       )}
@@ -147,7 +147,7 @@ export function SegmentedTabs<T extends string>({
           key={t.id}
           type="button"
           onClick={() => onChange(t.id)}
-          className="relative flex-1 px-3 py-2 text-sm font-medium transition-colors"
+          className="relative flex-1 rounded-full px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
         >
           {value === t.id && (
             <motion.div

@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
+import { prisma, withDbRetry } from "@/lib/prisma";
 import { touchLastActive } from "@/lib/lastActive";
 
 type FriendsListUser = {
@@ -23,15 +23,39 @@ export async function GET() {
     // Throttlad aktivitetsstämpel (~1/min) — driver "senast aktiv" på vänprofiler.
     touchLastActive(me);
 
-    // Vänner (båda ordningar)
-    const friendships = await prisma.friendship.findMany({
-      where: { OR: [{ userId: me }, { friendId: me }] },
-      include: {
-        user: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-        friend: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    // Endpointen pollas var 5–15:e sekund (lib/socialStore.ts) — kör de tre
+    // oberoende queriesarna i EN parallell våg i stället för seriellt, så
+    // routen kostar en Neon-rundresa i stället för tre. withDbRetry fångar
+    // Neon-kallstart (P1001) så pollen inte visar fel i onödan.
+    const [friendships, pendingIn, pendingOut] = await withDbRetry(() =>
+      Promise.all([
+        // Vänner (båda ordningar)
+        prisma.friendship.findMany({
+          where: { OR: [{ userId: me }, { friendId: me }] },
+          include: {
+            user: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+            friend: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        // Pending inkommande
+        prisma.friendRequest.findMany({
+          where: { toUserId: me, status: "pending" },
+          include: {
+            fromUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        // Pending utgående
+        prisma.friendRequest.findMany({
+          where: { fromUserId: me, status: "pending" },
+          include: {
+            toUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]),
+    );
 
     const friends = friendships.map((f) => {
       const other = f.userId === me ? f.friend : f.user;
@@ -48,24 +72,6 @@ export async function GET() {
         other: otherUser,
         createdAt: f.createdAt,
       };
-    });
-
-    // Pending inkommande
-    const pendingIn = await prisma.friendRequest.findMany({
-      where: { toUserId: me, status: "pending" },
-      include: {
-        fromUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // Pending utgående
-    const pendingOut = await prisma.friendRequest.findMany({
-      where: { fromUserId: me, status: "pending" },
-      include: {
-        toUser: { select: { id: true, username: true, profile: { select: { displayName: true, avatarId: true } } } },
-      },
-      orderBy: { createdAt: "desc" },
     });
 
     return NextResponse.json({

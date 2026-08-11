@@ -6,7 +6,8 @@
 // "knapptryck tar lång tid"-känslan. Skeletten ger omedelbar respons.
 
 function Pulse({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-white/5 ${className}`} />;
+  // bg-white/10: /5 dimmades ned till nästan osynligt av animate-pulse på #0a0a0a.
+  return <div className={`animate-pulse rounded-xl bg-white/10 ${className}`} />;
 }
 
 /** Rubrik + undertext — matchar PageHeader-ytan. */

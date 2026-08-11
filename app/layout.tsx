@@ -5,7 +5,6 @@ import Script from "next/script";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
-import { cookies } from "next/headers";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 
 const ADSENSE_CLIENT_FALLBACK = "ca-pub-2616665688666431";
@@ -30,14 +29,11 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // App Router-regeln: anropa cookies() på serversidan
-  await cookies();
-
   const adsClient = adsenseClientId() ?? ADSENSE_CLIENT_FALLBACK;
 
   return (

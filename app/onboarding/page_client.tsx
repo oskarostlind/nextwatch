@@ -171,11 +171,19 @@ const STEPS = [
   { id: 3, title: "Konto", subtitle: "Gäst eller registrera dig" },
 ] as const;
 
-export default function Client() {
+export default function Client({
+  initialName = "",
+  hasAccount = false,
+}: {
+  /** Förifyllt visningsnamn (t.ex. namnet Apple gav vid Sign in with Apple). */
+  initialName?: string;
+  /** true = användaren är redan inloggad (Apple/lösenord) → inget kontosteg. */
+  hasAccount?: boolean;
+} = {}) {
   const router = useRouter();
 
   const [step, setStep] = useState(0);
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(initialName);
   const [username, setUsername] = useState("");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
@@ -253,9 +261,11 @@ export default function Client() {
     return () => clearTimeout(t);
   }, [username]);
 
+  // Visningsnamnet är AVSIKTLIGT frivilligt: en användare som loggat in med
+  // Apple ska aldrig tvingas skriva in namnet igen (App Store guideline 4).
+  // Saknas det faller vi tillbaka på användarnamnet i backend.
   function step0Valid() {
     return (
-      displayName.trim().length > 0 &&
       parsedAge() !== null &&
       usernameValidRequired(username) &&
       usernameStatus === "available"
@@ -298,14 +308,14 @@ export default function Client() {
   async function saveAndContinue(redirect: string) {
     setErr(null);
     if (!step0Valid()) {
-      setErr("Kontrollera namn, användarnamn och ålder.");
+      setErr("Kontrollera användarnamn och ålder.");
       setStep(0);
       return;
     }
     setLoading(true);
 
     const payload = {
-      displayName,
+      displayName: displayName.trim() || null,
       username,
       age: parsedAge(),
       uiLanguage: language,
@@ -356,6 +366,15 @@ export default function Client() {
 
   const progress = ((step + 1) / STEPS.length) * 100;
 
+  // Redan inloggad (t.ex. via Apple) → sista steget är inte "skapa konto" utan
+  // bara en bekräftelse. Att visa registreringsval här skulle be om e-post som
+  // vi redan har.
+  const stepMeta = STEPS.map((s) =>
+    hasAccount && s.id === 3
+      ? { ...s, title: "Klart", subtitle: "Spara profilen och börja swipa" }
+      : s
+  );
+
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-4 py-10">
       {/* Header */}
@@ -363,14 +382,14 @@ export default function Client() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400/80">
           Välkommen till NextWatch
         </p>
-        <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{STEPS[step].title}</h1>
-        <p className="mt-1.5 text-sm text-neutral-400">{STEPS[step].subtitle}</p>
+        <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{stepMeta[step].title}</h1>
+        <p className="mt-1.5 text-sm text-neutral-400">{stepMeta[step].subtitle}</p>
       </div>
 
       {/* Progress */}
       <div className="mb-6">
         <div className="mb-2 flex justify-between text-[11px] font-medium">
-          {STEPS.map((s, i) => (
+          {stepMeta.map((s, i) => (
             <span
               key={s.id}
               className={i < step ? "text-cyan-400/70" : i === step ? "text-cyan-300" : "text-neutral-600"}
@@ -418,15 +437,22 @@ export default function Client() {
           {step === 0 && (
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm text-neutral-300">Visningsnamn</label>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  Visningsnamn <span className="text-neutral-500">(valfritt)</span>
+                </label>
                 <input
                   className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
                   placeholder="Ditt namn…"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  required
-                  autoFocus
+                  autoComplete="name"
+                  autoFocus={!initialName}
                 />
+                {initialName ? (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Hämtat från ditt Apple-ID. Ändra om du vill.
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -574,7 +600,26 @@ export default function Client() {
           )}
 
           {/* Steg 4: Välj gäst eller konto */}
-          {step === 3 && (
+          {step === 3 && hasAccount && (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-400">
+                Profilen är klar och kopplad till ditt konto.
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/swipe")}
+                className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
+              >
+                <p className="font-semibold text-cyan-300">Börja swipa</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Vi sparar profilen och tar dig vidare.
+                </p>
+              </button>
+            </div>
+          )}
+
+          {step === 3 && !hasAccount && (
             <div className="space-y-4">
               <p className="text-sm text-neutral-400">
                 Profilen är klar! Välj hur du vill fortsätta.

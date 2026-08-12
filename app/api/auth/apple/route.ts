@@ -4,10 +4,27 @@ import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
 import { verifyAppleIdentityToken } from "../../../../lib/appleAuth";
 import { setAuthCookies } from "../../../../lib/auth";
+import { sessionCookieOpts } from "../../../../lib/cookies";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Apple skickar förnamn/efternamn EN gång — vid första auktoriseringen. Vi
+ * plockar upp det här och sparar det som visningsnamn, för guideline 4 säger
+ * att en användare aldrig ska behöva fylla i namn/e-post som
+ * AuthenticationServices redan lämnat. Onboardingen läser nw_apple_name när
+ * profilen ännu inte finns.
+ */
+function fullNameFrom(given: unknown, family: unknown): string | null {
+  const clean = (v: unknown) =>
+    typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+  const name = [clean(given), clean(family)].filter(Boolean).join(" ").trim();
+  return name.length > 0 ? name : null;
+}
+
+const APPLE_NAME_COOKIE_MAX_AGE = 60 * 30;
 
 export async function POST(req: Request) {
   try {
@@ -19,7 +36,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const { identityToken } = (await req.json()) as { identityToken?: string };
+    const body = (await req.json()) as {
+      identityToken?: string;
+      givenName?: string | null;
+      familyName?: string | null;
+      email?: string | null;
+    };
+    const identityToken = body.identityToken;
+    const appleFullName = fullNameFrom(body.givenName, body.familyName);
     if (!identityToken) {
       return NextResponse.json(
         { ok: false, message: "Saknar Apple-token" },
@@ -31,7 +55,7 @@ export async function POST(req: Request) {
 
     let user = await prisma.user.findUnique({
       where: { appleSub: claims.sub },
-      select: { id: true, profile: { select: { userId: true } } },
+      select: { id: true, profile: { select: { userId: true, displayName: true } } },
     });
 
     if (!user && claims.email) {
@@ -40,7 +64,7 @@ export async function POST(req: Request) {
         select: {
           id: true,
           appleSub: true,
-          profile: { select: { userId: true } },
+          profile: { select: { userId: true, displayName: true } },
         },
       });
 
@@ -77,7 +101,7 @@ export async function POST(req: Request) {
             appleSub: true,
             passwordHash: true,
             email: true,
-            profile: { select: { userId: true } },
+            profile: { select: { userId: true, displayName: true } },
           },
         });
         if (guest && !guest.appleSub && !guest.passwordHash) {
@@ -104,7 +128,7 @@ export async function POST(req: Request) {
           emailVerified: claims.emailVerified ? new Date() : null,
           appleSub: claims.sub,
         },
-        select: { id: true, profile: { select: { userId: true } } },
+        select: { id: true, profile: { select: { userId: true, displayName: true } } },
       });
     }
 
@@ -113,9 +137,29 @@ export async function POST(req: Request) {
       data: { lastLoginAt: new Date() },
     });
 
+    // Namnet från Apple skrivs in åt användaren i stället för att efterfrågas:
+    // finns profilen redan fyller vi bara i ett tomt visningsnamn (skriver
+    // aldrig över ett namn användaren själv valt).
+    if (appleFullName && user.profile && !user.profile.displayName) {
+      await prisma.profile.update({
+        where: { userId: user.id },
+        data: { displayName: appleFullName },
+      });
+    }
+
     const redirect = user.profile ? "/swipe" : "/onboarding";
     const res = NextResponse.json({ ok: true, redirect });
     await setAuthCookies(res, user.id, { remember: true });
+
+    // Ingen profil ännu → onboardingen förifyller visningsnamnet från den här
+    // kortlivade cookien (httpOnly, läses av server-komponenten).
+    if (appleFullName && !user.profile) {
+      res.cookies.set(
+        "nw_apple_name",
+        appleFullName,
+        sessionCookieOpts(APPLE_NAME_COOKIE_MAX_AGE, true)
+      );
+    }
     return res;
   } catch (err) {
     console.error("[auth/apple]", err);

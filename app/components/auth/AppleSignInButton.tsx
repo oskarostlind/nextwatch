@@ -30,10 +30,25 @@ export default function AppleSignInButton() {
         return;
       }
 
+      // Namn/e-post levereras av AuthenticationServices ENBART vid den allra
+      // första auktoriseringen — därefter är fälten tomma för alltid. Apple
+      // kräver (guideline 4) att vi tar emot dem här i stället för att be
+      // användaren skriva in dem igen, så de skickas med till servern direkt.
+      const identity = result.response as {
+        givenName?: string | null;
+        familyName?: string | null;
+        email?: string | null;
+      };
+
       const res = await fetch("/api/auth/apple", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identityToken }),
+        body: JSON.stringify({
+          identityToken,
+          givenName: identity.givenName ?? null,
+          familyName: identity.familyName ?? null,
+          email: identity.email ?? null,
+        }),
       });
       const data = (await res.json()) as {
         ok?: boolean;

@@ -162,8 +162,13 @@ export async function POST(req: NextRequest) {
     const uiLanguageRaw = requireString(body, "uiLanguage");
     const uiLanguage = uiLanguageRaw ? uiLanguageRaw : (finalLocale.split("-")[0] || "sv");
 
+    // displayName är FRIVILLIGT. En användare som loggat in med Apple ska inte
+    // tvingas skriva in sitt namn igen (App Store guideline 4) — saknas det
+    // används namnet Apple gav (nw_apple_name) eller användarnamnet.
+    const appleName = jar.get("nw_apple_name")?.value?.trim() || null;
+    const finalDisplayName = displayName || appleName || username;
+
     const missing: string[] = [];
-    if (!displayName) missing.push("displayName");
     if (!username) missing.push("username");
     if (!dobStr) missing.push("age");
     if (missing.length) {
@@ -191,7 +196,7 @@ export async function POST(req: NextRequest) {
     const dobDate = new Date(dobStr!);
 
     const dataCommon = {
-      displayName,
+      displayName: finalDisplayName,
       dob: dobDate,
       region: finalRegion,
       locale: finalLocale,
@@ -230,6 +235,8 @@ export async function POST(req: NextRequest) {
     res.cookies.set("nw_uid", await signUid(uid), sessionCookieOpts(oneYear, true));
     res.cookies.set("nw_region", finalRegion, sessionCookieOpts(oneYear, false));
     res.cookies.set("nw_locale", finalLocale, sessionCookieOpts(oneYear, false));
+    // Apple-namnet är förbrukat när profilen finns.
+    res.cookies.set("nw_apple_name", "", sessionCookieOpts(0, true));
     return res;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

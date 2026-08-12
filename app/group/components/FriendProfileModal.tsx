@@ -33,11 +33,14 @@ export default function FriendProfileModal({
   friendId,
   onClose,
   onOpenChat,
+  onReport,
 }: {
   friendId: string | null;
   onClose: () => void;
   /** Öppnar filmchatten med vännen (stänger profilen först). */
   onOpenChat?: (friendId: string) => void;
+  /** Öppnar anmälningsdialogen (Guideline 1.2 — nåbar från profilen). */
+  onReport?: (friendId: string) => void;
 }) {
   const [prof, setProf] = useState<Prof | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +108,16 @@ export default function FriendProfileModal({
                   ))}
                 </div>
               </div>
+            )}
+
+            {onReport && (
+              <button
+                type="button"
+                onClick={() => onReport(prof.id)}
+                className="w-full rounded-xl border border-white/10 py-2 text-xs font-medium text-white/50 transition hover:bg-rose-500/10 hover:text-rose-300"
+              >
+                Anmäl användare
+              </button>
             )}
 
             <div>

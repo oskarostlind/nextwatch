@@ -7,6 +7,7 @@ import Modal from "@/app/components/ui/Modal";
 import PosterImage from "@/app/components/ui/PosterImage";
 import { fieldClass } from "@/app/components/ui/kit";
 import GroupSettingsModal from "./GroupSettingsModal";
+import ReportUserModal from "@/app/components/client/ReportUserModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
@@ -176,6 +177,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   const memberIds = new Set(members.map((m) => m.userId));
 
   const [meUserId, setMeUserId] = useState<string | null>(initialMeUserId || null);
+  // Guideline 1.2: anmäl en gruppmedlem.
+  const [reportMemberId, setReportMemberId] = useState<string | null>(null);
 
   // Kugghjulet visas bara för gruppens skapare (servern verifierar också vid PATCH).
   const [isCreator, setIsCreator] = useState(false);
@@ -372,25 +375,50 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
               >
                 <span className="font-medium text-white/90">{m.displayName ?? m.username ?? "Okänd"}</span>
-                {meUserId === m.userId ? (
-                  <span className="text-xs text-white/60">Du</span>
-                ) : isCreator ? (
-                  <button
-                    type="button"
-                    aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
-                    title="Ta bort ur gruppen"
-                    onClick={() => void removeMember(m.userId)}
-                    className="relative flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/20 text-rose-400 transition after:absolute after:-inset-1.5 hover:bg-rose-500/10"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : null}
+                <span className="flex items-center gap-2">
+                  {meUserId === m.userId ? (
+                    <span className="text-xs text-white/60">Du</span>
+                  ) : (
+                    <>
+                      {/* Guideline 1.2: anmälan nåbar där andra användare visas. */}
+                      <button
+                        type="button"
+                        onClick={() => setReportMemberId(m.userId)}
+                        className="rounded-lg px-2 py-1 text-[11px] font-medium text-white/45 transition hover:bg-rose-500/10 hover:text-rose-300"
+                      >
+                        Anmäl
+                      </button>
+                      {isCreator ? (
+                        <button
+                          type="button"
+                          aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
+                          title="Ta bort ur gruppen"
+                          onClick={() => void removeMember(m.userId)}
+                          className="relative flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/20 text-rose-400 transition after:absolute after:-inset-1.5 hover:bg-rose-500/10"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
         </div>
 
         <CommonWatchlistSection code={code} memberCount={members.length} />
+
+        <ReportUserModal
+          userId={reportMemberId}
+          userLabel={
+            members.find((m) => m.userId === reportMemberId)?.displayName ??
+            members.find((m) => m.userId === reportMemberId)?.username ??
+            undefined
+          }
+          onClose={() => setReportMemberId(null)}
+          onReported={() => void refreshSocial()}
+        />
 
         <Modal open={inviteOpen} onClose={() => setInviteOpen(false)}>
           <div className="p-2">

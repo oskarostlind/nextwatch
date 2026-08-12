@@ -193,6 +193,16 @@ export async function POST(req: NextRequest) {
       data: { username },
     });
 
+    // Guideline 1.2: godkännandet av villkoren tidsstämplas på användaren.
+    // updateMany med termsAcceptedAt: null gör att ett senare sparande av
+    // profilen inte flyttar fram det ursprungliga datumet.
+    if (body.termsAccepted === true) {
+      await prisma.user.updateMany({
+        where: { id: uid, termsAcceptedAt: null },
+        data: { termsAcceptedAt: new Date() },
+      });
+    }
+
     const dobDate = new Date(dobStr!);
 
     const dataCommon = {

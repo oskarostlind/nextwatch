@@ -11,6 +11,9 @@ export default function RegisterClient() {
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  // Guideline 1.2: villkoren måste godkännas innan konto skapas — gäller både
+  // Apple-knappen och e-postformuläret.
+  const [terms, setTerms] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const router = useRouter();
 
@@ -29,6 +32,7 @@ export default function RegisterClient() {
       body: JSON.stringify({
         email,
         password: pwd,
+        termsAccepted: terms,
         from: Capacitor.isNativePlatform() ? "app" : undefined,
       }),
     });
@@ -50,7 +54,27 @@ export default function RegisterClient() {
       {err && <div className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-300">{err}</div>}
       {okMsg && <div className="rounded-xl bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{okMsg}</div>}
 
-      <AppleSignInButton />
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-neutral-300">
+        <input
+          type="checkbox"
+          checked={terms}
+          onChange={(e) => setTerms(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
+        />
+        <span>
+          Jag godkänner{" "}
+          <Link href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
+            användarvillkoren
+          </Link>{" "}
+          och{" "}
+          <Link href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
+            integritetspolicyn
+          </Link>
+          , och accepterar att stötande innehåll eller kränkande beteende inte tolereras.
+        </span>
+      </label>
+
+      <AppleSignInButton disabled={!terms} />
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
@@ -89,7 +113,8 @@ export default function RegisterClient() {
         </div>
         <button
           type="submit"
-          className="w-full rounded-xl bg-cyan-500 py-2.5 font-medium text-black hover:bg-cyan-400"
+          disabled={!terms}
+          className="w-full rounded-xl bg-cyan-500 py-2.5 font-medium text-black transition hover:bg-cyan-400 disabled:opacity-50"
         >
           Skapa konto med e-post
         </button>

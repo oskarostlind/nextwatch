@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
-import { verifyAppleIdentityToken } from "../../../../lib/appleAuth";
+import { verifyAppleIdentityToken, exchangeAppleAuthCode } from "../../../../lib/appleAuth";
 import { setAuthCookies } from "../../../../lib/auth";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       givenName?: string | null;
       familyName?: string | null;
       email?: string | null;
+      authorizationCode?: string | null;
     };
     const identityToken = body.identityToken;
     const appleFullName = fullNameFrom(body.givenName, body.familyName);
@@ -136,6 +137,19 @@ export async function POST(req: Request) {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    // Refresh token sparas enbart för att kunna återkalla kopplingen när
+    // kontot raderas (TN3194). Best-effort: saknas SIWA-nyckeln i miljön
+    // returnerar utbytet null och inloggningen fortsätter som vanligt.
+    if (body.authorizationCode) {
+      const refreshToken = await exchangeAppleAuthCode(body.authorizationCode);
+      if (refreshToken) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { appleRefreshToken: refreshToken },
+        });
+      }
+    }
 
     // Namnet från Apple skrivs in åt användaren i stället för att efterfrågas:
     // finns profilen redan fyller vi bara i ett tomt visningsnamn (skriver

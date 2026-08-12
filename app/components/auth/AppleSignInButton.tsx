@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 
-export default function AppleSignInButton() {
+export default function AppleSignInButton({ disabled = false }: { disabled?: boolean } = {}) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -38,6 +38,7 @@ export default function AppleSignInButton() {
         givenName?: string | null;
         familyName?: string | null;
         email?: string | null;
+        authorizationCode?: string | null;
       };
 
       const res = await fetch("/api/auth/apple", {
@@ -48,6 +49,9 @@ export default function AppleSignInButton() {
           givenName: identity.givenName ?? null,
           familyName: identity.familyName ?? null,
           email: identity.email ?? null,
+          // Behövs för att kunna återkalla kopplingen vid kontoradering
+          // (Apple TN3194) — servern byter den mot ett refresh token.
+          authorizationCode: identity.authorizationCode ?? null,
         }),
       });
       const data = (await res.json()) as {
@@ -77,7 +81,7 @@ export default function AppleSignInButton() {
       <button
         type="button"
         onClick={() => void onAppleSignIn()}
-        disabled={loading}
+        disabled={loading || disabled}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white py-2 font-medium text-black transition hover:bg-white/90 disabled:opacity-60"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>

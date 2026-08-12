@@ -188,6 +188,9 @@ export default function Client({
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
   const [ageInput, setAgeInput] = useState("");
+  // Guideline 1.2: UGC-appar måste låta användaren godkänna regler mot stötande
+  // innehåll innan hen kan delta. Obligatorisk — steg 0 släpper inte igenom.
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   function parsedAge(): number | null {
     const n = Number(ageInput.trim());
@@ -266,6 +269,7 @@ export default function Client({
   // Saknas det faller vi tillbaka på användarnamnet i backend.
   function step0Valid() {
     return (
+      termsAccepted &&
       parsedAge() !== null &&
       usernameValidRequired(username) &&
       usernameStatus === "available"
@@ -283,6 +287,8 @@ export default function Client({
         setErr("Vänta medan vi kollar användarnamnet…");
       } else if (ageInput.trim() && parsedAge() === null) {
         setErr("Ange en giltig ålder (7–99 år).");
+      } else if (!termsAccepted) {
+        setErr("Du behöver godkänna villkoren för att fortsätta.");
       } else {
         setErr("Fyll i alla obligatoriska fält.");
       }
@@ -325,6 +331,7 @@ export default function Client({
       favoriteGenres: likeGenres,
       dislikedGenres: dislikeGenres,
       favoriteKeywordIds,
+      termsAccepted,
     };
 
     try {
@@ -519,6 +526,29 @@ export default function Client({
                   </span>
                 </div>
               </div>
+
+              {/* Guideline 1.2: uttryckligt godkännande av villkoren, med regeln
+                  mot stötande innehåll och nåbara länkar. */}
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
+                  required
+                />
+                <span>
+                  Jag godkänner{" "}
+                  <a href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
+                    användarvillkoren
+                  </a>{" "}
+                  och{" "}
+                  <a href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
+                    integritetspolicyn
+                  </a>
+                  , och accepterar att stötande innehåll eller kränkande beteende inte tolereras.
+                </span>
+              </label>
             </div>
           )}
 

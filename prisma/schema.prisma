@@ -48,6 +48,15 @@ model User {
   // Sign in with Apple (unikt Apple-användar-id)
   appleSub String? @unique @map("apple_sub")
 
+  /// Refresh token från Apples /auth/token, sparad enbart för att kunna
+  /// återkalla inloggningen vid kontoradering (Apple TN3194 + Guideline
+  /// 5.1.1(v)). Null = tokenutbytet gick inte igenom eller kontot är äldre.
+  appleRefreshToken String? @map("apple_refresh_token")
+
+  /// När användaren godkände villkoren (Guideline 1.2 kräver att UGC-appar
+  /// låter användare godkänna regler mot stötande innehåll).
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+
   profile        Profile?
   ratings        Rating[]
   sharesSent     SharedTitle[] @relation("sharesSent")

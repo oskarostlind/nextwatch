@@ -69,11 +69,21 @@ export async function POST(req: NextRequest) {
       return jsonRes(429, "För många förfrågningar. Försök igen senare.");
     }
 
-    const body = (await req.json()) as { email?: string; password?: string; from?: string };
+    const body = (await req.json()) as {
+      email?: string;
+      password?: string;
+      from?: string;
+      termsAccepted?: boolean;
+    };
     const email = (body.email ?? "").trim().toLowerCase();
     const password = (body.password ?? "").trim();
     const fromApp = body.from === "app";
     if (!email || !password) return jsonRes(400, "E-post och lösenord krävs.");
+    // Guideline 1.2: kontot får inte skapas utan godkända villkor. Kryssrutan
+    // i UI:t är gaten, men servern litar inte på klienten.
+    if (body.termsAccepted !== true) {
+      return jsonRes(400, "Du behöver godkänna villkoren för att skapa konto.");
+    }
 
     // Preflight: kontrollera att nödvändiga kolumner finns
     const [usersCols, verCols] = await Promise.all([
@@ -111,7 +121,10 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await prisma.$transaction([
-      prisma.user.update({ where: { id: uid }, data: { email, passwordHash: hash } }),
+      prisma.user.update({
+        where: { id: uid },
+        data: { email, passwordHash: hash, termsAcceptedAt: new Date() },
+      }),
       prisma.verification.create({ data: { token, userId: uid, email, name: null, expiresAt } }),
     ]);
 

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { revokeAppleToken } from "@/lib/appleAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,19 @@ async function cancelStripeIfAny(stripeCustomerId: string | null): Promise<void>
   }
 }
 
+/** Apple TN3194: raderingen är inte komplett förrän Sign in with Apple-
+ *  kopplingen återkallats — annars ligger appen kvar under Inställningar →
+ *  Apple-ID → Logga in med Apple. Best-effort: ett fel här får aldrig hindra
+ *  användaren från att radera sitt konto. */
+async function revokeAppleIfAny(refreshToken: string | null): Promise<void> {
+  if (!refreshToken) return;
+  try {
+    await revokeAppleToken(refreshToken);
+  } catch (e) {
+    console.warn("[user/delete] Apple-revoke misslyckades (best-effort):", e instanceof Error ? e.message : e);
+  }
+}
+
 export async function POST() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
@@ -46,7 +60,7 @@ export async function POST() {
   try {
     const user = await prisma.user.findUnique({
       where: { id: uid },
-      select: { id: true, stripeCustomerId: true },
+      select: { id: true, stripeCustomerId: true, appleRefreshToken: true },
     });
     if (!user) {
       // Kontot finns inte (redan raderat eller enbart anonym cookie). Städa
@@ -56,7 +70,10 @@ export async function POST() {
       return res;
     }
 
-    await cancelStripeIfAny(user.stripeCustomerId);
+    await Promise.all([
+      cancelStripeIfAny(user.stripeCustomerId),
+      revokeAppleIfAny(user.appleRefreshToken),
+    ]);
 
     await prisma.user.delete({ where: { id: uid } });
 

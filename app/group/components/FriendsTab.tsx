@@ -6,6 +6,7 @@ import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import FriendProfileModal from "./FriendProfileModal";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
+import ReportUserModal from "@/app/components/client/ReportUserModal";
 import Avatar from "@/app/components/ui/Avatar";
 import { fieldClass } from "@/app/components/ui/kit";
 import { refreshThreads, useShareThreads } from "@/lib/threadsStore";
@@ -57,6 +58,8 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   const [sentToIds, setSentToIds] = useState<Set<string>>(new Set());
   const [openFriendId, setOpenFriendId] = useState<string | null>(null);
   const [chatFriendId, setChatFriendId] = useState<string | null>(null);
+  // Guideline 1.2: anmälan ska gå att nå där användaren visas.
+  const [reportFriendId, setReportFriendId] = useState<string | null>(null);
   const [friendFilter, setFriendFilter] = useState("");
 
   // Olästa filmtips + senaste interaktion per vän — delade threads-storen
@@ -308,6 +311,14 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                       >
                         Blockera
                       </button>
+                      <button
+                        type="button"
+                        disabled={managing}
+                        onClick={() => setReportFriendId(f.id)}
+                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/20 disabled:opacity-50"
+                      >
+                        Anmäl
+                      </button>
                       <span className="text-[11px] text-white/60">
                         Blockering tar bort vänskapen och stoppar nya förfrågningar.
                       </span>
@@ -327,6 +338,20 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         onOpenChat={(id) => {
           setOpenFriendId(null);
           setChatFriendId(id);
+        }}
+        onReport={(id) => {
+          setOpenFriendId(null);
+          setReportFriendId(id);
+        }}
+      />
+
+      <ReportUserModal
+        userId={reportFriendId}
+        userLabel={displayName(friends.find((f) => f.id === reportFriendId) ?? { id: reportFriendId ?? "" })}
+        onClose={() => setReportFriendId(null)}
+        onReported={() => {
+          setManageId(null);
+          void refreshSocial();
         }}
       />
 

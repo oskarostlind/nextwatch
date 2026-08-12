@@ -20,7 +20,7 @@ npm run appflow:build    # Appflow CI: Trapeze sets build number, then next buil
 
 # Prisma
 npx prisma generate      # runs automatically on postinstall
-npx prisma migrate dev --name <name>
+npx prisma db push       # how schema changes are applied — there is NO prisma/migrations dir
 npx prisma studio
 ```
 
@@ -39,7 +39,7 @@ Despite a `NEXTAUTH_SECRET` env var, there is **no NextAuth**. Sessions are a pl
 Most API routes read `const uid = (await cookies()).get("nw_uid")?.value` and return 401 if missing — there is no shared `getSession()` helper, so follow the existing inline pattern.
 
 ### Data model (`prisma/schema.prisma`, Postgres)
-`User` (id, email, plan, username, appleSub) is the hub. Related: `Profile` (taste profile — `favoriteGenres`/`dislikedGenres`, `favoriteMovie`/`favoriteShow` as JSON, `providers` as JSON array of service names, region/locale/year preferences), `Rating`, `watchlist` (lowercase model name), `Purchase` (Stripe lifetime), `Verification`, `PushToken`. Social/group graph: `Group` → `GroupMember` / `GroupVote` / `GroupInvite` (5-min TTL via `expiresAt`) / `GroupMatchSeen`, plus `FriendRequest` / `Friendship`. Column names are snake_cased via `@map`.
+`User` (id, email, plan, username, appleSub, `appleRefreshToken` for TN3194 revocation, `termsAcceptedAt` for guideline 1.2) is the hub. Related: `Profile` (taste profile — `favoriteGenres`/`dislikedGenres`, `favoriteMovie`/`favoriteShow` as JSON, `providers` as JSON array of service names, region/locale/year preferences), `Rating`, `watchlist` (lowercase model name), `Purchase` (Stripe), `AppleIapTransaction` (App Store subscriptions), `Verification`, `PushToken`. Social/group graph: `Group` → `GroupMember` / `GroupVote` / `GroupInvite` (5-min TTL via `expiresAt`) / `GroupMatchSeen`, plus `FriendRequest` / `Friendship`. Column names are snake_cased via `@map`.
 
 ### Recommendation engine
 The canonical recommender pipeline lives in **`lib/unifiedRecs.ts`** (`computeUnifiedRecs`), shared by `app/api/recs/unified/route.ts` (cookie/rate-limit wrapper) and the daily push cron `app/api/cron/daily-recs/route.ts`. Pipeline:
@@ -59,7 +59,19 @@ The canonical recommender pipeline lives in **`lib/unifiedRecs.ts`** (`computeUn
 `lib/tmdb.ts` is the typed helper (genre-name→id maps, `discoverByGenres`, poster URLs). ⚠️ **Token conventions are inconsistent** across the codebase: `lib/tmdb.ts` reads `TMDB_READ_TOKEN`/`TMDB_TOKEN`, while `recs/unified` and `group/match` read `TMDB_V4_TOKEN`/`TMDB_API_KEY`. The env file defines `TMDB_V4_TOKEN` + `TMDB_API_KEY`. When adding TMDB calls, match the convention already used by the route you're editing, and consider normalizing.
 
 ### Commerce
-Stripe **one-time "lifetime" purchase** (not subscription): `app/api/stripe/checkout/route.ts` creates a `mode: "payment"` session tied to `nw_uid` via `client_reference_id`/metadata; `app/api/stripe/webhook/route.ts` fulfils it and flips `User.plan`/`planSince`. Missing `STRIPE_SECRET_KEY` returns 503 instead of crashing. Premium UI under `app/premium/*`, status via `app/api/billing/status`.
+Premium is an **auto-renewable monthly subscription** (19 kr/mån), sold through two different rails depending on platform — `lib/premiumPurchase.ts` picks the right one via `isNativeIos()`:
+- **iOS: Apple IAP / StoreKit** (required by guideline 3.1.1 — never route an iOS purchase through Stripe). `@capgo/native-purchases` buys the product id from `app/api/apple/iap/config`, the transaction is verified server-side in `lib/appleIap.ts` (App Store Server API, `APPLE_IAP_*` env) via `app/api/apple/iap/verify`. `restorePremiumPurchases()` backs the mandatory "Återställ tidigare köp" button.
+- **Web: Stripe subscription.** `app/api/stripe/checkout/route.ts` + `app/api/stripe/webhook/route.ts` flip `User.plan`/`planSince`. Missing `STRIPE_SECRET_KEY` returns 503 instead of crashing.
+
+`STRIPE_PRICE_LIFETIME` still exists in the env but is legacy — the live product is `STRIPE_PRICE_PREMIUM_MONTHLY`. Premium UI under `app/premium/*`, entitlement checks in `lib/entitlements.ts`, status via `app/api/billing/status`.
+
+⚠️ The paywall copy in `app/premium/page.tsx` is **App Review surface area**, not decoration: guideline 3.1.2(c) requires the subscription name, price, period, auto-renewal wording and working links to the Apple EULA + privacy policy at the point of purchase. Build 27 was rejected for missing exactly this. Don't trim that block.
+
+### App Store compliance (don't regress these)
+Three behaviours exist because App Review demanded them — see `.cursor/skills/` and the git history before changing them:
+- **Guideline 4 (Sign in with Apple):** `AppleSignInButton` forwards `givenName`/`familyName` (Apple sends them only on the *first* authorization) and `authorizationCode` to `app/api/auth/apple`, which stores the name as `Profile.displayName` or hands it to onboarding via the short-lived `nw_apple_name` cookie. The onboarding display-name field is deliberately **optional and pre-filled** — never make it required again.
+- **Guideline 1.2 (UGC):** friends/group members can be both blocked (`app/api/friends/block`) and reported (`app/api/report`, mails support via `sendReportMail` and blocks by default). Onboarding and registration require an explicit terms checkbox, stored as `User.termsAcceptedAt`; `app/api/auth/register` rejects a signup without it.
+- **Guideline 5.1.1(v) / Apple TN3194:** `app/api/user/delete` cancels Stripe *and* revokes the Sign in with Apple credential (`revokeAppleToken` in `lib/appleAuth.ts`, using the refresh token stored in `User.appleRefreshToken`). Both are best-effort — a failure must never block the deletion itself. Needs `APPLE_TEAM_ID`, `APPLE_SIWA_KEY_ID`, `APPLE_SIWA_PRIVATE_KEY`; without them the revoke degrades to a logged warning.
 
 ### Push notifications & iOS / Capacitor
 The Next.js app is deployed to the web (`www.nextwatch.se`) and loaded inside a native iOS shell via Capacitor — `capacitor.config.ts` sets `server.url` to the live site, so **iOS is a WebView wrapper, not a static bundle** (the app can't be statically exported; it needs API routes/middleware/cookies). `www/index.html` is only a required local fallback for Capacitor's copy step. Push tokens are registered client-side (`app/components/client/PushRegistration.tsx`) and stored via `app/api/push/register` in `PushToken`; server sending logic in `lib/push.ts`.

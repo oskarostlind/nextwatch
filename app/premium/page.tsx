@@ -65,11 +65,26 @@ export default function PremiumPage() {
         <p className="text-sm text-neutral-300">
           Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.
         </p>
+        {/* Varje punkt måste motsvara en gate som FAKTISKT finns i koden — annars
+            säljer vi något användaren redan har. Siffrorna speglar defaultvärdena
+            i lib/swipeLimit.ts (100/dygn) och lib/groupLimits.ts (3 resp. 20);
+            ändras de env-variablerna måste texten här ändras med. */}
         <ul className="space-y-2 text-sm text-neutral-200">
-          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Helt annonsfritt</li>
-          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Obegränsat med swipes</li>
-          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Större grupper</li>
-          <li className="flex items-center gap-2"><span className="text-emerald-400">✓</span> Stötta utvecklingen</li>
+          <li className="flex items-start gap-2">
+            <span className="text-emerald-400">✓</span> Helt annonsfritt
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-emerald-400">✓</span> Obegränsat med swipes — gratis ingår 100 per
+            dygn
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-emerald-400">✓</span> Grupper upp till 20 personer — gratis rymmer
+            3
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-emerald-400">✓</span> Din smakprofil: se vilka teman, regissörer
+            och skådespelare dina swipes pekar mot
+          </li>
         </ul>
         <Button onClick={buy} disabled={loading} className="w-full">
           {loading

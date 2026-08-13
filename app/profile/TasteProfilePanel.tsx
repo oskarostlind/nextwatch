@@ -66,17 +66,27 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
   const [data, setData] = useState<TasteProfileOk | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 403 = premium-gejtad (lib/tasteFeature). Egen flagga i stället för att
+  // matcha på felmeddelandets text — en "Kräver Premium"-ruta ska aldrig
+  // renderas för ett riktigt fel, och tvärtom.
+  const [needsPremium, setNeedsPremium] = useState(false);
 
   useEffect(() => {
     let ignore = false;
     setLoading(true);
     setError(null);
+    setNeedsPremium(false);
 
     const qs = groupCode ? `?group=${encodeURIComponent(groupCode)}` : "";
     void fetch(`/api/profile/taste${qs}`, { cache: "no-store" })
       .then(async (res) => {
         const json = (await res.json()) as TasteProfileOk | { ok: false; message?: string };
         if (ignore) return;
+        if (res.status === 403) {
+          setNeedsPremium(true);
+          setData(null);
+          return;
+        }
         if (!res.ok || !json.ok) {
           setError("message" in json && json.message ? json.message : "Kunde inte ladda smakprofil.");
           setData(null);
@@ -100,6 +110,24 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
     return (
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <p className="text-sm text-white/50">Analyserar din smak…</p>
+      </div>
+    );
+  }
+
+  if (needsPremium) {
+    return (
+      <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] p-4">
+        <p className="text-sm font-medium text-amber-100">Smakprofil ingår i Premium</p>
+        <p className="mt-1 text-xs leading-relaxed text-white/50">
+          Se vilka teman, regissörer och skådespelare dina swipes egentligen pekar mot — och få
+          förslag på genrer du missat.
+        </p>
+        <Link
+          href="/premium"
+          className="mt-3 inline-flex items-center rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-neutral-950 transition hover:bg-amber-300"
+        >
+          Bli Premium – 19 kr/mån
+        </Link>
       </div>
     );
   }

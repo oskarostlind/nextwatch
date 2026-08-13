@@ -18,11 +18,13 @@ import {
 import ActionDock from "@/app/components/ui/ActionDock";
 import { useGroupSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import SwipeLimitWall from "@/app/components/client/SwipeLimitWall";
+import PremiumUpsellModal from "@/app/components/client/PremiumUpsellModal";
 import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import RatingModal from "@/app/components/client/RatingModal";
 import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
+import { initAdMobIfEligible, registerSwipeForAds } from "@/lib/admobAds";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 
 type MediaType = "movie" | "tv";
@@ -54,6 +56,12 @@ export default function GroupSwipePage({ code }: { code: string }) {
   // sökningen vidgas eller att förslagen snart sinar. Återställs så fort en
   // påfyllning (lib/swipeDeckStore.ts maybePrefetchGroupPages) gett fler kort,
   // så varningen kan visas igen nästa gång leken blir tunn.
+  // Starta AdMob även här — annars visas interstitials bara för den som
+  // passerat solo-swipen den här appstarten. Idempotent och no-op på webben.
+  useEffect(() => {
+    void initAdMobIfEligible();
+  }, []);
+
   const warnedLowRef = useRef(false);
   useEffect(() => {
     if (!ready || cards.length === 0) return;
@@ -390,6 +398,10 @@ export default function GroupSwipePage({ code }: { code: string }) {
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
+    // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
+    // Räknaren i lib/admobAds är modulglobal och delas med solo-swipen, så en
+    // användare som växlar mellan lägena får inte annonser dubbelt så tätt.
+    registerSwipeForAds();
     x.set(0);
     y.set(0);
     controls.set({ x: 0, y: 0, opacity: 1 });
@@ -423,6 +435,9 @@ export default function GroupSwipePage({ code }: { code: string }) {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
+      {/* Lyssnar på "nw:admob-ad-shown" — utan den visas interstitials i
+          gruppläget men aldrig uppföljande upsell ("slipp annonser i 24h"). */}
+      <PremiumUpsellModal />
       <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
         {cards[0] ? (
           <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">

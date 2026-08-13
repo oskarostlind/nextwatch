@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { canJoinGroup } from "@/lib/groupLimits";
 
 type JoinBody = {
   code: string;
@@ -53,6 +54,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<JoinOk | Join
 
     if (!found) {
       return NextResponse.json({ ok: false, message: "Grupp hittades inte." }, { status: 404 });
+    }
+
+    // Medlemstak (lib/groupLimits) — gratisgrupper är små, premiumgrupper stora.
+    // Redan medlem släpps alltid igenom, så en dubbelklickad kod aldrig nekas.
+    const gate = await canJoinGroup(found.code, uid);
+    if (!gate.allowed) {
+      return NextResponse.json({ ok: false, message: gate.message }, { status: 403 });
     }
 
     await prisma.groupMember.upsert({

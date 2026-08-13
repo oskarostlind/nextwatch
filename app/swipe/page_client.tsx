@@ -16,7 +16,7 @@ import { goPremium } from "@/lib/premiumPurchase";
 import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import type { ShareItem } from "@/app/components/client/ShareTitleModal";
-import { registerSwipeForAds } from "@/lib/admobAds";
+import { initAdMobIfEligible, registerSwipeForAds } from "@/lib/admobAds";
 import { emitGroupVoted } from "@/lib/groupVoteEvent";
 import { notify } from "@/app/components/lib/notify";
 import {
@@ -432,6 +432,16 @@ export default function SwipePageClient() {
   // Släpp låset om sidan lämnas medan guiden är öppen (egen unmount-effekt, inte
   // kopplad till öppna-villkorets täta deps).
   useEffect(() => () => releaseGuide("swipe"), []);
+
+  // AdMob måste initieras innan registerSwipeForAds() gör något — utan det här
+  // anropet returnerade den direkt (initialized=false) och iOS-appen visade
+  // aldrig en enda annons, trots att hela AdMob-lagret fanns färdigt.
+  // Idempotent och no-op på webben; init (UMP-samtycke + ATT-prompt) sker här
+  // på swipe-sidan i stället för vid appstart så första prompten kommer i ett
+  // sammanhang användaren förstår.
+  useEffect(() => {
+    void initAdMobIfEligible();
+  }, []);
 
   useEffect(() => {
     if (mode === "group" && group?.code && !groupRefreshAttempted) {

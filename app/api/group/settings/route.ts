@@ -20,6 +20,7 @@ import {
   type GroupSettings,
 } from "@/lib/groupSettings";
 import { isValidSwipeMediaFilter } from "@/lib/swipeMediaFilter";
+import { getGroupCapacity, PREMIUM_GROUP_MAX_MEMBERS } from "@/lib/groupLimits";
 
 type Ok = {
   ok: true;
@@ -30,6 +31,14 @@ type Ok = {
   memberCount: number;
   /** Vad matchtröskeln (antal personer) faktiskt blir just nu om ingen anpassad är satt. */
   defaults: { matchNeed: number };
+  /**
+   * Medlemstak (lib/groupLimits). Ligger här och inte i /api/group/members:
+   * taket kräver en entitlement-uppslagning på gruppens skapare, och members
+   * pollas var 5:e sekund av varje klient på gruppytorna. Här hämtas det en
+   * gång när någon öppnar inställningarna. Valfri: bara GET returnerar den —
+   * PATCH rör inte medlemskap, så taket kan inte ha ändrats där.
+   */
+  capacity?: { max: number; limitedByFreePlan: boolean; premiumMax: number };
 };
 type Err = { ok: false; message: string };
 
@@ -86,6 +95,8 @@ export async function GET(req: NextRequest) {
   if (!group) return bad("Gruppen finns inte.", 404);
   if (group.members.length === 0) return bad("Du är inte medlem i gruppen.", 403);
 
+  const capacity = await getGroupCapacity(code);
+
   return NextResponse.json({
     ok: true,
     code: group.code,
@@ -93,6 +104,11 @@ export async function GET(req: NextRequest) {
     settings: toSettingsDto(group),
     memberCount,
     defaults: { matchNeed: groupMatchNeed(memberCount, null) },
+    capacity: {
+      max: capacity.max,
+      limitedByFreePlan: capacity.limitedByFreePlan,
+      premiumMax: PREMIUM_GROUP_MAX_MEMBERS,
+    },
   } as Ok);
 }
 

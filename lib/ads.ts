@@ -7,17 +7,25 @@
 //   - Webb  -> Google AdSense (renderas i AdCard)
 //   - iOS   -> Google AdMob (native, via Capacitor-plugin – kopplas i Fas 2)
 //
-// Allt sitter bakom feature-flaggan NEXT_PUBLIC_ADS_ENABLED så att inget visas
-// förrän AdSense/AdMob-konton är godkända och konfigurerade.
+// Annonser är PÅ som standard; NEXT_PUBLIC_ADS_ENABLED=0 är kill-switchen.
+// AdSense nekade sajten, så utan konfigurerat klient-id renderar AdCard en
+// premium-CTA i annonsplatsen i stället för en riktig annons.
 
 import type { SwipeCard } from "@/lib/swipeDeck";
 
 /** Vart N:te kort blir en annons (räknat på riktiga titlar). */
 export const AD_EVERY = 10;
 
-/** Global feature-flagga. Sätt NEXT_PUBLIC_ADS_ENABLED=1 för att aktivera. */
+/**
+ * Global feature-flagga. Annonser är PÅ som standard sedan 2026-08-13 — de är
+ * hela skillnaden mellan gratis och Premium, och en osatt env-variabel ska
+ * aldrig tyst göra appen gratis-för-alla igen (vilket är exakt vad som hände:
+ * flaggan var osatt i produktion och premium gav i praktiken ingenting).
+ *
+ * NEXT_PUBLIC_ADS_ENABLED=0 är kill-switchen om något måste stängas av snabbt.
+ */
 export function adsFeatureEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_ADS_ENABLED === "1";
+  return process.env.NEXT_PUBLIC_ADS_ENABLED !== "0";
 }
 
 /** AdSense-klient-id (ca-pub-...), sätts när kontot är godkänt. */

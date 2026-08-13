@@ -67,6 +67,22 @@ Premium is an **auto-renewable monthly subscription** (19 kr/mån), sold through
 
 ⚠️ The paywall copy in `app/premium/page.tsx` is **App Review surface area**, not decoration: guideline 3.1.2(c) requires the subscription name, price, period, auto-renewal wording and working links to the Apple EULA + privacy policy at the point of purchase. Build 27 was rejected for missing exactly this. Don't trim that block.
 
+### What Premium actually gates (reviewed 2026-08-13)
+Until 2026-08-13 every one of these was inert and premium bought nothing — the flags existed but were all switched off, so free and paid were identical. **Each bullet on `/premium` must map to a live gate below; if you disable a gate, change the copy in the same commit.**
+
+| Gate | Free | Premium | Where |
+|---|---|---|---|
+| Ads | interstitial every 15 swipes (iOS, solo **and** group), ad card every 10th (web, solo only) | none | `lib/ads.ts`, `lib/admobAds.ts` |
+| Daily swipes | 100 / rolling 24 h | unlimited | `lib/swipeLimit.ts` |
+| Group size | 3 members | 20 members | `lib/groupLimits.ts` |
+| Taste profile | upsell | full panel | `lib/tasteFeature.ts` |
+
+- **Ads are on by default.** `adsFeatureEnabled()` returns true unless `NEXT_PUBLIC_ADS_ENABLED=0` — an unset env must never silently make the app free-for-all again (that's the bug this table documents). On iOS, `initAdMobIfEligible()` **must** be called before `registerSwipeForAds()` does anything; it's invoked on mount from *both* `app/swipe/page_client.tsx` and `app/group/swipe/_legacy.tsx`. Before that call existed, `initAdMobIfEligible()` had no caller reachable from app code at all (its only caller was `watchRewardedForAdFree`, which was itself gated behind `initialized`) — so live AdMob keys produced zero ads. The AdSense `<Script>` in `app/layout.tsx` additionally requires a configured `NEXT_PUBLIC_ADSENSE_CLIENT` — AdSense rejected the site, and the script must never load inside the iOS WebView.
+- **The group deck carries no ad cards** — only interstitials. `withAdsMaybe` is applied to the solo fetch only; `_legacy.tsx` has no `kind === "ad"` branch, so an injected ad card would render as a broken title and post a group vote for `tmdbId: -1`. Add that branch to every one of `handleLike`/`handleDislike`/`handleSeen`/`sendVote`/undo before ever enabling ad cards in group mode.
+- **Group caps follow the group's creator, not the joiner** — a paying host lifts the whole party. Enforced on all three entry points: `group/join`, `group/invite` (fails early, at send time) and `group/invite/respond`. Existing over-cap groups are never pruned; only new joins are blocked.
+- The swipe limit is enforced server-side on `/api/rate`, `/api/swipe/decide` and `/api/group/vote` (429 + `error:"swipe_limit"`), so it can't be bypassed from the client.
+- Tuning without a deploy: `FREE_DAILY_SWIPE_LIMIT`, `NW_FREE_GROUP_MAX_MEMBERS`, `NW_PREMIUM_GROUP_MAX_MEMBERS`. `FREE_DAILY_SWIPE_LIMIT=0` explicitly means unlimited (kill switch); *unset* means the 100 default.
+
 ### App Store compliance (don't regress these)
 Three behaviours exist because App Review demanded them — see `.cursor/skills/` and the git history before changing them:
 - **Guideline 4 (Sign in with Apple):** `AppleSignInButton` forwards `givenName`/`familyName` (Apple sends them only on the *first* authorization) and `authorizationCode` to `app/api/auth/apple`, which stores the name as `Profile.displayName` or hands it to onboarding via the short-lived `nw_apple_name` cookie. The onboarding display-name field is deliberately **optional and pre-filled** — never make it required again.

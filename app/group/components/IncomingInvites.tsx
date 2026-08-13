@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGroupInvites } from "@/lib/useGroupInvites";
+import { notify } from "@/app/components/lib/notify";
 
 export default function IncomingInvites() {
   const router = useRouter();
@@ -43,7 +44,17 @@ export default function IncomingInvites() {
                 });
                 setBusy(null);
                 void refresh();
-                if (res.ok) router.refresh();
+                if (res.ok) {
+                  router.refresh();
+                  return;
+                }
+                // Servern kan neka av en begriplig anledning (gruppen full —
+                // se lib/groupLimits). Utan det här hände ingenting synligt
+                // när man tryckte Acceptera.
+                const body = (await res.json().catch(() => null)) as
+                  | { message?: string }
+                  | null;
+                notify(body?.message ?? "Kunde inte gå med i gruppen.");
               }}
             >
               Acceptera

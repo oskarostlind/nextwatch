@@ -34,12 +34,19 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const adsClient = adsenseClientId() ?? ADSENSE_CLIENT_FALLBACK;
+  // Scriptet laddas bara när ett AdSense-klient-id faktiskt är konfigurerat via
+  // env. Annonsflaggan är default-på sedan gating-genomgången 2026-08-13, och
+  // utan den här extra grinden hade scriptet börjat laddas på varje sidvisning
+  // — även i iOS-WebViewen, där AdSense inte får förekomma (där sköter AdMob
+  // annonserna), och för premiumanvändare som inte ska se annonser alls.
+  // AdSense har dessutom nekat sajten, så scriptet gör i dagsläget ingen nytta.
+  // Site-verification ligger i metadata ovan och påverkas inte av det här.
+  const adsClient = adsenseClientId();
 
   return (
     <html lang="sv" className="min-h-[100dvh] overscroll-none bg-neutral-950">
       <body className="min-h-[100dvh] overscroll-none bg-neutral-950 text-neutral-100 antialiased">
-        {adsFeatureEnabled() && (
+        {adsFeatureEnabled() && adsClient && (
           <Script
             async
             strategy="afterInteractive"

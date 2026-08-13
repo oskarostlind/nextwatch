@@ -33,6 +33,7 @@ type SettingsResp = {
   isCreator?: boolean;
   settings?: GroupSettings;
   memberCount?: number;
+  capacity?: { max: number; limitedByFreePlan: boolean; premiumMax: number };
 };
 
 /** Rubricerad sektion med diskret ram runt innehållet (matchar profilsidans stil). */
@@ -70,6 +71,7 @@ export default function GroupSettingsModal({
   const [error, setError] = useState<string | null>(null);
 
   const [memberCount, setMemberCount] = useState(0);
+  const [capacity, setCapacity] = useState<SettingsResp["capacity"]>(undefined);
   const [likedGenres, setLikedGenres] = useState<string[]>([]);
   const [dislikedGenres, setDislikedGenres] = useState<string[]>([]);
   const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
@@ -94,6 +96,7 @@ export default function GroupSettingsModal({
         }
         const n = j.memberCount ?? 0;
         setMemberCount(n);
+        setCapacity(j.capacity);
         setLikedGenres(j.settings.favoriteGenres);
         setDislikedGenres(j.settings.dislikedGenres);
         setFavoriteKeywordIds(j.settings.favoriteKeywordIds);
@@ -192,6 +195,20 @@ export default function GroupSettingsModal({
         ) : (
           <>
             <div className="space-y-5">
+              {capacity && (
+                <SettingsSection title="Platser">
+                  <p className="text-sm text-white/70">
+                    {memberCount} av {capacity.max} platser använda.
+                  </p>
+                  {capacity.limitedByFreePlan && (
+                    <p className="mt-1.5 text-xs leading-relaxed text-white/40">
+                      Taket följer den som skapade gruppen. Med Premium rymmer gruppen upp till{" "}
+                      {capacity.premiumMax} personer.
+                    </p>
+                  )}
+                </SettingsSection>
+              )}
+
               <SettingsSection
                 title="Vi letar efter"
                 hint="Alla i gruppen ser samma typ av titlar när ni swipar."

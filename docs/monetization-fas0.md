@@ -42,11 +42,20 @@ Utan steg 1–2 kommer TypeScript/bygget att klaga på de nya Prisma-fälten.
 
 ## Env-variabler
 
-### Fas 0 (valfria – allt fungerar utan, annonser/premium bara inaktiva)
+### Fas 0
+> ⚠️ **Inaktuellt sedan 2026-08-13.** Annonser är numera PÅ som standard och
+> `NEXT_PUBLIC_ADS_ENABLED=0` är kill-switchen (osatt = på). Att flaggan var
+> osatt i produktion var precis anledningen till att premium inte gav något.
+> Den aktuella sanningen för vad premium gejtar finns i **CLAUDE.md → "What
+> Premium actually gates"**.
+
 ```
-NEXT_PUBLIC_ADS_ENABLED=1              # slår på annonser för gratisanvändare
-NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-xxxx…
+NEXT_PUBLIC_ADS_ENABLED=0              # ENDAST för att stänga av annonser helt
+NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-xxxx…  # osatt = AdSense-scriptet laddas inte alls
 NEXT_PUBLIC_ADSENSE_SLOT_SWIPE=xxxx…
+FREE_DAILY_SWIPE_LIMIT=100             # osatt = 100. 0 = obegränsat (kill-switch)
+NW_FREE_GROUP_MAX_MEMBERS=3            # osatt = 3
+NW_PREMIUM_GROUP_MAX_MEMBERS=20        # osatt = 20
 ```
 
 ### Fas 1 – Stripe-prenumeration (webb)

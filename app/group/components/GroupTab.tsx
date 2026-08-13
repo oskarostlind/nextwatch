@@ -27,7 +27,14 @@ async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: 
       body: payload ? JSON.stringify(payload) : undefined,
       cache: "no-store",
     });
-    if (!res.ok) throw new Error("API Error");
+    if (!res.ok) {
+      // Servern skickar ofta en förklarande `message` (t.ex. medlemstaket i
+      // /api/group/join). Kastade vi direkt här blev varje sådant svar
+      // "Nätverksfel. Försök igen." — fel orsak, och användaren fick aldrig
+      // veta att gruppen var full.
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return { error: body?.message || "Nätverksfel. Försök igen." };
+    }
     return (await res.json()) as T;
   } catch {
     return { error: "Nätverksfel. Försök igen." };

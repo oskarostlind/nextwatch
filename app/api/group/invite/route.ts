@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
+import { getGroupCapacity, groupFullMessage } from "@/lib/groupLimits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
     if (!member) {
       return NextResponse.json(
         { ok: false, message: "Not a member of the active group." },
+        { status: 403 }
+      );
+    }
+
+    // Medlemstak (lib/groupLimits): neka redan här i stället för att låta
+    // mottagaren tacka ja och först då bli nekad — det senare hade sett ut som
+    // ett fel hos mottagaren, inte som en gräns hos avsändaren.
+    const capacity = await getGroupCapacity(groupCode);
+    if (capacity.isFull) {
+      return NextResponse.json(
+        { ok: false, message: groupFullMessage(capacity) },
         { status: 403 }
       );
     }

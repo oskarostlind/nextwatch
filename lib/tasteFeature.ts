@@ -1,8 +1,13 @@
 /**
- * Smakprofil / swipe-insyn — enkel feature-flagga för premium-gating.
- * Sätt till true när insyn ska kräva Premium.
+ * Smakprofil / swipe-insyn — premium-funktion sedan 2026-08-13.
+ *
+ * Gejtas i /api/profile/taste (403 för fria konton). Klientytorna hanterar
+ * 403 som "visa upsell", inte som fel: TasteProfilePanel byter till en
+ * uppgraderingsruta och GenreSuggestions renderar ingenting alls.
+ *
+ * Sätt till false för att öppna funktionen igen utan att röra någon annan kod.
  */
-export const TASTE_PROFILE_REQUIRES_PREMIUM = false;
+export const TASTE_PROFILE_REQUIRES_PREMIUM = true;
 
 /** Andel swipe-kort som får en "Varför det här?"-rad (0–1). */
 export const SWIPE_REASONS_SHOW_RATE = 0.35;

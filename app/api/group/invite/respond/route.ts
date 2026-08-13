@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
+import { canJoinGroup } from "@/lib/groupLimits";
 
 type Action = "accept" | "decline";
 type Body = { id: string; action: Action };
@@ -67,6 +68,14 @@ export async function POST(req: NextRequest) {
     }
 
     // ACCEPT
+    // 0) Medlemstak (lib/groupLimits). Inbjudan raderas INTE när gruppen är
+    //    full — den får ligga kvar och löpa ut på sin egen TTL, så att ett
+    //    försök under tiden någon annan lämnar gruppen fortfarande går igenom.
+    const gate = await canJoinGroup(group.code, userId);
+    if (!gate.allowed) {
+      return bad(gate.message, 403);
+    }
+
     // 1) Gör användaren till medlem (idempotent via upsert på (group_code, user_id))
     await prisma.groupMember.upsert({
       where: { groupCode_userId: { groupCode: group.code, userId } },

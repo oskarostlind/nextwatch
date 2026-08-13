@@ -12,11 +12,24 @@
 import { prisma } from "@/lib/prisma";
 import { getEntitlement } from "@/lib/entitlements";
 
-// Konfigureras via env (lokalt + Vercel). 0 eller osatt = obegränsat.
-// Sätt t.ex. FREE_DAILY_SWIPE_LIMIT=100 för att återaktivera gränsen.
-const rawLimit = Number(process.env.FREE_DAILY_SWIPE_LIMIT ?? "0");
-export const FREE_DAILY_SWIPE_LIMIT =
-  Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 0;
+// Standardgräns för gratiskonton. Var tidigare 0 (= obegränsat) som default,
+// vilket i praktiken gjorde "Obegränsat med swipes" på premiumsidan till ett
+// löfte utan täckning — gratis hade också obegränsat.
+//
+// FREE_DAILY_SWIPE_LIMIT styr värdet utan ny deploy:
+//   osatt          -> DEFAULT_FREE_DAILY_SWIPE_LIMIT (100)
+//   positivt tal   -> det värdet
+//   0              -> obegränsat (explicit kill-switch, t.ex. om supportärenden
+//                     visar att gränsen är fel satt)
+const DEFAULT_FREE_DAILY_SWIPE_LIMIT = 100;
+
+const rawLimit = process.env.FREE_DAILY_SWIPE_LIMIT;
+const parsedLimit = rawLimit === undefined || rawLimit === "" ? NaN : Number(rawLimit);
+export const FREE_DAILY_SWIPE_LIMIT = !Number.isFinite(parsedLimit)
+  ? DEFAULT_FREE_DAILY_SWIPE_LIMIT
+  : parsedLimit > 0
+    ? Math.floor(parsedLimit)
+    : 0;
 
 export type SwipeAllowance = {
   isPremium: boolean;

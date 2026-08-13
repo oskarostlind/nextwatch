@@ -22,12 +22,34 @@ const TEST_IDS = {
   rewarded: "ca-app-pub-3940256099942544/1712485313",
 };
 
+/**
+ * Ett ANNONSENHETS-id ser ut som ca-app-pub-<publisher>/<enhet> (snedstreck).
+ * AdMob-appens APP-id ser nästan likadant ut men har tilde: ...~8922574955, och
+ * ligger i ios/App/App/Info.plist som GADApplicationIdentifier — inte här.
+ *
+ * Prefixkollen ensam släppte igenom app-id:t, och då misslyckas varje
+ * annonsbegäran tyst för alltid. Kräv snedstrecket och skrik i konsolen i
+ * stället, annars är felet praktiskt taget osynligt.
+ */
+function isAdUnitId(value: string): boolean {
+  return value.startsWith("ca-app-pub-") && value.includes("/");
+}
+
 function adId(kind: keyof typeof TEST_IDS): string {
   const env = {
     interstitial: process.env.NEXT_PUBLIC_ADMOB_INTERSTITIAL_ID,
     rewarded: process.env.NEXT_PUBLIC_ADMOB_REWARDED_ID,
   }[kind];
-  return env && env.startsWith("ca-app-pub-") ? env : TEST_IDS[kind];
+  if (!env) return TEST_IDS[kind];
+  if (!isAdUnitId(env)) {
+    console.warn(
+      `[admob] "${env}" ser inte ut som ett annonsenhets-id (saknar "/"). ` +
+        `Ser det ut som ca-app-pub-...~... är det appens app-id — hämta ad unit-id:t ` +
+        `under Apps → NextWatch → Ad units i AdMob. Faller tillbaka på test-id.`
+    );
+    return TEST_IDS[kind];
+  }
+  return env;
 }
 
 /* ---------- 24h annonsfritt ---------- */

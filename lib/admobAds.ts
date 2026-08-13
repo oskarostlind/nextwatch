@@ -59,6 +59,13 @@ function grantAdFree24h(): void {
 
 const INTERSTITIAL_EVERY = 15;
 const INTERSTITIAL_MIN_GAP_MS = 3 * 60 * 1000;
+/**
+ * Efter ett misslyckat försök väntar vi bara så här många swipes innan nästa,
+ * i stället för hela INTERSTITIAL_EVERY. "No fill" är ofta övergående (nytt
+ * AdMob-konto, opublicerad app), och då vill vi känna av att det lossnat utan
+ * att användaren ska behöva swipa 15 gånger till.
+ */
+const RETRY_AFTER_FAILED_SWIPES = 5;
 
 let initialized = false;
 let initInFlight: Promise<boolean> | null = null;
@@ -67,6 +74,29 @@ let npa = false;
 let interstitialReady = false;
 let swipesSinceAd = 0;
 let lastInterstitialAt = 0;
+/** Hindrar att flera snabba swipes startar parallella visningsförsök. */
+let attemptInFlight = false;
+
+/** Backa räknaren så nästa försök sker om RETRY_AFTER_FAILED_SWIPES swipes. */
+function retryLater(): void {
+  swipesSinceAd = Math.max(0, INTERSTITIAL_EVERY - RETRY_AFTER_FAILED_SWIPES);
+}
+
+/**
+ * Felsökning på enheten. iOS-appen är en WebView och console.warn går bara att
+ * läsa via Safari Web Inspector — vilket kräver en Mac. Med
+ * NEXT_PUBLIC_ADMOB_DEBUG=1 i Vercel visas felen som toast i appen i stället,
+ * så annonsproblem går att diagnosticera från en Windows-maskin.
+ * Lämna avstängd i skarp drift: texterna är utvecklartext, inte användartext.
+ */
+function adDebug(message: string): void {
+  if (process.env.NEXT_PUBLIC_ADMOB_DEBUG !== "1") return;
+  void import("@/app/components/lib/notify")
+    .then((m) => m.notify(message))
+    .catch(() => {
+      /* notify saknas i den här kontexten — strunt samma */
+    });
+}
 
 async function plugin() {
   // Dynamisk import: modulen får aldrig hamna i webbens bundle-kritiska väg.
@@ -96,6 +126,9 @@ export async function initAdMobIfEligible(): Promise<boolean> {
       if (await fetchIsPremium()) {
         eligible = false;
         initialized = true;
+        // Vanligaste förklaringen till "jag ser inga annonser" när allt annat
+        // är rätt: testkontot har blivit premium av ett tidigare köp.
+        adDebug("AdMob av: kontot är premium");
         return false;
       }
 
@@ -149,8 +182,15 @@ async function prepareInterstitial(): Promise<void> {
     const { AdMob } = await plugin();
     await AdMob.prepareInterstitial({ adId: adId("interstitial"), npa });
     interstitialReady = true;
-  } catch {
-    /* försöker igen vid nästa registerSwipe-tröskel */
+  } catch (err) {
+    // Tyst för användaren, men ALDRIG tyst i konsolen: det här är enda stället
+    // man ser skillnad på "no fill" (nytt konto/opublicerad app — går över av
+    // sig själv) och ett ogiltigt annonsenhets-id (t.ex. att AdMob-appens
+    // app-id med ~ råkat användas i stället för ad unit-id:t med /).
+    console.warn("[admob] prepareInterstitial misslyckades för", adId("interstitial"), err);
+    adDebug(
+      `AdMob prepare misslyckades\nid: ${adId("interstitial")}\n${err instanceof Error ? err.message : String(err)}`
+    );
   }
 }
 
@@ -164,15 +204,25 @@ export function registerSwipeForAds(): void {
   if (swipesSinceAd < INTERSTITIAL_EVERY) return;
   if (Date.now() - lastInterstitialAt < INTERSTITIAL_MIN_GAP_MS) return;
 
-  swipesSinceAd = 0;
+  if (attemptInFlight) return;
+
+  // Räknaren nollställs först när annonsen FAKTISKT visats. Tidigare nollades
+  // den här uppe, före det asynkrona försöket — ett misslyckat anrop (no fill,
+  // fel ad unit-id) åt alltså upp hela kvoten och användaren fick swipa 15
+  // gånger till innan nästa försök, utan ett spår av varför.
+  attemptInFlight = true;
   void (async () => {
     try {
       if (!interstitialReady) {
         await prepareInterstitial();
-        if (!interstitialReady) return;
+        if (!interstitialReady) {
+          retryLater();
+          return;
+        }
       }
       const { AdMob } = await plugin();
       await AdMob.showInterstitial();
+      swipesSinceAd = 0;
       lastInterstitialAt = Date.now();
       interstitialReady = false;
       void prepareInterstitial();
@@ -183,8 +233,13 @@ export function registerSwipeForAds(): void {
       } catch {
         /* SSR/edge — irrelevant här */
       }
-    } catch {
+    } catch (err) {
       interstitialReady = false;
+      console.warn("[admob] showInterstitial misslyckades", err);
+      adDebug(`AdMob show misslyckades\n${err instanceof Error ? err.message : String(err)}`);
+      retryLater();
+    } finally {
+      attemptInFlight = false;
     }
   })();
 }

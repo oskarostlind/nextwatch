@@ -9,6 +9,7 @@ import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
 import { groupMatchNeed } from "@/lib/groupSettings";
 import { tmdbDetails, type TmdbType, type TmdbLite } from "@/lib/tmdbDetails";
 import { providerGroupsFor, providerWatchUrl } from "@/lib/watchLinks";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 /**
  * TMDB-detaljerna innehåller rå watch-providers (flatrate/rent/buy) — matchrutan
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
         { status: 429 }
       );
     }
-    const locale = jar.get("nw_locale")?.value ?? "sv-SE";
+    const locale = await tmdbLanguageFromCookies();
 
     const [size, groupRow, profileRow] = await Promise.all([
       prisma.groupMember.count({ where: { groupCode: code } }),

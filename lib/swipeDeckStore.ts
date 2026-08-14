@@ -212,6 +212,11 @@ export type SoloDeckState = {
   nextTmdbPage: number;
   hasMore: boolean;
   loading: boolean;
+  /**
+   * Felkod ur deckError.* i messages/*.json, ELLER ett färdigt meddelande som
+   * servern skickat med i `message`. Ytan som renderar felet översätter koden
+   * och faller tillbaka på strängen om den inte är en känd kod.
+   */
   error: string | null;
   mode: "group" | "individual";
   group: GroupInfo | null;
@@ -370,7 +375,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
   try {
     const res = await fetch(soloRecsUrl(targetPage, fromTmdbPage), { cache: "no-store" });
     if (!res.ok) {
-      if (replace) patchSolo({ error: "Kunde inte hämta förslag. Försök igen.", hasMore: false, loading: false });
+      if (replace) patchSolo({ error: "deck_fetch_failed_retry", hasMore: false, loading: false });
       return;
     }
     const data = (await res.json()) as
@@ -387,7 +392,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     if (!("ok" in data) || !data.ok) {
       if (replace) {
         patchSolo({
-          error: ("message" in data && data.message) || "Kunde inte hämta förslag.",
+          error: ("message" in data && data.message) || "deck_fetch_failed",
           hasMore: false,
           loading: false,
         });
@@ -417,7 +422,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();
   } catch {
     if (replace) {
-      patchSolo({ error: "Nätverksfel. Kontrollera anslutningen.", hasMore: false, loading: false });
+      patchSolo({ error: "network_check_connection", hasMore: false, loading: false });
     }
   } finally {
     soloLoadInFlight = false;
@@ -548,7 +553,7 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
       if (replace) {
         setGroupDeck(key, {
           loading: false,
-          error: ("message" in data && data.message) || "Kunde inte hämta gruppförslag.",
+          error: ("message" in data && data.message) || "group_deck_fetch_failed",
           ready: true,
         });
       }
@@ -570,7 +575,7 @@ async function loadGroupPage(key: string, targetPage: number, replace: boolean) 
     });
     persistGroupDeckSoon(key);
   } catch {
-    if (replace) setGroupDeck(key, { loading: false, error: "Nätverksfel.", ready: true });
+    if (replace) setGroupDeck(key, { loading: false, error: "network_error", ready: true });
   } finally {
     groupLoadInFlight.delete(key);
   }

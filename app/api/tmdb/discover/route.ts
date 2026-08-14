@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,6 @@ export async function GET(req: Request) {
 
     // Default region/language; override från cookies (i första hand) eller profil
     let region = "SE";
-    let language = "sv-SE";
     let withProviders = "";
 
     const c = await cookies();
@@ -79,16 +79,15 @@ export async function GET(req: Request) {
     // request, så Prisma-uppslaget behövs bara när cookies saknas (t.ex. en
     // gammal klient). Sparar en Neon-rundresa per discover-sida.
     const cookieRegion = c.get("nw_region")?.value || "";
-    const cookieLocale = c.get("nw_locale")?.value || "";
+    // Språket följer gränssnittsvalet; regionen förblir geografisk.
+    const language = await tmdbLanguageFromCookies();
     if (cookieRegion) region = cookieRegion;
-    if (cookieLocale) language = cookieLocale;
-    if (uid && (!cookieRegion || !cookieLocale)) {
+    if (uid && !cookieRegion) {
       const p = await prisma.profile.findUnique({
         where: { userId: uid },
-        select: { locale: true, region: true, providers: true },
+        select: { region: true, providers: true },
       });
       if (!cookieRegion && p?.region) region = p.region;
-      if (!cookieLocale && p?.locale) language = p.locale;
       if (useMyProviders && Array.isArray(p?.providers) && p.providers.length > 0) {
         // NOTE: TMDb expects provider IDs; we have names. We use name filtering client-side,
         // but here we still forward monetization + region hints for better results.

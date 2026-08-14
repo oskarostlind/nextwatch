@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../lib/prisma';
 import { verifyPassword } from '../../../../lib/hash';
-import { setAuthCookies } from '../../../../lib/auth';
+import { setAuthCookies, attachUiLanguageCookie } from '../../../../lib/auth';
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from '../../../../lib/rateLimit';
 
 export const runtime = 'nodejs';
@@ -24,7 +24,13 @@ export async function POST(req: Request) {
     // ⚠️ Håll detta i linje med ditt faktiska schema (fältnamn)
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, passwordHash: true, emailVerified: true } as const,
+      select: {
+        id: true,
+        passwordHash: true,
+        emailVerified: true,
+        // Kontots språk följer med till den här enheten (se attachUiLanguageCookie).
+        profile: { select: { uiLanguage: true } },
+      } as const,
     });
 
     if (!user?.passwordHash) {
@@ -40,6 +46,7 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json({ ok: true });
     await setAuthCookies(res, user.id, { remember: true });
+    if (user.profile?.uiLanguage) attachUiLanguageCookie(res, user.profile.uiLanguage);
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed';

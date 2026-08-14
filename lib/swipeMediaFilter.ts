@@ -31,9 +31,15 @@ export function swipeMediaFilterLabel(f: SwipeMediaFilter): string {
 }
 
 /** Kort etikett för gruppfältet / GroupBar. */
-export function swipeMediaFilterShortLabel(f: SwipeMediaFilter): string | null {
-  if (f === "movie") return "Film";
-  if (f === "tv") return "Serier";
+/**
+ * Nyckel i stället för färdig text — modulen har ingen locale. Ytorna slår upp
+ * swipe.filterMovie / swipe.filterTv. null = inget chip ska visas ("båda").
+ */
+export function swipeMediaFilterShortLabelKey(
+  f: SwipeMediaFilter
+): "filterMovie" | "filterTv" | null {
+  if (f === "movie") return "filterMovie";
+  if (f === "tv") return "filterTv";
   return null;
 }
 

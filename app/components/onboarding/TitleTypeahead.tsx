@@ -3,6 +3,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type MediaType = "movie" | "tv";
 
@@ -25,8 +26,11 @@ export default function TitleTypeahead({
   onChange,
   language = "sv-SE",
   region = "SE",
-  placeholder = "Sök titel…",
+  placeholder,
 }: Props) {
+  const t = useTranslations("onboarding");
+  // Utelämnad placeholder = standardtexten på valt språk.
+  const inputPlaceholder = placeholder ?? t("searchTitle");
   const [q, setQ] = useState(value?.title ?? "");
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<PickedTitle[]>([]);
@@ -69,7 +73,7 @@ export default function TitleTypeahead({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder={placeholder}
+        placeholder={inputPlaceholder}
         className="w-full rounded-lg bg-neutral-900 border border-neutral-700 px-3 py-2 text-neutral-100 outline-none focus:ring-2 focus:ring-neutral-500"
       />
 

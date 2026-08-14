@@ -1,5 +1,6 @@
 // app/api/tmdb/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const q = (url.searchParams.get("q") || "").trim();
     const type = (url.searchParams.get("type") || "movie").toLowerCase();
-    const locale = url.searchParams.get("locale") || "sv-SE";
+    const locale = url.searchParams.get("locale") || (await tmdbLanguageFromCookies());
 
     if (!q || !["movie", "tv"].includes(type)) {
       return fail(400, "Ogiltig query.");

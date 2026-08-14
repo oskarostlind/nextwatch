@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { rateLimitAllow, getRateLimitKey, RECS_LIMIT } from "../../../../lib/rateLimit";
 import { computeUnifiedRecs } from "../../../../lib/unifiedRecs";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +15,8 @@ export async function GET(req: Request) {
   const c = await cookies();
   const uid = c.get("nw_uid")?.value;
   const region = c.get("nw_region")?.value || "SE";
-  const locale = c.get("nw_locale")?.value || "sv-SE";
+  // TMDB-språket följer användarens gränssnittsval (nw_lang), inte regionen.
+  const locale = await tmdbLanguageFromCookies();
   const reqUrl = new URL(req.url);
   // Gruppkod kan komma explicit via query (t.ex. gruppdäcket) eller från cookie.
   const groupCode = reqUrl.searchParams.get("group") || c.get("nw_group")?.value || null;

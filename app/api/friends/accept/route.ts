@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/push";
+import { sendLocalizedPushToUser } from "@/lib/push";
 
 type Ok = { ok: true; friendship?: { userId: string; friendId: string } };
 type Err = { ok: false; message: string };
@@ -137,9 +137,9 @@ export async function POST(req: NextRequest) {
   });
   const accepterName =
     accepter?.profile?.displayName ?? accepter?.username ?? "Någon";
-  await sendPushToUser(pending.from_user_id, {
-    title: "Vänförfrågan accepterad",
-    body: `${accepterName} accepterade din vänförfrågan`,
+  await sendLocalizedPushToUser(pending.from_user_id, {
+    key: "friendAccepted",
+    values: { name: accepterName },
     data: { type: "friend_accepted", userId: uid },
   });
 

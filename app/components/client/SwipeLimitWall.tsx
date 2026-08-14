@@ -16,8 +16,10 @@ import { goPremium } from "@/lib/premiumPurchase";
 // reportSwipeLimitFrom bor i lib/swipeLimitEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
 import { SWIPE_LIMIT_EVENT } from "@/lib/swipeLimitEvent";
+import { useTranslations } from "next-intl";
 
 export default function SwipeLimitWall() {
+  const t = useTranslations("swipeLimit");
   const [reached, setReached] = useState(false);
   const [buying, setBuying] = useState(false);
   // Servern äger gränsvärdet (lib/swipeLimit.ts) — 100 är bara defaulttext
@@ -69,10 +71,9 @@ export default function SwipeLimitWall() {
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
           >
             <div className="text-3xl">🎬</div>
-            <h2 className="text-lg font-semibold text-white">Du har nått dagens gräns</h2>
+            <h2 className="text-lg font-semibold text-white">{t("heading")}</h2>
             <p className="text-sm leading-relaxed text-neutral-300">
-              {limit} swipes per dag ingår gratis. Kom igen imorgon
-              – eller bli Premium för obegränsat swipande.
+              {t("body", { limit })}
             </p>
             <button
               type="button"
@@ -84,9 +85,9 @@ export default function SwipeLimitWall() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 font-semibold text-neutral-950 transition hover:bg-amber-300 disabled:opacity-50"
             >
               <Crown className="h-4 w-4" />
-              {buying ? "Öppnar…" : "Bli Premium – 19 kr/mån"}
+              {buying ? t("opening") : t("cta")}
             </button>
-            <p className="text-xs text-neutral-500">Gränsen nollställs löpande under dygnet.</p>
+            <p className="text-xs text-neutral-500">{t("resetHint")}</p>
           </motion.div>
         </div>
       ) : null}

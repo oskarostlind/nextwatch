@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader, Card, Note } from "../../components/ui/kit";
+import { useTranslations } from "next-intl";
 
 export default function GroupMatchPage() {
+  const t = useTranslations("groupMatchPage");
   return (
-    <Suspense fallback={<div className="p-6">Laddar…</div>}>
+    <Suspense fallback={<div className="p-6">{t("loading")}</div>}>
       <GroupMatchInner />
     </Suspense>
   );
@@ -30,6 +32,7 @@ type MatchResponse = {
 };
 
 function GroupMatchInner() {
+  const t = useTranslations("groupMatchPage");
   const sp = useSearchParams();
   const code = sp?.get("code") || "";
   const [data, setData] = useState<MatchResponse | null>(null);
@@ -46,19 +49,25 @@ function GroupMatchInner() {
   if (!code) {
     return (
       <div className="p-6 text-sm text-neutral-400">
-        Ingen kod. Gå till <a className="text-cyan-400 underline underline-offset-2" href="/group">gruppsidan</a>.
+        {t.rich("noCode", {
+          link: (chunks: React.ReactNode) => (
+            <a className="text-cyan-400 underline underline-offset-2" href="/group">
+              {chunks}
+            </a>
+          ),
+        })}
       </div>
     );
   }
   if (err) return <div className="p-6"><Note tone="error">{err}</Note></div>;
-  if (!data) return <div className="p-6 text-neutral-400">Laddar…</div>;
+  if (!data) return <div className="p-6 text-neutral-400">{t("loading")}</div>;
   if (!data.match) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-6">
-        <PageHeader eyebrow="Grupp" title="Ingen träff ännu" subtitle="Fortsätt svepa!" />
+        <PageHeader eyebrow={t("eyebrow")} title={t("noMatchTitle")} subtitle={t("noMatchSubtitle")} />
         <Card>
           <p className="text-sm text-neutral-400">
-            Gruppstorlek: {data.size}. Kräver minst {data.need} likes på samma titel.
+            {t("sizeNeed", { size: data.size, need: data.need })}
           </p>
         </Card>
       </div>
@@ -70,15 +79,15 @@ function GroupMatchInner() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-6">
       <PageHeader
-        eyebrow="Grupp"
-        title="Gruppens träff"
-        subtitle={`Gruppstorlek: ${data.size} · Kräver ${data.need} likes · Nuvarande: ${data.count}`}
+        eyebrow={t("eyebrow")}
+        title={t("matchTitle")}
+        subtitle={t("matchSubtitle", { size: data.size, need: data.need, count: data.count })}
       />
       <Card className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate font-medium text-white">
             {m.title || `TMDb #${m.tmdbId}`}{" "}
-            <span className="text-xs text-neutral-500">({m.tmdbType === "movie" ? "film" : "serie"})</span>
+            <span className="text-xs text-neutral-500">({m.tmdbType === "movie" ? t("typeMovie") : t("typeTv")})</span>
           </div>
           {typeof m.rating === "number" && (
             <div className="text-sm text-neutral-400">★ {m.rating.toFixed(1)}</div>
@@ -90,7 +99,7 @@ function GroupMatchInner() {
           target="_blank"
           rel="noreferrer"
         >
-          Öppna på TMDb
+          {t("openOnTmdb")}
         </a>
       </Card>
     </div>

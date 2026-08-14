@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 
 export type RatingModalItem = {
   tmdbId: number;
@@ -56,7 +57,7 @@ export default function RatingModal({
   open,
   item,
   heading = "Vad tyckte du?",
-  skipLabel = "Hoppa över",
+  skipLabel,
   saving = false,
   initialRating,
   onRate,
@@ -64,6 +65,7 @@ export default function RatingModal({
   onRemove,
   removeLabel = "Ta bort betyg",
 }: Props) {
+  const t = useTranslations("modals");
   // null = användaren har inte rört slidern än (och inget förifyllt betyg finns).
   const [selected, setSelected] = useState<number | null>(initialRating ?? null);
 
@@ -160,7 +162,11 @@ export default function RatingModal({
               }}
               className="w-full rounded-xl bg-emerald-600 py-3 font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-40"
             >
-              {saving ? "Sparar…" : selected !== null ? `Spara betyg (${selected}/10)` : "Dra för att betygsätta"}
+              {saving
+                ? t("saving")
+                : selected !== null
+                ? t("saveRating", { value: selected })
+                : t("dragToRate")}
             </button>
 
             {onRemove ? (
@@ -180,7 +186,7 @@ export default function RatingModal({
               onClick={onSkip}
               className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-300 disabled:opacity-50"
             >
-              {skipLabel}
+              {skipLabel ?? t("skip")}
             </button>
           </motion.div>
 

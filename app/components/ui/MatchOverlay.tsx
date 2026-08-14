@@ -18,6 +18,7 @@ import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { Trailer } from "@/lib/tmdbVideos";
 import type { MatchEvidence } from "@/lib/tasteModel";
 import { BUTTON_VARIANTS } from "@/app/components/ui/kit";
+import { useTranslations } from "next-intl";
 
 export type ProviderLink = { name: string; url: string };
 
@@ -60,23 +61,30 @@ function normalizePoster(src?: string): string | undefined {
  * "skådespelaren Ryan Gosling" — kategorin måste med, annars går det inte att
  * skilja en skådespelare från ett tema i uppräkningen.
  */
-function evidencePhrase(e: MatchEvidence, mediaType: "movie" | "tv"): string {
+function evidencePhrase(
+  e: MatchEvidence,
+  mediaType: "movie" | "tv",
+  t: (key: string, values?: Record<string, string>) => string
+): string {
   switch (e.kind) {
     case "cast":
-      return `skådespelaren ${e.label}`;
+      return t("evidenceCast", { label: e.label });
     case "director":
-      return mediaType === "tv" ? `skaparen ${e.label}` : `regissören ${e.label}`;
+      return mediaType === "tv"
+        ? t("evidenceCreator", { label: e.label })
+        : t("evidenceDirector", { label: e.label });
     case "keyword":
-      return `teman som ${e.label}`;
+      return t("evidenceKeyword", { label: e.label });
     case "genre":
       return e.label;
   }
 }
 
 /** "A", "A och B", "A, B och C" */
-function joinSv(parts: string[]): string {
+/** "a, b och c" / "a, b and c" — bindeordet kommer från översättningen. */
+function joinList(parts: string[], and: string): string {
   if (parts.length <= 1) return parts[0] ?? "";
-  return `${parts.slice(0, -1).join(", ")} och ${parts[parts.length - 1]}`;
+  return `${parts.slice(0, -1).join(", ")} ${and} ${parts[parts.length - 1]}`;
 }
 
 /* Konfetti: statiska vinklar/färger så partiklarna inte hoppar vid re-render. */
@@ -126,6 +134,7 @@ export default function MatchOverlay({
   evidence,
   savedBy,
 }: Props) {
+  const t = useTranslations("match");
   const [flipped, setFlipped] = useState(false);
   // Konfettin är ren vestibulär dekor — hoppa över den vid "Minska rörelse".
   const reduce = useReducedMotion();
@@ -161,22 +170,22 @@ export default function MatchOverlay({
     }
   }, [code, item, onClose, variant]);
 
-  const heading = variant === "solo" ? "Toppmatch för dig!" : "Gruppmatch!";
+  const heading = variant === "solo" ? t("headingSolo") : t("headingGroup");
 
   const reasonLine = useMemo(() => {
     if (variant !== "solo" || !evidence?.length || !item) return null;
-    const phrases = evidence.slice(0, 2).map((e) => evidencePhrase(e, item.tmdbType));
-    return `Du gillar ${joinSv(phrases)}.`;
-  }, [variant, evidence, item]);
+    const phrases = evidence.slice(0, 2).map((e) => evidencePhrase(e, item.tmdbType, t));
+    return t("youLike", { list: joinList(phrases, t("and")) });
+  }, [variant, evidence, item, t]);
 
   /** "Oskar hade den redan i sin watchlist." — förklarar den snabba matchen. */
   const savedByLine = useMemo(() => {
     if (variant !== "group" || !savedBy?.length) return null;
-    const namn = joinSv(savedBy.slice(0, 3));
+    const names = joinList(savedBy.slice(0, 3), t("and"));
     return savedBy.length === 1
-      ? `${namn} hade den redan i sin watchlist.`
-      : `${namn} hade den redan i sina watchlists.`;
-  }, [variant, savedBy]);
+      ? t("savedByOne", { names })
+      : t("savedByMany", { names });
+  }, [variant, savedBy, t]);
 
   if (typeof document === "undefined") return null;
 
@@ -284,14 +293,14 @@ export default function MatchOverlay({
                     {item.overview ? (
                       <p className="whitespace-pre-line">{item.overview}</p>
                     ) : (
-                      <p>Ingen beskrivning tillgänglig.</p>
+                      <p>{t("noDescription")}</p>
                     )}
                   </div>
 
                   {providers.length > 0 && (
                     <div className="mt-3">
                       <div className="mb-1 text-xs uppercase tracking-wide text-neutral-400">
-                        Tillgänglig på
+                        {t("availableOn")}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {providers.map((p) => (
@@ -329,7 +338,7 @@ export default function MatchOverlay({
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-[15px] font-semibold text-black shadow-[0_8px_24px_-8px_rgba(34,211,238,0.7)] transition hover:bg-cyan-400 active:scale-[0.98]"
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  Kolla nu på {watch.name}
+                  {t("watchNowOn", { provider: watch.name })}
                 </a>
               ) : null}
 
@@ -345,7 +354,7 @@ export default function MatchOverlay({
                   className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition ${BUTTON_VARIANTS.secondary}`}
                 >
                   {flipped ? <Undo2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
-                  {flipped ? "Framsida" : "Mer info"}
+                  {flipped ? t("front") : t("moreInfo")}
                 </button>
                 <button
                   type="button"
@@ -353,7 +362,7 @@ export default function MatchOverlay({
                   className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition ${BUTTON_VARIANTS.secondary}`}
                 >
                   <Check className="h-4 w-4" />
-                  Fortsätt swipa
+                  {t("keepSwiping")}
                 </button>
               </div>
             </motion.div>

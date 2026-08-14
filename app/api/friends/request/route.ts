@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/push";
+import { sendLocalizedPushToUser } from "@/lib/push";
 
 type ApiOk = { ok: true; requestId: string };
 type ApiErr = { ok: false; message: string };
@@ -109,9 +109,9 @@ export async function POST(req: NextRequest) {
         data: { fromUserId: me, toUserId, status: "pending" },
         select: { id: true },
       });
-      await sendPushToUser(toUserId, {
-        title: "Ny vänförfrågan",
-        body: `${fromUser.username ?? "Någon"} vill bli vän med dig`,
+      await sendLocalizedPushToUser(toUserId, {
+        key: "friendRequest",
+        values: { name: fromUser.username ?? "" },
         data: { type: "friend_request", fromUserId: me },
       });
       return json({ ok: true, requestId: fr.id });
@@ -128,9 +128,9 @@ export async function POST(req: NextRequest) {
               where: { id: fr.id },
               data: { status: "pending", decidedAt: null },
             });
-            await sendPushToUser(toUserId, {
-              title: "Ny vänförfrågan",
-              body: `${fromUser.username ?? "Någon"} vill bli vän med dig`,
+            await sendLocalizedPushToUser(toUserId, {
+              key: "friendRequest",
+              values: { name: fromUser.username ?? "" },
               data: { type: "friend_request", fromUserId: me },
             });
           }

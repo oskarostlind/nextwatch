@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/push";
+import { sendLocalizedPushToUser } from "@/lib/push";
 import { canJoinGroup } from "@/lib/groupLimits";
 
 type Action = "accept" | "decline";
@@ -97,9 +97,9 @@ export async function POST(req: NextRequest) {
         select: { username: true, profile: { select: { displayName: true } } },
       });
       const name = accepter?.profile?.displayName ?? accepter?.username ?? "Någon";
-      await sendPushToUser(invite.fromUserId, {
-        title: "Inbjudan accepterad",
-        body: `${name} gick med i din grupp ${group.code} – dags att swipa!`,
+      await sendLocalizedPushToUser(invite.fromUserId, {
+        key: "groupInviteAccepted",
+        values: { name, code: group.code },
         data: { type: "group_invite_accepted", groupCode: group.code },
       });
     }

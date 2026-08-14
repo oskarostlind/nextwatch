@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGroupInvites } from "@/lib/useGroupInvites";
 import { notify } from "@/app/components/lib/notify";
+import { useTranslations } from "next-intl";
 
 export default function IncomingInvites() {
+  const t = useTranslations("group");
   const router = useRouter();
   const { data, refresh } = useGroupInvites();
   const [busy, setBusy] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export default function IncomingInvites() {
 
   return (
     <div className="mb-5 space-y-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-      <h3 className="text-sm font-medium text-cyan-300">Gruppinbjudningar</h3>
+      <h3 className="text-sm font-medium text-cyan-300">{t("invitesHeading")}</h3>
 
       {data.incoming.map((inv) => (
         <div
@@ -23,10 +25,10 @@ export default function IncomingInvites() {
         >
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-white">
-              {inv.from.displayName ?? inv.from.username ?? "Någon"}
+              {inv.from.displayName ?? inv.from.username ?? t("someone")}
             </div>
             <div className="text-xs text-white/50">
-              Bjuder in till <span className="font-mono text-white/70">{inv.groupCode}</span>
+              {t("invitesYouTo")} <span className="font-mono text-white/70">{inv.groupCode}</span>
             </div>
           </div>
 
@@ -54,10 +56,10 @@ export default function IncomingInvites() {
                 const body = (await res.json().catch(() => null)) as
                   | { message?: string }
                   | null;
-                notify(body?.message ?? "Kunde inte gå med i gruppen.");
+                notify(body?.message ?? t("joinFailed"));
               }}
             >
-              Acceptera
+              {t("accept")}
             </button>
             <button
               type="button"
@@ -74,7 +76,7 @@ export default function IncomingInvites() {
                 void refresh();
               }}
             >
-              Avvisa
+              {t("decline")}
             </button>
           </div>
         </div>

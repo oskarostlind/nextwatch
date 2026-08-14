@@ -4,6 +4,7 @@
 // sorterat närmast först. Cachas några timmar (listan ändras långsamt).
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,7 @@ export async function GET() {
   const jar = await cookies();
   const regionRaw = jar.get("nw_region")?.value ?? "";
   const region = /^[A-Z]{2}$/.test(regionRaw) ? regionRaw : "SE";
-  const localeRaw = jar.get("nw_locale")?.value ?? "";
-  const locale = /^[a-z]{2}(-[A-Z]{2})?$/.test(localeRaw) ? localeRaw : "sv-SE";
+  const locale = await tmdbLanguageFromCookies();
 
   const v4 = process.env.TMDB_V4_TOKEN ?? process.env.TMDB_READ_TOKEN;
   const apiKey = process.env.TMDB_API_KEY;

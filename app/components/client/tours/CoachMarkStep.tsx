@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { CoachTourStep } from "@/lib/tours/types";
+import { useTranslations } from "next-intl";
 
 type Rect = { top: number; left: number; width: number; height: number };
 
@@ -40,6 +41,8 @@ export default function CoachMarkStep({
   /** Utelämnad = ingen "Hoppa över"-knapp (t.ex. första steget). */
   onSkip?: () => void;
 }) {
+  const tt = useTranslations("tours");
+  const tg = useTranslations("guide");
   const [mounted, setMounted] = useState(false);
   const [spot, setSpot] = useState<Rect | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -119,8 +122,8 @@ export default function CoachMarkStep({
         <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400/80">
           {index + 1} / {total}
         </p>
-        <h3 className="mt-1 text-lg font-bold text-white">{step.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-300">{step.body}</p>
+        <h3 className="mt-1 text-lg font-bold text-white">{tt(step.titleKey)}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-300">{tt(step.bodyKey)}</p>
         <div className="mt-4 flex items-center justify-between gap-2">
           {onSkip ? (
             <button type="button" onClick={onSkip} className="text-sm text-neutral-400 transition hover:text-white">
@@ -134,7 +137,7 @@ export default function CoachMarkStep({
             onClick={onNext}
             className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400"
           >
-            {index >= total - 1 ? "Klart" : "Nästa"}
+            {index >= total - 1 ? tg("done") : tg("next")}
           </button>
         </div>
       </div>

@@ -26,6 +26,7 @@ import { notify } from "@/app/components/lib/notify";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { initAdMobIfEligible, registerSwipeForAds } from "@/lib/admobAds";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
+import { useTranslations } from "next-intl";
 
 type MediaType = "movie" | "tv";
 
@@ -46,6 +47,7 @@ type MatchResp =
 const LOW_DECK_WARNING_CARDS = 4;
 
 export default function GroupSwipePage({ code }: { code: string }) {
+  const t = useTranslations("groupSwipe");
   const { deck, popCard, updateCards, unshiftCard, retry } = useGroupSwipeDeck(code);
   const { cards, loading, ready, hasMore, broadened } = deck;
   const showLoading = cards.length === 0 && (loading || !ready);
@@ -68,11 +70,14 @@ export default function GroupSwipePage({ code }: { code: string }) {
     if (hasMore && cards.length <= LOW_DECK_WARNING_CARDS) {
       if (!warnedLowRef.current) {
         warnedLowRef.current = true;
-        notify("Få förslag kvar – hämtar fler och vidgar sökningen vid behov…");
+        notify(t("fewLeftFetching"));
       }
     } else if (cards.length > LOW_DECK_WARNING_CARDS) {
       warnedLowRef.current = false;
     }
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, hasMore, ready]);
 
   // Servern (lib/unifiedRecs.ts) släpper hårda genre-/nyckelordsfilter när
@@ -82,10 +87,13 @@ export default function GroupSwipePage({ code }: { code: string }) {
   useEffect(() => {
     if (!broadened) return;
     if (broadened.genres) {
-      notify("Få träffar med era filter — vidgade sökningen (släppte genre/sub-genre) för fler förslag.");
+      notify(t("widenedDroppedGenres"));
     } else if (broadened.keywords) {
-      notify("Få träffar med era sub-genrer — vidgade sökningen för fler förslag.");
+      notify(t("widenedSubgenres"));
     }
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadened]);
 
   // Leken kan tömmas helt (hasMore=false, 0 kort kvar) trots påfyllningen ovan
@@ -105,7 +113,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     }
     if (loading || hasMore || autoRetriedRef.current) return;
     autoRetriedRef.current = true;
-    notify("Letar efter fler förslag…");
+    notify(t("lookingForMore"));
     void retry();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, ready, loading, hasMore]);
@@ -326,7 +334,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
   function handleUndo(): void {
     const entry = undoStackRef.current[0];
     if (!entry) {
-      notify("Inget att ångra");
+      notify(t("nothingToUndo"));
       return;
     }
     undoStackRef.current = undoStackRef.current.slice(1);
@@ -347,7 +355,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
         groupCode: code,
       }),
     }).catch(() => {
-      notify("Kunde inte ångra på servern");
+      notify(t("undoFailed"));
     });
   }
 
@@ -534,7 +542,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="opacity-70">Slut på förslag nu.</p>
+            <p className="opacity-70">{t("outOfSuggestions")}</p>
             <button
               type="button"
               className="text-cyan-400 underline underline-offset-2"
@@ -543,11 +551,11 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 // körts och ändå kommit tomhänt — låt användaren utlösa ett
                 // till utan att lämna skärmen.
                 autoRetriedRef.current = false;
-                notify("Letar efter fler förslag…");
+                notify(t("lookingForMore"));
                 void retry();
               }}
             >
-              Försök igen
+              {t("retry")}
             </button>
             <a
               className="text-cyan-400 underline underline-offset-2"

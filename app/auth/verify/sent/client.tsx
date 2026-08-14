@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
+import { useTranslations } from "next-intl";
 
 const POLL_MS = 4000;
 
 export default function VerifySentClient() {
+  const t = useTranslations("auth");
   const router = useRouter();
   const [verified, setVerified] = useState(false);
   const isNative = Capacitor.isNativePlatform();
@@ -39,18 +41,17 @@ export default function VerifySentClient() {
   }, [checkStatus]);
 
   if (verified) {
-    return <p className="text-emerald-400">E-post verifierad — öppnar appen…</p>;
+    return <p className="text-emerald-400">{t("emailVerified")}</p>;
   }
 
   return (
     <>
       <p className="text-white/70">
-        Vi har skickat en länk för att bekräfta din e-post. Öppna mejlet och klicka på länken.
+        {t("verifySentBody")}
       </p>
       {isNative ? (
         <p className="mt-3 text-sm text-white/50">
-          När du verifierat kan du byta tillbaka hit — vi uppdaterar automatiskt. Du kan också trycka
-          &quot;Ta mig tillbaka till appen&quot; i Safari efter verifieringen.
+          {t("nativeHint")}
         </p>
       ) : null}
     </>

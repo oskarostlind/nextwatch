@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { rateLimitAllow, getRateLimitKey, TMDB_DETAILS_LIMIT } from "../../../../lib/rateLimit";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 import {
   pickTrailer,
   VIDEO_APPEND_PARAMS,
@@ -110,20 +111,18 @@ export async function GET(req: Request) {
     }
 
     const langOverride = url.searchParams.get("language") || url.searchParams.get("locale");
-    // Cookie-först: middleware.ts stämplar nw_locale/nw_region på VARJE
-    // request, så Prisma-uppslaget behövs bara när cookies saknas (t.ex. en
-    // gammal klient). Det tar bort en Neon-rundresa från varje kortöppning.
-    const cookieLocale = c.get("nw_locale")?.value || null;
+    // Språket följer gränssnittsvalet (nw_lang) — regionen är fortfarande
+    // geografisk och kommer från nw_region/profilen, så providers och
+    // åldersgränser inte ändras när man byter språk.
     const cookieRegion = c.get("nw_region")?.value || null;
-    let language = langOverride || cookieLocale || "sv-SE";
+    const language = langOverride || (await tmdbLanguageFromCookies());
     let region = cookieRegion || "SE";
-    if (uid && ((!langOverride && !cookieLocale) || !cookieRegion)) {
+    if (uid && !cookieRegion) {
       const profile = await prisma.profile.findUnique({
         where: { userId: uid },
-        select: { locale: true, region: true },
+        select: { region: true },
       });
-      if (!langOverride && !cookieLocale && profile?.locale) language = profile.locale;
-      if (!cookieRegion && profile?.region) region = profile.region;
+      if (profile?.region) region = profile.region;
     }
 
     const qs = new URLSearchParams({

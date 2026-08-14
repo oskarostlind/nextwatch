@@ -13,13 +13,20 @@ import { useSocial } from "@/app/components/client/SocialProvider";
 import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
 import { GROUPS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
+import { useTranslations } from "next-intl";
 
 type GroupResponse = {
   code?: string;
   group?: { code: string };
 };
 
-async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: string }> {
+// networkError skickas in i stället för att slås upp här: funktionen ligger
+// på modulnivå och har ingen tillgång till useTranslations.
+async function apiCall<T>(
+  url: string,
+  payload: unknown,
+  networkError: string
+): Promise<T | { error: string }> {
   try {
     const res = await fetch(url, {
       method: payload ? "POST" : "GET",
@@ -33,11 +40,11 @@ async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: 
       // "Nätverksfel. Försök igen." — fel orsak, och användaren fick aldrig
       // veta att gruppen var full.
       const body = (await res.json().catch(() => null)) as { message?: string } | null;
-      return { error: body?.message || "Nätverksfel. Försök igen." };
+      return { error: body?.message || networkError };
     }
     return (await res.json()) as T;
   } catch {
-    return { error: "Nätverksfel. Försök igen." };
+    return { error: networkError };
   }
 }
 
@@ -62,6 +69,7 @@ type CommonItem = {
  * Svaret på "vad händer när alla swipat klart?": det ni redan är överens om.
  */
 function CommonWatchlistSection({ code, memberCount }: { code: string; memberCount: number }) {
+  const t = useTranslations("group");
   const [items, setItems] = useState<CommonItem[] | null>(null);
 
   useEffect(() => {
@@ -82,10 +90,10 @@ function CommonWatchlistSection({ code, memberCount }: { code: string; memberCou
   return (
     <div>
       <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
-        <Sparkles className="h-4 w-4" /> Gemensamt i era watchlists
+        <Sparkles className="h-4 w-4" /> {t("commonWatchlist")}
       </h3>
       <p className="mb-2 text-xs text-white/60">
-        Titlar som flera av er redan sparat — börja kvällen här.
+        {t("commonWatchlistHint")}
       </p>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {items.map((it) => (
@@ -117,6 +125,7 @@ function CommonWatchlistSection({ code, memberCount }: { code: string; memberCou
 }
 
 export default function GroupTab({ initialCode, initialRegion, initialMembers, initialMeUserId }: Props) {
+  const t = useTranslations("group");
   const router = useRouter();
   const [code, setCode] = useState<string | null>(initialCode);
   const [region] = useState<string | undefined>(initialRegion);
@@ -177,7 +186,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const friends = social.friends.map((f) => ({
     id: f.id,
-    name: f.displayName ?? f.username ?? "Okänd",
+    name: f.displayName ?? f.username ?? t("unknown"),
   }));
 
   // Vänner som redan är med i gruppen ska inte gå att bjuda in igen.
@@ -212,12 +221,15 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   useEffect(() => {
     if (!meUserId) {
-      apiCall<{ profile?: { userId: string } }>("/api/profile").then((res) => {
+      apiCall<{ profile?: { userId: string } }>("/api/profile", undefined, t("networkError")).then((res) => {
         if (res && !("error" in res) && res.profile?.userId) {
           setMeUserId(res.profile.userId);
         }
       });
     }
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meUserId]);
 
   const handleAction = async <T,>(action: () => Promise<T | { error: string }>, onSuccess: (data: T) => void) => {
@@ -234,7 +246,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const handleCreate = () => 
     void handleAction(
-      () => apiCall<GroupResponse>("/api/group/create", {}),
+      () => apiCall<GroupResponse>("/api/group/create", {}, t("networkError")),
       (data) => { 
         const newCode = data.code || data.group?.code;
         if (newCode) {
@@ -249,7 +261,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const handleJoin = (groupCode: string) => 
     void handleAction(
-      () => apiCall<GroupResponse>("/api/group/join", { code: groupCode }),
+      () => apiCall<GroupResponse>("/api/group/join", { code: groupCode }, t("networkError")),
       (data) => { 
         const newCode = data.code || data.group?.code;
         if (newCode) {
@@ -262,7 +274,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const handleLeave = () => 
     void handleAction(
-      () => apiCall<{ success: boolean }>("/api/group/leave", {}),
+      () => apiCall<{ success: boolean }>("/api/group/leave", {}, t("networkError")),
       () => { setCode(null); void refreshSocial(); router.refresh(); }
     );
 
@@ -279,7 +291,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const inviteUser = async (userId: string) => {
     setError(null);
-    const result = await apiCall<{ ok?: boolean }>("/api/group/invite", { toUserId: userId });
+    const result = await apiCall<{ ok?: boolean }>("/api/group/invite", { toUserId: userId }, t("networkError"));
     if (result && "error" in result) {
       setError(result.error);
       return;
@@ -290,13 +302,13 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
   const removeMember = async (userId: string) => {
     setError(null);
-    const result = await apiCall<{ ok?: boolean; message?: string }>("/api/group/remove", { userId });
+    const result = await apiCall<{ ok?: boolean; message?: string }>("/api/group/remove", { userId }, t("networkError"));
     if (result && "error" in result) {
       setError(result.error);
       return;
     }
     if (result && "ok" in result && result.ok === false) {
-      setError(result.message ?? "Kunde inte ta bort medlemmen.");
+      setError(result.message ?? t("removeMemberFailed"));
       return;
     }
     void refreshSocial();
@@ -314,17 +326,17 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
         >
-          <Play className="h-5 w-5" /> Starta gruppswipe
+          <Play className="h-5 w-5" /> {t("startGroupSwipe")}
         </button>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-start justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-white/60">Gruppkod</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-white/60">{t("groupCode")}</p>
             {isCreator && (
               <button
                 type="button"
-                aria-label="Gruppinställningar"
-                title="Gruppinställningar"
+                aria-label={t("groupSettings")}
+                title={t("groupSettings")}
                 data-tour="group-settings"
                 onClick={() => setSettingsOpen(true)}
                 className="relative flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/60 transition after:absolute after:-inset-1.5 hover:bg-white/10 hover:text-white"
@@ -345,13 +357,13 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                   .writeText(code)
                   .then(() => {
                     setCopied(true);
-                    window.dispatchEvent(new CustomEvent("app:toast", { detail: "Kod kopierad!" }));
+                    window.dispatchEvent(new CustomEvent("app:toast", { detail: t("codeCopied") }));
                   })
                   .catch(() => {})
               }
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm hover:bg-white/5"
             >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Kopiera
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {t("copy")}
             </button>
             <button
               type="button"
@@ -359,21 +371,21 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
               onClick={openInviteModal}
               className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-white/90"
             >
-              <UserPlus className="h-4 w-4" /> Bjud in
+              <UserPlus className="h-4 w-4" /> {t("invite")}
             </button>
             <button
               type="button"
               onClick={handleLeave}
               className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10"
             >
-              <LogOut className="h-4 w-4" /> Lämna
+              <LogOut className="h-4 w-4" /> {t("leave")}
             </button>
           </div>
         </div>
 
         <div>
           <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/60">
-            <Users className="h-4 w-4" /> Medlemmar (<span className="tabular-nums">{members.length}</span>)
+            <Users className="h-4 w-4" /> {t("members", { count: members.length })}
           </h3>
           <ul className="space-y-2">
             {members.map((m) => (
@@ -381,10 +393,10 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                 key={m.userId}
                 className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
               >
-                <span className="font-medium text-white/90">{m.displayName ?? m.username ?? "Okänd"}</span>
+                <span className="font-medium text-white/90">{m.displayName ?? m.username ?? t("unknown")}</span>
                 <span className="flex items-center gap-2">
                   {meUserId === m.userId ? (
-                    <span className="text-xs text-white/60">Du</span>
+                    <span className="text-xs text-white/60">{t("you")}</span>
                   ) : (
                     <>
                       {/* Guideline 1.2: anmälan nåbar där andra användare visas. */}
@@ -393,13 +405,13 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
                         onClick={() => setReportMemberId(m.userId)}
                         className="rounded-lg px-2 py-1 text-[11px] font-medium text-white/45 transition hover:bg-rose-500/10 hover:text-rose-300"
                       >
-                        Anmäl
+                        {t("report")}
                       </button>
                       {isCreator ? (
                         <button
                           type="button"
-                          aria-label={`Ta bort ${m.displayName ?? m.username ?? "medlem"}`}
-                          title="Ta bort ur gruppen"
+                          aria-label={t("removeMemberAria", { name: m.displayName ?? m.username ?? t("member") })}
+                          title={t("removeFromGroup")}
                           onClick={() => void removeMember(m.userId)}
                           className="relative flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/20 text-rose-400 transition after:absolute after:-inset-1.5 hover:bg-rose-500/10"
                         >
@@ -429,17 +441,17 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <Modal open={inviteOpen} onClose={() => setInviteOpen(false)}>
           <div className="p-2">
-            <h3 className="mb-4 text-xl font-bold">Bjud in vänner</h3>
+            <h3 className="mb-4 text-xl font-bold">{t("inviteFriendsHeading")}</h3>
             <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
               {friends.map((f) => (
                 <li key={f.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3">
                   <span className="font-medium">{f.name}</span>
                   {memberIds.has(f.id) ? (
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/50">Med i gruppen</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/50">{t("alreadyMember")}</span>
                   ) : invitedIds.has(f.id) ? (
-                    <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400"><Check className="h-3 w-3" /> Inbjuden</span>
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400"><Check className="h-3 w-3" /> {t("invited")}</span>
                   ) : (
-                    <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-white/80">Bjud in</button>
+                    <button onClick={() => void inviteUser(f.id)} className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-white/80">{t("invite")}</button>
                   )}
                 </li>
               ))}
@@ -461,8 +473,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       {error && <div className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-        <h3 className="mb-1 font-semibold">Gå med i grupp</h3>
-        <p className="mb-4 text-sm text-white/50">Har du fått en kod? Skriv in den här.</p>
+        <h3 className="mb-1 font-semibold">{t("joinGroupHeading")}</h3>
+        <p className="mb-4 text-sm text-white/50">{t("joinGroupHint")}</p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -482,21 +494,21 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
             type="submit"
             className="shrink-0 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-black hover:bg-cyan-400 disabled:opacity-50"
           >
-            Gå med
+            {t("join")}
           </button>
         </form>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-        <h3 className="mb-1 font-semibold">Skapa grupp</h3>
-        <p className="mb-4 text-sm text-white/50">Starta en ny grupp och dela koden med vänner.</p>
+        <h3 className="mb-1 font-semibold">{t("createGroupHeading")}</h3>
+        <p className="mb-4 text-sm text-white/50">{t("createGroupHint")}</p>
         <button
           type="button"
           disabled={busy}
           onClick={() => handleCreate()}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black hover:bg-cyan-400 disabled:opacity-50"
         >
-          <Plus className="h-4 w-4" /> Skapa ny grupp
+          <Plus className="h-4 w-4" /> {t("createGroup")}
         </button>
       </div>
 

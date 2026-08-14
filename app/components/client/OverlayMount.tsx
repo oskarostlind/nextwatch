@@ -6,6 +6,7 @@ import RatingModal, { type RatingModalItem } from "./RatingModal";
 import { useGroupMatchPolling } from "../../../lib/useGroupMatch";
 import { GROUP_VOTED_EVENT } from "../../../lib/groupVoteEvent";
 import { markTitleRated } from "../../../lib/swipeDeckStore";
+import { useTranslations } from "next-intl";
 
 /* ---------- Betygsätt tidigare gruppmatchningar (vid app-öppning) ---------- */
 
@@ -102,6 +103,7 @@ function usePendingMatchRatings(liveMatchOpen: boolean) {
 }
 
 export default function OverlayMount() {
+  const t = useTranslations("overlay");
   const { open, item, savedBy, dismiss, notifyVoted, groupCode } = useGroupMatchPolling();
   const pending = usePendingMatchRatings(open);
 
@@ -128,8 +130,8 @@ export default function OverlayMount() {
       <RatingModal
         open={pending.item !== null}
         item={pending.item}
-        heading="Ni matchade på denna — såg du den?"
-        skipLabel="Såg den inte / hoppa över"
+        heading={t("groupMatchRate")}
+        skipLabel={t("didntSee")}
         saving={pending.saving}
         onRate={pending.rate}
         onSkip={pending.skip}

@@ -62,7 +62,12 @@ export type WatchProviders = {
   buy?: WatchProviderEntry[];
 };
 
-export type ProviderGroup = { label: string; list: WatchProviderEntry[] };
+/**
+ * `labelKey` i stället för färdig text: den här modulen körs både på server och
+ * klient och har ingen locale att översätta mot. Ytorna som renderar gruppen
+ * slår upp watch.group.<labelKey> i messages/*.json.
+ */
+export type ProviderGroup = { labelKey: "stream" | "paid"; list: WatchProviderEntry[] };
 
 /**
  * Tak för antal butiker under "Hyr eller köp".
@@ -72,8 +77,6 @@ export type ProviderGroup = { label: string; list: WatchProviderEntry[] };
  * pris. Att rada upp alla är brus, inte valfrihet.
  */
 const PAID_PROVIDER_LIMIT = 3;
-
-export const PAID_GROUP_LABEL = "Hyr eller köp";
 
 function byDisplayPriority(a: WatchProviderEntry, b: WatchProviderEntry): number {
   return (a.display_priority ?? Number.MAX_SAFE_INTEGER) - (b.display_priority ?? Number.MAX_SAFE_INTEGER);
@@ -105,10 +108,10 @@ export function providerGroupsFor(
 ): ProviderGroup[] {
   if (!providers) return [];
   const out: ProviderGroup[] = [];
-  if (providers.flatrate?.length) out.push({ label: "Streama", list: providers.flatrate });
+  if (providers.flatrate?.length) out.push({ labelKey: "stream", list: providers.flatrate });
   if (showPaidOptions) {
     const paid = topPaidProviders(providers);
-    if (paid.length) out.push({ label: PAID_GROUP_LABEL, list: paid });
+    if (paid.length) out.push({ labelKey: "paid", list: paid });
   }
   return out;
 }
@@ -127,7 +130,8 @@ export function isPaidOnly(
   return !hasFlatrate && hasPaid;
 }
 
-export const PAID_ONLY_LABEL = "Endast att hyra eller köpa";
+// Texten bor numera i messages/*.json som watch.paidOnly — se ProviderGroup
+// ovan för varför den här modulen inte översätter själv.
 
 /**
  * Bästa "Kolla nu"-länk för en titel. Utan opt-in vägs bara flatrate in, så

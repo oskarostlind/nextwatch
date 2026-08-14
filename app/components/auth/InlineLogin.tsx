@@ -3,8 +3,10 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export default function InlineLogin() {
+  const t = useTranslations("auth");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function InlineLogin() {
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-white/10 bg-black/40 p-6 shadow-xl">
-      <h2 className="mb-4 text-center text-2xl font-semibold">Logga in</h2>
+      <h2 className="mb-4 text-center text-2xl font-semibold">{t("signIn")}</h2>
       {err && (
         <div className="mb-3 rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">
           {err}
@@ -36,7 +38,7 @@ export default function InlineLogin() {
       )}
       <form onSubmit={onSubmit} className="space-y-3">
         <div>
-          <label className="text-sm text-white/70">E-post</label>
+          <label className="text-sm text-white/70">{t("email")}</label>
           <input
             className="mt-1 w-full rounded-xl border border-white/10 bg-black/50 p-3 outline-none focus:ring-2 focus:ring-white/20"
             type="email"
@@ -47,7 +49,7 @@ export default function InlineLogin() {
           />
         </div>
         <div>
-          <label className="text-sm text-white/70">Lösenord</label>
+          <label className="text-sm text-white/70">{t("password")}</label>
           <input
             className="mt-1 w-full rounded-xl border border-white/10 bg-black/50 p-3 outline-none focus:ring-2 focus:ring-white/20"
             type="password"
@@ -62,16 +64,19 @@ export default function InlineLogin() {
           disabled={loading}
           className="w-full rounded-2xl bg-cyan-500 py-3 font-medium text-black hover:bg-cyan-400 disabled:opacity-50"
         >
-          {loading ? "Loggar in…" : "Logga in"}
+          {loading ? t("signingIn") : t("signIn")}
         </button>
       </form>
 
       {/* Endast EN länk nedan */}
       <div className="mt-6 text-center text-sm text-white/70">
-        Ny användare?{" "}
-        <Link href="/onboarding" className="underline">
-          Skapa konto
-        </Link>
+        {t.rich("newUser", {
+          link: (chunks) => (
+            <Link href="/onboarding" className="underline">
+              {chunks}
+            </Link>
+          ),
+        })}
       </div>
     </div>
   );

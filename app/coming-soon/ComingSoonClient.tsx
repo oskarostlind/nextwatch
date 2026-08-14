@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Bell, BellRing, CalendarClock } from "lucide-react";
 import { PageHeader, Note } from "../components/ui/kit";
 import { canRemind, scheduleReleaseReminder, cancelReleaseReminder } from "@/lib/filmReminders";
+import { useTranslations } from "next-intl";
 
 type Item = {
   id: number;
@@ -21,6 +22,7 @@ function formatDate(iso: string): string {
 }
 
 export default function ComingSoonClient() {
+  const t = useTranslations("comingSoon");
   const [items, setItems] = useState<Item[] | null>(null);
   const [reminded, setReminded] = useState<Set<number>>(new Set());
   const [note, setNote] = useState<string | null>(null);
@@ -55,10 +57,10 @@ export default function ComingSoonClient() {
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="På gång" title="Kommer snart" subtitle="Nya filmer på väg – få en påminnelse när de släpps." />
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
 
       {!native && (
-        <Note tone="info">Påminnelser kan sättas i iOS-appen. Här ser du vad som är på väg.</Note>
+        <Note tone="info">{t("iosOnlyNote")}</Note>
       )}
       {note && <Note tone="error">{note}</Note>}
 
@@ -98,11 +100,11 @@ export default function ComingSoonClient() {
                     >
                       {isReminded ? (
                         <>
-                          <BellRing className="h-3.5 w-3.5" /> Påminns
+                          <BellRing className="h-3.5 w-3.5" /> {t("reminderSet")}
                         </>
                       ) : (
                         <>
-                          <Bell className="h-3.5 w-3.5" /> Påminn mig
+                          <Bell className="h-3.5 w-3.5" /> {t("remindMe")}
                         </>
                       )}
                     </button>

@@ -4,9 +4,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "../lib/nav";
+import { useTranslations } from "next-intl";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   return (
     // Behåller strukturen
@@ -33,7 +35,7 @@ export default function Sidebar() {
               ].join(" ")}
             >
               <Icon className="h-5 w-5" />
-              <span className="text-base">{item.label}</span>
+              <span className="text-base">{t(item.labelKey)}</span>
             </Link>
           );
         })}

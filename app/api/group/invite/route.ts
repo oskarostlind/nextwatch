@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/push";
+import { sendLocalizedPushToUser } from "@/lib/push";
 import { getGroupCapacity, groupFullMessage } from "@/lib/groupLimits";
 
 export const runtime = "nodejs";
@@ -132,9 +132,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
     });
     const fromName = inviter?.username ?? "Någon";
     const notify = async () => {
-      await sendPushToUser(toUserId, {
-        title: "Gruppinbjudan",
-        body: `${fromName} bjöd in dig till en grupp`,
+      await sendLocalizedPushToUser(toUserId, {
+        key: "groupInvite",
+        values: { name: fromName },
         data: { type: "group_invite", groupCode, fromUserId },
       });
     };

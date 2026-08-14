@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import Modal from "@/app/components/ui/Modal";
 import Avatar from "@/app/components/ui/Avatar";
 import { useShareThreads } from "@/lib/threadsStore";
+import { useTranslations } from "next-intl";
 
 export type ShareItem = {
   tmdbId: number;
@@ -41,6 +42,7 @@ export default function ShareTitleModal({
   item: ShareItem | null;
   onClose: () => void;
 }) {
+  const t = useTranslations("share");
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [sendState, setSendState] = useState<Record<string, SendState>>({});
   const [q, setQ] = useState("");
@@ -89,7 +91,7 @@ export default function ShareTitleModal({
     }
   }
 
-  const name = (f: Friend) => f.displayName ?? f.username ?? "Okänd";
+  const name = (f: Friend) => f.displayName ?? f.username ?? t("unknown");
 
   // Senast tipsad-med först (chattens rytm), övriga alfabetiskt; sök filtrerar.
   const needle = q.trim().toLowerCase();
@@ -106,7 +108,7 @@ export default function ShareTitleModal({
     <Modal open={open} onClose={onClose} labelledBy="share-title-heading">
       <div className="p-2">
         <h3 id="share-title-heading" className="text-lg font-bold text-white">
-          Tipsa en vän
+          {t("heading")}
         </h3>
         {item && (
           <p className="mt-0.5 text-sm text-white/50">
@@ -119,17 +121,17 @@ export default function ShareTitleModal({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Sök vän…"
+            placeholder={t("searchFriend")}
             className="mt-3 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
           />
         )}
 
         <div className="mt-4 grid gap-2">
           {friends === null ? (
-            <p className="py-6 text-center text-sm text-white/50">Laddar vänner…</p>
+            <p className="py-6 text-center text-sm text-white/50">{t("loadingFriends")}</p>
           ) : friends.length === 0 ? (
             <p className="py-6 text-center text-sm text-white/50">
-              Inga vänner än — lägg till någon under Grupp → Vänner först.
+              {t("noFriends")}
             </p>
           ) : (
             sortedFilteredFriends.map((f) => {
@@ -155,7 +157,13 @@ export default function ShareTitleModal({
                         : "bg-cyan-500 text-black hover:bg-cyan-400 disabled:opacity-60"
                     }`}
                   >
-                    {st === "sent" ? "Skickat ✓" : st === "sending" ? "Skickar…" : st === "error" ? "Försök igen" : "Skicka"}
+                    {st === "sent"
+                      ? t("sent")
+                      : st === "sending"
+                      ? t("sending")
+                      : st === "error"
+                      ? t("retry")
+                      : t("send")}
                   </button>
                 </div>
               );
@@ -168,7 +176,7 @@ export default function ShareTitleModal({
           onClick={onClose}
           className="mt-4 w-full rounded-xl py-2.5 text-sm text-white/50 transition hover:text-white/80"
         >
-          Stäng
+          {t("close")}
         </button>
       </div>
     </Modal>

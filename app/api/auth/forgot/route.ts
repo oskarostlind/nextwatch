@@ -4,6 +4,8 @@ import prisma from "../../../../lib/prisma";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
 import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
+import { getTranslations } from "next-intl/server";
+import { normalizeLocale } from "@/lib/i18nConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, passwordHash: true },
+      select: { id: true, email: true, passwordHash: true, profile: { select: { uiLanguage: true } } },
     });
     if (!user?.email) return genericOk;
 
@@ -80,17 +82,22 @@ export async function POST(req: NextRequest) {
 
     const origin = computeOrigin(req);
     const link = `${origin}/auth/reset?token=${token}`;
+    // Mejlet skrivs på kontots språk (Profile.uiLanguage), inte på avsändarens.
+    const t = await getTranslations({
+      locale: normalizeLocale(user.profile?.uiLanguage),
+      namespace: "email.reset",
+    });
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-        <h2>Återställ ditt lösenord</h2>
-        <p>Du (eller någon annan) har begärt att återställa lösenordet för ditt NextWatch-konto.</p>
-        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">Välj nytt lösenord</a></p>
-        <p>Om knappen inte fungerar, kopiera länken:</p>
+        <h2>${t("heading")}</h2>
+        <p>${t("intro")}</p>
+        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">${t("cta")}</a></p>
+        <p>${t("fallback")}</p>
         <p><code>${link}</code></p>
-        <p>Länken är giltig i 1 timme. Om du inte begärde detta kan du ignorera mejlet.</p>
+        <p>${t("validity")}</p>
       </div>
     `;
-    await sendEmailSMTP(user.email, "Återställ ditt lösenord", html);
+    await sendEmailSMTP(user.email, t("subject"), html);
 
     return genericOk;
   } catch (e) {

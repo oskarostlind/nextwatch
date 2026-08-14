@@ -16,6 +16,7 @@ import { addAnonLike } from "@/lib/anonLikes";
 import type { HeroCard } from "@/lib/curatedHero";
 import LoginSheet from "../auth/LoginSheet";
 import GuestEntryButton from "../auth/GuestEntryButton";
+import { useTranslations } from "next-intl";
 
 const VISIBLE_BEHIND = 4;
 
@@ -33,6 +34,7 @@ const HARD_GATE_AT = 4;
 /* ------------------------------------------------------------------ */
 
 export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
+  const t = useTranslations("landing");
   const [index, setIndex] = React.useState(0);
   const [liked, setLiked] = React.useState<HeroCard[]>([]);
   const [touched, setTouched] = React.useState(false);
@@ -171,18 +173,20 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           onClick={() => setLoginOpen(true)}
           className="rounded-full border border-white/15 px-3.5 py-1.5 text-[13px] font-medium text-white/70 transition hover:border-white/30 hover:text-white"
         >
-          Logga in
+          {t("signIn")}
         </button>
       </header>
 
       <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
 
       <h1 className="relative z-20 mb-7 px-6 text-center text-[clamp(1.6rem,5vw,2.6rem)] font-semibold leading-[1.1] tracking-[-0.02em] text-white">
-        Vad ska{" "}
-        <span style={{ color: top?.accent ?? "#fff" }} className="transition-colors duration-500">
-          ni
-        </span>{" "}
-        se ikväll?
+        {t.rich("headline", {
+          accent: (chunks) => (
+            <span style={{ color: top?.accent ?? "#fff" }} className="transition-colors duration-500">
+              {chunks}
+            </span>
+          ),
+        })}
       </h1>
 
       {/* EN perspective-wrapper. Nästlade 3d-kontexter spränger lagerantalet i WKWebView. */}
@@ -241,13 +245,13 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
               style={{ opacity: likeOpacity }}
               className="pointer-events-none absolute left-4 top-5 -rotate-12 rounded-lg border-4 border-emerald-400 px-3 py-1 text-xl font-black uppercase tracking-widest text-emerald-400"
             >
-              Gilla
+              {t("like")}
             </motion.div>
             <motion.div
               style={{ opacity: nopeOpacity }}
               className="pointer-events-none absolute right-4 top-5 rotate-12 rounded-lg border-4 border-rose-400 px-3 py-1 text-xl font-black uppercase tracking-widest text-rose-400"
             >
-              Nope
+              {t("nope")}
             </motion.div>
           </motion.div>
         )}
@@ -258,7 +262,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           <button
             type="button"
             onClick={() => !hardGate && commit("left")}
-            aria-label="Nope"
+            aria-label={t("nope")}
             className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-white/15 bg-white/5 text-lg text-rose-300 transition hover:bg-white/10"
           >
             ✕
@@ -266,7 +270,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           <button
             type="button"
             onClick={() => !hardGate && commit("right")}
-            aria-label="Gilla"
+            aria-label={t("like")}
             className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-white/15 bg-white/5 text-lg text-emerald-300 transition hover:bg-white/10"
           >
             ♥
@@ -278,7 +282,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         {/* Lägsta tröskeln in i riktiga appen, synlig utan att stjäla fokus från
             leken. Gestalten är en textlänk, inte en knapp — heron äger ytan. */}
         <GuestEntryButton
-          label="Hoppa in som gäst →"
+          label={t("guestEntry")}
           className="text-[13px] font-medium text-white/45 underline decoration-white/25 underline-offset-4 transition hover:text-white/80 disabled:opacity-60"
         />
       </div>
@@ -288,20 +292,22 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       {/* Diskret legal-rad — Apple/AdMob kräver nåbar policy och TMDB kräver
           attribution. Medvetet nästan osynlig: heron äger fortfarande scenen. */}
       <footer className="absolute inset-x-0 bottom-2 z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 text-center text-[10px] text-white/25">
-        <a href="/legal/privacy" className="transition hover:text-white/60">Integritetspolicy</a>
-        <a href="/legal/terms" className="transition hover:text-white/60">Villkor</a>
-        <a href="/support" className="transition hover:text-white/60">Support</a>
+        <a href="/legal/privacy" className="transition hover:text-white/60">{t("privacy")}</a>
+        <a href="/legal/terms" className="transition hover:text-white/60">{t("terms")}</a>
+        <a href="/support" className="transition hover:text-white/60">{t("support")}</a>
         <span>
-          Data från{" "}
-          <a
-            href="https://www.themoviedb.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#01b4e4]/60 transition hover:text-[#01b4e4]"
-          >
-            TMDB
-          </a>{" "}
-          — ej godkänd/certifierad av TMDB
+          {t.rich("tmdbAttribution", {
+            tmdb: (chunks) => (
+              <a
+                href="https://www.themoviedb.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#01b4e4]/60 transition hover:text-[#01b4e4]"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
         </span>
       </footer>
     </div>
@@ -418,6 +424,7 @@ function GateCard({
   liked: HeroCard[];
   reduce: boolean;
 }) {
+  const t = useTranslations("landing");
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-260, 260], [-8, 8]);
   const fan = liked.slice(-5);
@@ -466,18 +473,18 @@ function GateCard({
 
         <div className="flex flex-col items-center gap-2">
           <p className="text-[19px] font-semibold leading-tight tracking-tight text-white">
-            {liked.length} {liked.length === 1 ? "film" : "filmer"} väntar på dig
+            {t("filmsWaiting", { count: liked.length })}
           </p>
           {/* Tre löften — och varje löfte är något besökaren precis bevisat själv. */}
           <ul className="mt-1 space-y-1.5 text-left text-[13px] leading-snug text-white/65">
             <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> Vi lärde oss din smak av swipesen. Nu blir förslagen dina.
+              <span style={{ color: accent }}>—</span> {t("promiseTaste")}
             </li>
             <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> Swipa med vänner. Ni matchar när ni gillar samma film.
+              <span style={{ color: accent }}>—</span> {t("promiseGroup")}
             </li>
             <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> Bara det ni faktiskt kan streama, med länk direkt dit.
+              <span style={{ color: accent }}>—</span> {t("promiseStreaming")}
             </li>
           </ul>
         </div>
@@ -491,12 +498,12 @@ function GateCard({
               boxShadow: `0 8px 24px -8px ${accent}`,
             }}
           >
-            Skapa gratis konto
+            {t("createFreeAccount")}
           </a>
           {/* Gästvägen infriar samma löfte som kontot — likesen spelas upp mot
               gästprofilen (se GuestEntryButton) — men utan onboarding. */}
           <GuestEntryButton
-            label="Fortsätt som gäst"
+            label={t("continueAsGuest")}
             className="w-full rounded-xl border border-white/15 bg-white/5 py-2.5 text-[14px] font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-60"
           />
         </div>

@@ -24,7 +24,6 @@ import {
   isPaidOnly,
   providerGroupsFor,
   providerWatchUrl,
-  PAID_ONLY_LABEL,
   type WatchProviders,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
@@ -37,6 +36,7 @@ import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
+import { useTranslations } from "next-intl";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -82,6 +82,16 @@ type UndoEntry = {
 };
 
 const UNDO_MAX = 5;
+
+/**
+ * Kortleken rapporterar felkoder (se lib/swipeDeckStore). Är strängen ingen
+ * känd kod är den ett färdigt meddelande från servern och visas som den är.
+ */
+function deckErrorText(code: string | null, t: (k: string) => string): string {
+  if (!code) return "";
+  const known = ["deck_fetch_failed_retry", "deck_fetch_failed", "network_check_connection", "group_deck_fetch_failed", "network_error"];
+  return known.includes(code) ? t(`deckError.${code}`) : code;
+}
 
 function pushUndo(stack: UndoEntry[], entry: UndoEntry): UndoEntry[] {
   return [entry, ...stack].slice(0, UNDO_MAX);
@@ -287,15 +297,16 @@ function MediaFilterPill({
   value: SwipeMediaFilter;
   onChange: (next: SwipeMediaFilter) => void;
 }) {
+  const t = useTranslations("swipe");
   const options: { id: SwipeMediaFilter; label: string }[] = [
-    { id: "both", label: "Båda" },
-    { id: "movie", label: "Film" },
-    { id: "tv", label: "Serier" },
+    { id: "both", label: t("filterBoth") },
+    { id: "movie", label: t("filterMovie") },
+    { id: "tv", label: t("filterTv") },
   ];
   return (
     <div
       role="radiogroup"
-      aria-label="Visa i swipen"
+      aria-label={t("filterAria")}
       className="absolute left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/10 bg-white/[0.06] p-0.5"
     >
       {options.map((o) => (
@@ -320,6 +331,7 @@ function MediaFilterPill({
 let groupRefreshAttempted = false;
 
 export default function SwipePageClient() {
+  const t = useTranslations("swipe");
   const router = useRouter();
   const { showPaidOptions, mediaFilter } = useSwipeSettings();
   const [shareItem, setShareItem] = useState<ShareItem | null>(null);
@@ -575,10 +587,10 @@ export default function SwipePageClient() {
       body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, rating }),
     })
       .then((res) => {
-        if (!res.ok) notify("Kunde inte spara betyget");
+        if (!res.ok) notify(t("ratingSaveFailed"));
       })
       .catch(() => {
-        notify("Kunde inte spara betyget");
+        notify(t("ratingSaveFailed"));
       })
       .finally(() => {
         setRatingSaving(false);
@@ -589,7 +601,7 @@ export default function SwipePageClient() {
   function handleUndo(): void {
     const entry = undoStackRef.current[0];
     if (!entry) {
-      notify("Inget att ångra");
+      notify(t("nothingToUndo"));
       return;
     }
     undoStackRef.current = undoStackRef.current.slice(1);
@@ -610,7 +622,7 @@ export default function SwipePageClient() {
         groupCode: entry.groupCode,
       }),
     }).catch(() => {
-      notify("Kunde inte ångra på servern");
+      notify(t("undoFailed"));
     });
   }
 
@@ -700,7 +712,7 @@ export default function SwipePageClient() {
         <button
           type="button"
           onClick={() => router.push("/profile")}
-          aria-label="Inställningar för förslag"
+          aria-label={t("settingsAria")}
           className="rounded-full p-2 text-white/50 transition hover:bg-white/5 hover:text-white/80"
         >
           <Settings className="h-5 w-5" />
@@ -728,14 +740,14 @@ export default function SwipePageClient() {
               }
             : null
         }
-        heading="Vad tyckte du?"
+        heading={t("ratePrompt")}
         saving={ratingSaving}
         onRate={submitSeenRating}
         onSkip={() => setRatePrompt(null)}
       />
       {mode === "group" && group?.code && (
         <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
-          Grupp: <span className="font-mono tracking-wider">{group.code}</span>
+          {t("groupLabel")} <span className="font-mono tracking-wider">{group.code}</span>
         </div>
       )}
 
@@ -751,9 +763,9 @@ export default function SwipePageClient() {
         </div>
       ) : feedError ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="text-sm text-rose-300">{feedError}</p>
+          <p className="text-sm text-rose-300">{deckErrorText(feedError, t)}</p>
           <Button variant="secondary" onClick={() => void retrySoloDeck()}>
-            Försök igen
+            {t("retry")}
           </Button>
         </div>
       ) : cards[0] ? (
@@ -986,6 +998,7 @@ export function StaticCard({
 /* ---------- Annonskort (AdSense på webb, AdMob på iOS i Fas 2) ---------- */
 
 function AdCard({ adId }: { adId: string }) {
+  const t = useTranslations("swipe");
   const client = adsenseClientId();
   const slot = adsenseSlotId();
 
@@ -1026,12 +1039,12 @@ function AdCard({ adId }: { adId: string }) {
           className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center"
         >
           <div className="text-2xl">🎬</div>
-          <div className="text-sm text-white/70">Reklamplats</div>
+          <div className="text-sm text-white/70">{t("adSlot")}</div>
           <p className="max-w-[16rem] text-xs leading-relaxed text-white/40">
-            Swipa vidare som vanligt — eller slipp annonserna helt.
+            {t("adSlotHint")}
           </p>
           <span className="mt-1 rounded-full bg-amber-400/15 px-4 py-1.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-400/40">
-            Uppgradera till Premium
+            {t("upgradeCta")}
           </span>
         </div>
       )}
@@ -1101,6 +1114,8 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
 }
 
 function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void }) {
+  const t = useTranslations("swipe");
+  const tw = useTranslations("watch");
   const heroSrc = card.backdrop ?? card.poster;
   const { showPaidOptions } = useSwipeSettings();
   const providerGroups = providerGroupsFor(card.providers, showPaidOptions);
@@ -1152,7 +1167,7 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
       {card.reasons && card.reasons.length > 0 ? (
         <div className="mx-3 mt-2 shrink-0 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/80">
-            Varför det här?
+            {t("whyThis")}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-white/65">
             {card.reasons.join(" · ")}
@@ -1163,15 +1178,15 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
       {/* overscroll-contain: iOS studs-scroll ska stanna i beskrivningen och inte
           kedjas vidare till body när texten tar slut. */}
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
-        {card.overview || "Ingen beskrivning tillgänglig."}
+        {card.overview || t("noDescription")}
       </div>
 
       {card.providers !== undefined && providerGroups.length > 0 ? (
         <div className="shrink-0 space-y-2 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
-          {providerGroups.map(({ label, list }) => (
-            <div key={label}>
+          {providerGroups.map(({ labelKey, list }) => (
+            <div key={labelKey}>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/70">
-                {label}
+                {tw(`group.${labelKey}`)}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {list.map((p) => {
@@ -1218,7 +1233,7 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
       ) : null}
 
       {paidOnly ? (
-        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{PAID_ONLY_LABEL}</div>
+        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{tw("paidOnly")}</div>
       ) : null}
 
       <div
@@ -1234,7 +1249,7 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
             className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-white/25 hover:bg-white/10"
           >
             <Send className="h-4 w-4" />
-            Tipsa
+            {t("shareTip")}
           </button>
         ) : null}
       </div>

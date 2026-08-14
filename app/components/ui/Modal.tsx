@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslations } from "next-intl";
 
 type ModalProps = {
   open: boolean;
@@ -11,6 +12,7 @@ type ModalProps = {
 };
 
 export default function Modal({ open, onClose, children, labelledBy }: ModalProps) {
+  const t = useTranslations("common");
   const panelRef = useRef<HTMLDivElement>(null);
   // Elementet som hade fokus innan modalen öppnades — fokus ska tillbaka dit.
   const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -67,7 +69,7 @@ export default function Modal({ open, onClose, children, labelledBy }: ModalProp
                 (och den skulle dessutom flytta knappen). */}
             <button
               type="button"
-              aria-label="Stäng"
+              aria-label={t("close")}
               onClick={onClose}
               className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-neutral-400 transition after:absolute after:-inset-1.5 hover:bg-white/10 hover:text-white"
             >

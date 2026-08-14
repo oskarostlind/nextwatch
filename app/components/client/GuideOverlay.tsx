@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { GuideStep } from "@/lib/guideSteps";
 import type { GuideId } from "@/lib/userGuide";
 import { markGuideSeen } from "@/lib/userGuide";
+import { useTranslations } from "next-intl";
 
 type Rect = { top: number; left: number; width: number; height: number };
 
@@ -96,6 +97,8 @@ function computeTooltipStyle(
 }
 
 export default function GuideOverlay({ guideId, steps, open, onClose, onStepChange }: Props) {
+  const t = useTranslations("guide");
+  const tt = useTranslations("tours");
   const [mounted, setMounted] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [spot, setSpot] = useState<Rect | null>(null);
@@ -199,15 +202,15 @@ export default function GuideOverlay({ guideId, steps, open, onClose, onStepChan
         <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400/80">
           {stepIndex + 1} / {steps.length}
         </p>
-        <h3 className="mt-1 text-lg font-bold text-white">{step.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-300">{step.body}</p>
+        <h3 className="mt-1 text-lg font-bold text-white">{tt(step.titleKey)}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-neutral-300">{tt(step.bodyKey)}</p>
         <div className="mt-4 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={finish}
             className="text-sm text-neutral-400 transition hover:text-white"
           >
-            Hoppa över
+            {t("skip")}
           </button>
           <button
             type="button"
@@ -217,7 +220,7 @@ export default function GuideOverlay({ guideId, steps, open, onClose, onStepChan
             }}
             className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400"
           >
-            {isLast ? "Klart" : "Nästa"}
+            {isLast ? t("done") : t("next")}
           </button>
         </div>
       </div>

@@ -7,6 +7,8 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import { getTranslations } from "next-intl/server";
+import { uiLocaleFromCookies } from "@/lib/serverLocale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,17 +133,20 @@ export async function POST(req: NextRequest) {
     const origin = computeOrigin(req);
     const link = `${origin}/auth/verify?token=${token}${fromApp ? "&from=app" : ""}`;
 
+    // Registreringen sker i webbläsaren, så nw_lang-cookien speglar det språk
+    // användaren just fyllde i formuläret på.
+    const t = await getTranslations({ locale: await uiLocaleFromCookies(), namespace: "email.verify" });
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-        <h2>Bekräfta din e-post</h2>
-        <p>Klicka på knappen för att verifiera din e-postadress.</p>
-        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">Verifiera e-post</a></p>
-        <p>Om knappen inte fungerar, kopiera länken:</p>
+        <h2>${t("heading")}</h2>
+        <p>${t("intro")}</p>
+        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">${t("cta")}</a></p>
+        <p>${t("fallback")}</p>
         <p><code>${link}</code></p>
-        <p>Giltig i 24 timmar.</p>
+        <p>${t("validity")}</p>
       </div>
     `;
-    const mailRes = await sendEmailSMTP(email, "Bekräfta din e-post", html);
+    const mailRes = await sendEmailSMTP(email, t("subject"), html);
 
     return NextResponse.json({
       ok: true,

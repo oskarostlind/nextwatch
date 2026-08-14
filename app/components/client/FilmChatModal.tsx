@@ -17,20 +17,23 @@ import Avatar from "@/app/components/ui/Avatar";
 import { SegmentedTabs } from "@/app/components/ui/kit";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
+import { useLocale, useTranslations } from "next-intl";
+import { bcp47 } from "@/lib/i18nConfig";
 import {
   bestWatchUrl,
   isPaidOnly,
   providerGroupsFor,
-  PAID_ONLY_LABEL,
   type WatchProviders,
 } from "@/lib/watchLinks";
 
 type Reaction = "seen" | "want" | "skip";
 
-const REACTION_META: Record<Reaction, { emoji: string; label: string }> = {
-  seen: { emoji: "👀", label: "Redan sett" },
-  want: { emoji: "🍿", label: "Vill kolla" },
-  skip: { emoji: "🙅", label: "Vill inte se" },
+// Etiketten översätts vid rendering (filmChat.reaction.<key>) — bara emojin
+// bor här, eftersom reaktionen skickas till servern som id.
+const REACTION_META: Record<Reaction, { emoji: string }> = {
+  seen: { emoji: "👀" },
+  want: { emoji: "🍿" },
+  skip: { emoji: "🙅" },
 };
 
 type ThreadItem = {
@@ -53,12 +56,12 @@ type SearchHit = { id: number; title: string; year: string; poster: string | nul
 
 const POLL_MS = 8000;
 
-function timeLabel(iso: string): string {
+function timeLabel(iso: string, locale: string): string {
   const d = new Date(iso);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
-  const hm = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
-  return sameDay ? hm : `${d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" })} ${hm}`;
+  const hm = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  return sameDay ? hm : `${d.toLocaleDateString(locale, { day: "numeric", month: "short" })} ${hm}`;
 }
 
 export default function FilmChatModal({
@@ -75,6 +78,9 @@ export default function FilmChatModal({
   /** Anropas när ett tips lagts i watchlisten — låter t.ex. /watchlist refetcha. */
   onWatchlistAdd?: () => void;
 }) {
+  const t = useTranslations("filmChat");
+  const locale = useLocale();
+  const tw = useTranslations("watch");
   const [items, setItems] = useState<ThreadItem[] | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -267,7 +273,9 @@ export default function FilmChatModal({
             <p className="py-10 text-center text-sm text-white/50">Laddar…</p>
           ) : items.length === 0 ? (
             <p className="px-6 py-10 text-center text-sm text-white/50">
-              Inga tips än — skicka det första med <Plus className="inline h-3.5 w-3.5" />-knappen nedan.
+              {t.rich("noTips", {
+                plus: () => <Plus className="inline h-3.5 w-3.5" />,
+              })}
             </p>
           ) : (
             <div className="grid gap-2 px-1">
@@ -303,10 +311,10 @@ export default function FilmChatModal({
                           {it.year ? <span className="text-white/40"> ({it.year})</span> : null}
                         </div>
                         <div className="mt-0.5 text-[11px] text-white/35">
-                          {timeLabel(it.createdAt)}
+                          {timeLabel(it.createdAt, bcp47(locale))}
                           {it.fromMe && !it.id.startsWith("optimistic_") && (
                             <span className="ml-1.5 text-cyan-300/70">
-                              {it.seenAt ? "· Läst" : "· Skickat"}
+                              {it.seenAt ? t("read") : t("sent")}
                             </span>
                           )}
                         </div>
@@ -317,7 +325,7 @@ export default function FilmChatModal({
                     {it.fromMe ? (
                       it.reaction && (
                         <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/70">
-                          {REACTION_META[it.reaction].emoji} {REACTION_META[it.reaction].label}
+                          {REACTION_META[it.reaction].emoji} {t(`reaction.${it.reaction}`)}
                         </div>
                       )
                     ) : (
@@ -326,7 +334,7 @@ export default function FilmChatModal({
                           <button
                             key={r}
                             type="button"
-                            title={REACTION_META[r].label}
+                            title={t(`reaction.${r}`)}
                             aria-pressed={it.reaction === r}
                             onClick={() => void react(it, r)}
                             className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
@@ -336,7 +344,7 @@ export default function FilmChatModal({
                             }`}
                           >
                             {REACTION_META[r].emoji}
-                            {it.reaction === r ? ` ${REACTION_META[r].label}` : ""}
+                            {it.reaction === r ? ` ${t(`reaction.${r}`)}` : ""}
                           </button>
                         ))}
                         <button
@@ -349,7 +357,7 @@ export default function FilmChatModal({
                               : "bg-cyan-500 text-black hover:bg-cyan-400"
                           }`}
                         >
-                          {addedIds.has(it.id) ? "Tillagd ✓" : "Lägg till"}
+                          {addedIds.has(it.id) ? t("added") : t("add")}
                         </button>
                       </div>
                     )}
@@ -382,7 +390,7 @@ export default function FilmChatModal({
                     setQ("");
                     setHits([]);
                   }}
-                  aria-label="Stäng sök"
+                  aria-label={t("closeSearch")}
                   className="ml-auto rounded-full p-2 text-white/50 transition hover:bg-white/10"
                 >
                   <X className="h-4 w-4" />
@@ -392,7 +400,7 @@ export default function FilmChatModal({
                 autoFocus
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder={searchType === "movie" ? "Sök film att tipsa om…" : "Sök serie att tipsa om…"}
+                placeholder={searchType === "movie" ? t("searchMovie") : t("searchTv")}
                 className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
               />
               {hits.length > 0 && (
@@ -427,7 +435,7 @@ export default function FilmChatModal({
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
             >
               <Plus className="h-4 w-4" />
-              Tipsa om en titel
+              {t("shareATitle")}
             </button>
           )}
         </div>
@@ -452,7 +460,7 @@ export default function FilmChatModal({
                 {detailItem.year ? ` (${detailItem.year})` : ""}
               </h4>
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
-                {detailLoading ? "Laddar info…" : detailOverview || "Ingen beskrivning tillgänglig."}
+                {detailLoading ? t("loadingInfo") : detailOverview || t("noDescription")}
               </p>
 
               {!detailLoading && (
@@ -460,13 +468,13 @@ export default function FilmChatModal({
                   {providerGroupsFor(detailProviders, showPaidOptions).length === 0 ? (
                     <p className="text-sm text-neutral-400">
                       {isPaidOnly(detailProviders, showPaidOptions)
-                        ? PAID_ONLY_LABEL
-                        : "Ingen streamingdata för din region just nu."}
+                        ? tw("paidOnly")
+                        : t("noStreamingData")}
                     </p>
                   ) : (
-                    providerGroupsFor(detailProviders, showPaidOptions).map(({ label, list }) => (
-                      <div key={label} className="mb-2">
-                        <p className="mb-1 text-xs uppercase tracking-widest text-cyan-400/80">{label}</p>
+                    providerGroupsFor(detailProviders, showPaidOptions).map(({ labelKey, list }) => (
+                      <div key={labelKey} className="mb-2">
+                        <p className="mb-1 text-xs uppercase tracking-widest text-cyan-400/80">{tw(`group.${labelKey}`)}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {list.map((p) => (
                             <span
@@ -494,7 +502,7 @@ export default function FilmChatModal({
                     }}
                     className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
                   >
-                    Lägg till i watchlist
+                    {t("addToWatchlist")}
                   </button>
                 )}
               </div>

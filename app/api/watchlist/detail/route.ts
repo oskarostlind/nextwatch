@@ -2,7 +2,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { cookies, headers } from 'next/headers';
+
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
@@ -30,13 +31,6 @@ type TvDetail = {
   episode_run_time?: number[];
 };
 
-function pickLang(l: string | null): string {
-  if (!l) return 'sv-SE';
-  const first = l.split(',')[0]?.trim();
-  if (!first) return 'sv-SE';
-  return /^[a-z]{2}(-[A-Z]{2})?$/.test(first) ? first : 'sv-SE';
-}
-
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -46,12 +40,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, message: 'Missing id or invalid type.' }, { status: 400 });
     }
 
-    const jar = await cookies();
-    const hdr = await headers();
-    const locale =
-      jar.get('nw_locale')?.value ??
-      pickLang(hdr.get('accept-language'));
-    const language = pickLang(locale);
+    const language = await tmdbLanguageFromCookies();
 
     // 1) Försök på användarens språk
     let data = await tmdbGet<MovieDetail | TvDetail>(`/${type}/${id}`, `language=${encodeURIComponent(language)}`);

@@ -1,11 +1,14 @@
 'use client';
 
+import { useTranslations } from "next-intl";
+
 type Props = {
   url?: string;
   disabledText?: string;
 };
 
-export default function WatchNowButton({ url, disabledText = 'Ej tillgänglig' }: Props) {
+export default function WatchNowButton({ url, disabledText }: Props) {
+  const t = useTranslations("watch");
   const enabled = Boolean(url);
   return (
     <a
@@ -17,7 +20,7 @@ export default function WatchNowButton({ url, disabledText = 'Ej tillgänglig' }
         ${enabled ? 'bg-cyan-500 hover:bg-cyan-400 text-black' : 'bg-neutral-700 text-neutral-400 cursor-not-allowed'}
       `}
     >
-      {enabled ? 'Kolla nu' : disabledText}
+      {enabled ? t('watchNow') : disabledText ?? t('unavailable')}
     </a>
   );
 }

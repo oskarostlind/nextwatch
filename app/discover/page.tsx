@@ -15,12 +15,12 @@ import {
   isPaidOnly,
   providerGroupsFor,
   providerWatchUrl,
-  PAID_ONLY_LABEL,
   type WatchProviders as Providers,
 } from "@/lib/watchLinks";
 import { useSwipeSettings } from "../components/client/SwipeSettingsProvider";
 import { markTitleRated } from "@/lib/swipeDeckStore";
 import { toggleKeywordGroup } from "@/lib/subgenres";
+import { useTranslations } from "next-intl";
 
 // Modalerna renderas bara bakom booleskt state — håll dem utanför
 // förstaladdningens bundle. ssr:false: rena klientkomponenter.
@@ -95,6 +95,8 @@ async function fetchDetail(id: number, mediaType: "movie" | "tv"): Promise<Detai
 }
 
 export default function DiscoverPage() {
+  const t = useTranslations("discover");
+  const tw = useTranslations("watch");
   const { showPaidOptions } = useSwipeSettings();
   const [type, setType] = useState<MediaTypeFilter>("movie");
   const [sort, setSort] = useState("popularity.desc");
@@ -181,7 +183,7 @@ export default function DiscoverPage() {
         );
         const j = (await r.json()) as { ok: boolean; results?: SearchHit[]; message?: string };
         if (ignore) return;
-        if (!j.ok) throw new Error(j.message ?? "Sökningen misslyckades");
+        if (!j.ok) throw new Error(j.message ?? t("searchFailed"));
         setSearchResults(j.results ?? []);
       } catch (e) {
         if (!ignore) {
@@ -196,6 +198,9 @@ export default function DiscoverPage() {
     return () => {
       ignore = true;
     };
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, type]);
 
   const openItem = useCallback(async (it: Item) => {
@@ -302,7 +307,7 @@ export default function DiscoverPage() {
         ) : null}
         <button
           type="button"
-          aria-label="Betygsätt"
+          aria-label={t("rate")}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -314,7 +319,7 @@ export default function DiscoverPage() {
         </button>
         <button
           type="button"
-          aria-label="Tipsa en vän"
+          aria-label={t("tipFriend")}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -331,7 +336,7 @@ export default function DiscoverPage() {
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
       <div ref={topRef} />
-      <PageHeader eyebrow="Utforska" title="Discover" subtitle="Bläddra bland filmer och serier." />
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
 
       <MediaFilters
         type={type}
@@ -358,7 +363,7 @@ export default function DiscoverPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Sök titel…"
+          placeholder={t("searchPlaceholder")}
           className={`${fieldClass} text-sm`}
         />
       </div>
@@ -378,7 +383,7 @@ export default function DiscoverPage() {
       ) : isSearching && !searchBusy && displayItems.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
           <Search className="mx-auto mb-2 h-10 w-10 text-white/20" />
-          <p className="text-neutral-400">Inga träffar för &quot;{debouncedQ.trim()}&quot;.</p>
+          <p className="text-neutral-400">{t("noResults", { query: debouncedQ.trim() })}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -396,7 +401,7 @@ export default function DiscoverPage() {
             }}
             disabled={page === 1}
           >
-            ← Föregående
+            {t("prev")}
           </Button>
           <span className="text-sm text-neutral-400">Sida {page}</span>
           <Button
@@ -406,7 +411,7 @@ export default function DiscoverPage() {
               scrollToTop();
             }}
           >
-            Nästa →
+            {t("next")}
           </Button>
         </div>
       )}
@@ -440,18 +445,18 @@ export default function DiscoverPage() {
               </p>
 
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
-                {modalLoading ? "Laddar info…" : detail.overview || "Ingen beskrivning tillgänglig."}
+                {modalLoading ? t("loadingInfo") : detail.overview || t("noDescription")}
               </p>
 
               <div className="mt-4 space-y-3">
                 {providerGroups.length === 0 && !modalLoading && (
                   <p className="text-sm text-neutral-400">
-                    {paidOnly ? PAID_ONLY_LABEL : "Ingen tillgänglig streamingdata för din region just nu."}
+                    {paidOnly ? tw("paidOnly") : t("noStreamingData")}
                   </p>
                 )}
-                {providerGroups.map(({ label, list }) => (
-                  <div key={label}>
-                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{label}</p>
+                {providerGroups.map(({ labelKey, list }) => (
+                  <div key={labelKey}>
+                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{tw(`group.${labelKey}`)}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {list.map((p) => {
                         const href = providerWatchUrl(p.provider_name, active.title);
@@ -480,7 +485,7 @@ export default function DiscoverPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
-                            title={`Öppna ${p.provider_name}`}
+                            title={t("openProvider", { provider: p.provider_name })}
                           >
                             {inner}
                           </a>
@@ -521,7 +526,7 @@ export default function DiscoverPage() {
                   className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
                 >
                   <Send className="h-4 w-4" />
-                  Tipsa en vän
+                  {t("tipFriend")}
                 </button>
               </div>
             </div>

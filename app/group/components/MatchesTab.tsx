@@ -13,12 +13,12 @@ import PosterImage from "@/app/components/ui/PosterImage";
 import { PosterGridSkeleton } from "@/app/components/ui/Skeletons";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
+import { useTranslations } from "next-intl";
 import {
   bestWatchUrl,
   isPaidOnly,
   providerGroupsFor,
   providerWatchUrl,
-  PAID_ONLY_LABEL,
   type WatchProviders,
 } from "@/lib/watchLinks";
 
@@ -46,6 +46,8 @@ export default function MatchesTab({
   code: string | null;
   items: GroupMatchItem[] | null;
 }) {
+  const t = useTranslations("groupMatches");
+  const tw = useTranslations("watch");
   const { showPaidOptions } = useSwipeSettings();
   const [active, setActive] = useState<GroupMatchItem | null>(null);
 
@@ -60,7 +62,7 @@ export default function MatchesTab({
   if (!code) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/50">
-        Gå med i eller skapa en grupp för att se era matchningar.
+        {t("noGroup")}
       </div>
     );
   }
@@ -74,7 +76,7 @@ export default function MatchesTab({
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-sm text-white/50">
-        Inga matchningar än — swipa tillsammans för att hitta något ni alla gillar.
+        {t("noMatches")}
       </div>
     );
   }
@@ -120,7 +122,7 @@ export default function MatchesTab({
               {posterUrl(active.poster) ? (
                 <Image src={posterUrl(active.poster)!} alt={active.title} fill sizes="220px" className="object-cover" />
               ) : (
-                <div className="flex h-full items-center justify-center bg-neutral-800 text-neutral-400">Ingen bild</div>
+                <div className="flex h-full items-center justify-center bg-neutral-800 text-neutral-400">{t("noImage")}</div>
               )}
             </div>
 
@@ -134,18 +136,18 @@ export default function MatchesTab({
               )}
 
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
-                {active.overview || "Ingen beskrivning tillgänglig."}
+                {active.overview || t("noDescription")}
               </p>
 
               <div className="mt-4 space-y-3">
                 {providerGroups.length === 0 && (
                   <p className="text-sm text-neutral-400">
-                    {paidOnly ? PAID_ONLY_LABEL : "Ingen tillgänglig streamingdata för din region just nu."}
+                    {paidOnly ? tw("paidOnly") : t("noStreamingData")}
                   </p>
                 )}
-                {providerGroups.map(({ label, list }) => (
-                  <div key={label}>
-                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{label}</p>
+                {providerGroups.map(({ labelKey, list }) => (
+                  <div key={labelKey}>
+                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{tw(`group.${labelKey}`)}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {list.map((p) => {
                         const href = providerWatchUrl(p.provider_name, active.title);
@@ -174,7 +176,7 @@ export default function MatchesTab({
                             target="_blank"
                             rel="noopener noreferrer"
                             className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
-                            title={`Öppna ${p.provider_name}`}
+                            title={t("openProvider", { provider: p.provider_name })}
                           >
                             {inner}
                           </a>

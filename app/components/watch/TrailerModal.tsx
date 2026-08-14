@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { youtubeEmbedUrl, type Trailer } from "@/lib/tmdbVideos";
+import { useTranslations } from "next-intl";
 
 type Props = {
   open: boolean;
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export default function TrailerModal({ open, trailer, title, onClose }: Props) {
+  const t = useTranslations("watch");
   // Esc stänger — modalen täcker skärmen och har ingen annan väg ut på desktop.
   useEffect(() => {
     if (!open) return;
@@ -58,7 +60,7 @@ export default function TrailerModal({ open, trailer, title, onClose }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Stäng trailer"
+                aria-label={t("closeTrailer")}
                 className="shrink-0 rounded-full bg-white/10 p-2 text-white/70 transition hover:bg-white/20 hover:text-white"
               >
                 <X className="h-4 w-4" />

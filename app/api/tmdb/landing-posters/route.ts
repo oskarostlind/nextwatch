@@ -1,6 +1,7 @@
 // app/api/tmdb/landing-posters/route.ts
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { LANG_COOKIE, tmdbLanguage } from "@/lib/i18nConfig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,12 +31,11 @@ async function resolveRegionLocale(): Promise<{ region: string; locale: string }
   const accept = h.get("accept-language")?.split(",")[0] ?? "";
 
   const regionCookie = c.get("nw_region")?.value ?? null;
-  const localeCookie = c.get("nw_locale")?.value ?? null;
 
   const region = regionCookie || (/^[A-Z]{2}$/.test(ipCountry) ? ipCountry : "SE");
-  const locale =
-    localeCookie ||
-    (/^[a-z]{2}(-[A-Z]{2})?$/.test(accept) ? accept : "sv-SE");
+  // Språket kommer från nw_lang (Accept-Language används redan av middleware
+  // för att gissa den cookien första gången).
+  const locale = tmdbLanguage(c.get(LANG_COOKIE)?.value ?? accept);
 
   return { region, locale };
 }

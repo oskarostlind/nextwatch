@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 const MAX_PROMPTS = 5;
 
@@ -23,7 +24,7 @@ export async function GET() {
     if (!uid) {
       return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
     }
-    const locale = jar.get("nw_locale")?.value ?? "sv-SE";
+    const locale = await tmdbLanguageFromCookies();
 
     const [seen, rated] = await Promise.all([
       prisma.groupMatchSeen.findMany({

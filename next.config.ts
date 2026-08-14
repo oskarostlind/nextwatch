@@ -1,5 +1,10 @@
 // next.config.ts
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Språket kommer från cookien nw_lang, inte från URL:en — se i18n/request.ts
+// för varför (Capacitor-djuplänkar får inte byta form).
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -44,4 +49,4 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

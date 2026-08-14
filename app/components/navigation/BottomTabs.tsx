@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "../lib/nav";
 import { motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 import { useSocial } from "../client/SocialProvider";
 import { useShareThreads } from "@/lib/threadsStore";
 
 export default function BottomTabs() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
 
   // Optimistisk aktiv-pill: flytta pillen redan vid trycket i stället för när
   // navigeringen är klar — fliken KÄNNS omedelbar även om RSC-svaret dröjer.
@@ -64,7 +66,7 @@ export default function BottomTabs() {
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 setPending(item.href);
               }}
-              aria-label={item.label}
+              aria-label={t(item.labelKey)}
               aria-current={active ? "page" : undefined}
               data-guide={item.guideTarget}
               className="group relative flex h-12 w-12 items-center justify-center rounded-full transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"

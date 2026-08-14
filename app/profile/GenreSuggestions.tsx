@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { getCached, setCached } from "@/lib/clientCache";
 import { ALL_GENRES_SV, ENG_TO_SV } from "./profileGenres";
+import { useTranslations } from "next-intl";
 
 /** Avfärdade förslag hålls borta i 30 dagar (per genre). */
 const DISMISS_KEY = "genre_suggestions_dismissed";
@@ -47,6 +48,7 @@ export default function GenreSuggestions({
   onAddLike,
   onRemoveDislike,
 }: Props) {
+  const t = useTranslations("genreSuggestions");
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
 
   // Beräknas EN gång vid mount. Redigeringar triggar inte om — dels för att inte
@@ -123,7 +125,7 @@ export default function GenreSuggestions({
         >
           Nej tack
         </button>
-        <span className="ml-1 text-[11px] text-white/40">Spara för att bekräfta.</span>
+        <span className="ml-1 text-[11px] text-white/40">{t("saveToConfirm")}</span>
       </div>
     </div>
   );

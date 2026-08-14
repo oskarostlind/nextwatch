@@ -15,7 +15,6 @@ import {
   isPaidOnly,
   providerGroupsFor,
   providerWatchUrl,
-  PAID_ONLY_LABEL,
   type WatchProviders as Providers,
 } from '@/lib/watchLinks';
 import { useSwipeSettings } from '@/app/components/client/SwipeSettingsProvider';
@@ -32,6 +31,7 @@ import {
 } from '@/lib/watchlistData';
 import { WATCHLIST_TOUR_STEPS } from '@/lib/tours/coachSteps';
 import { toggleKeywordGroup } from '@/lib/subgenres';
+import { useTranslations } from "next-intl";
 
 // Allt nedan renderas bakom ett booleskt state (eller bara när det finns data),
 // så det behöver inte ligga i förstaladdningens bundle. ssr:false — de är
@@ -75,6 +75,8 @@ async function fetchDetail(id: number, tmdbType: 'movie' | 'tv'): Promise<Detail
 }
 
 export default function WatchlistClient({ items: initial }: { items?: WatchItem[] }) {
+  const t = useTranslations("watchlist");
+  const tw = useTranslations("watch");
   const { showPaidOptions } = useSwipeSettings();
   const [items, setItems] = useState<WatchItem[]>(initial ?? []);
   // Klient-hämtad lista (sidan server-renderar inte längre datan): sant tills
@@ -387,20 +389,20 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       <div className="mb-4 flex rounded-xl border border-white/10 bg-black/40 p-1" data-tour="watchlist-tabs">
         {(
           [
-            { key: 'watchlist' as Tab, label: 'Watchlist' },
-            { key: 'ratings' as Tab, label: 'Betyg' },
+            { key: 'watchlist' as Tab, labelKey: 'tabWatchlist' as const },
+            { key: 'ratings' as Tab, labelKey: 'tabRatings' as const },
           ]
-        ).map((t) => (
+        ).map((item) => (
           <button
-            key={t.key}
+            key={item.key}
             type="button"
-            onClick={() => openTab(t.key)}
-            aria-pressed={tab === t.key}
+            onClick={() => openTab(item.key)}
+            aria-pressed={tab === item.key}
             className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-              tab === t.key ? 'bg-white text-neutral-900' : 'text-neutral-400 hover:text-neutral-200'
+              tab === item.key ? 'bg-white text-neutral-900' : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            {t.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </div>
@@ -408,7 +410,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
       {(tab === 'watchlist' || tab === 'ratings') && (
         <div className="mb-3 flex justify-end">
           <Button variant="secondary" onClick={() => setImdbOpen(true)}>
-            Importera från IMDb
+            {t("importImdb")}
           </Button>
         </div>
       )}
@@ -457,14 +459,14 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Sök titel…"
+          placeholder={t("searchPlaceholder")}
           className={`${fieldClass} text-sm`}
         />
       </div>
 
       {tab === 'ratings' ? (
         ratedLoading ? (
-          <p className="text-neutral-400">Laddar dina betyg…</p>
+          <p className="text-neutral-400">{t("loadingRatings")}</p>
         ) : filteredRated.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
             {rated && rated.length > 0 ? (
@@ -473,7 +475,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               <Star className="mx-auto mb-2 h-10 w-10 text-white/20" />
             )}
             <p className="text-neutral-400">
-              {rated && rated.length > 0 ? 'Inga träffar.' : 'Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.'}
+              {rated && rated.length > 0 ? t("noMatches") : t("noRatingsYet")}
             </p>
           </div>
         ) : (
@@ -523,12 +525,12 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
           )}
           <p className="text-neutral-400">
             {items.length === 0
-              ? 'Din watchlist är tom. Swipa höger på titlar du vill se, så hamnar de här.'
+              ? t("emptyWatchlist")
               : items.some((it) => it.tmdbType === wlType)
-              ? 'Inga träffar.'
+              ? t("noMatches")
               : wlType === 'movie'
-              ? 'Inga filmer i listan — men du har serier. Byt till Serier ovanför.'
-              : 'Inga serier i listan — men du har filmer. Byt till Film ovanför.'}
+              ? t("emptyMoviesHasTv")
+              : t("emptyTvHasMovies")}
           </p>
         </div>
       ) : (
@@ -540,7 +542,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
             >
               <button
                 type="button"
-                aria-label="Tipsa en vän"
+                aria-label={t("tipFriend")}
                 onClick={() =>
                   setShareItem({
                     tmdbId: it.id,
@@ -556,7 +558,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               </button>
               <button
                 type="button"
-                aria-label="Ta bort från watchlist"
+                aria-label={t("removeFromWatchlist")}
                 onClick={() => remove(it)}
                 className="absolute right-1.5 top-1.5 z-10 rounded-full bg-black/60 p-2.5 text-neutral-300 backdrop-blur transition after:absolute after:-inset-1 hover:bg-rose-600 hover:text-white"
               >
@@ -600,28 +602,30 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               </h2>
               <p className="mt-1 text-sm text-neutral-300">
                 {[
-                  typeof active.rating === 'number' ? `Betyg: ${active.rating.toFixed(1)}` : null,
+                  typeof active.rating === 'number'
+                    ? t('tmdbRating', { value: active.rating.toFixed(1) })
+                    : null,
                   typeof userRatingFor(active.id, active.tmdbType) === 'number'
-                    ? `Ditt betyg: ${userRatingFor(active.id, active.tmdbType)}/10`
+                    ? t('yourRating', { value: String(userRatingFor(active.id, active.tmdbType)) })
                     : null,
                 ]
                   .filter(Boolean)
-                  .join(' · ') || 'Betyg saknas'}
+                  .join(' · ') || t('noRating')}
               </p>
 
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
-                {loading ? 'Laddar info…' : (detail.overview || 'Ingen beskrivning tillgänglig.')}
+                {loading ? t("loadingInfo") : (detail.overview || t("noDescription"))}
               </p>
 
               <div className="mt-4 space-y-3">
                 {providerGroups.length === 0 && !loading && (
                   <p className="text-sm text-neutral-400">
-                    {paidOnly ? PAID_ONLY_LABEL : 'Ingen tillgänglig streamingdata för din region just nu.'}
+                    {paidOnly ? tw("paidOnly") : t("noStreamingData")}
                   </p>
                 )}
-                {providerGroups.map(({ label, list }) => (
-                  <div key={label}>
-                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{label}</p>
+                {providerGroups.map(({ labelKey, list }) => (
+                  <div key={labelKey}>
+                    <p className="mb-2 text-xs uppercase tracking-widest text-cyan-400/80">{tw(`group.${labelKey}`)}</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {list.map((p) => {
                         const href = providerWatchUrl(p.provider_name, active.title);
@@ -650,7 +654,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                             target="_blank"
                             rel="noopener noreferrer"
                             className={`${cls} transition hover:border-cyan-400/40 hover:bg-cyan-400/10`}
-                            title={`Öppna ${p.provider_name}`}
+                            title={t('openProvider', { provider: p.provider_name })}
                           >
                             {inner}
                           </a>
@@ -682,7 +686,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                   }}
                   className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
                 >
-                  Tipsa en vän
+                  {t("tipFriend")}
                 </button>
                 <button
                   type="button"
@@ -708,7 +712,7 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
                   className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20"
                 >
                   <Star className="h-4 w-4" />
-                  Betygsätt
+                  {t('rate')}
                   {typeof userRatingFor(active.id, active.tmdbType) === 'number'
                     ? ` (${userRatingFor(active.id, active.tmdbType)}/10)`
                     : ''}
@@ -732,8 +736,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               }
             : null
         }
-        heading="Ändra ditt betyg"
-        skipLabel="Avbryt"
+        heading={t("editRatingHeading")}
+        skipLabel={t("cancel")}
         saving={editSaving}
         initialRating={editing?.userRating}
         onRate={saveEditedRating}
@@ -754,8 +758,8 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               }
             : null
         }
-        heading="Vad tyckte du?"
-        skipLabel="Avbryt"
+        heading={t("ratePromptHeading")}
+        skipLabel={t("cancel")}
         saving={rateWlSaving}
         initialRating={
           rateFromWl ? userRatingFor(rateFromWl.id, rateFromWl.tmdbType) : undefined

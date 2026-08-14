@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useSocial } from "./client/SocialProvider";
+import { useTranslations } from "next-intl";
 
 const TOAST_DURATION_MS = 5000;
 
@@ -12,6 +13,7 @@ type Toast = {
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+  const t = useTranslations("group");
   useEffect(() => {
     const t = setTimeout(onDismiss, TOAST_DURATION_MS);
     return () => clearTimeout(t);
@@ -27,7 +29,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         type="button"
         onClick={onDismiss}
         className="ml-auto shrink-0 rounded p-1 text-white/50 hover:text-white/80"
-        aria-label="Stäng"
+        aria-label={t("close")}
       >
         ×
       </button>
@@ -36,6 +38,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
 }
 
 export default function InviteToasts() {
+  const t = useTranslations("group");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
 
@@ -51,7 +54,7 @@ export default function InviteToasts() {
         const id = `friend-${p.requestId}`;
         if (seenRef.current.has(id)) continue;
         seenRef.current.add(id);
-        const name = p.from?.displayName ?? p.from?.username ?? "Någon";
+        const name = p.from?.displayName ?? p.from?.username ?? t("someone");
         next.push({ id, message: `${name} vill bli vän med dig`, type: "friend" });
       }
     }
@@ -61,7 +64,7 @@ export default function InviteToasts() {
         const id = `group-${inv.id}`;
         if (seenRef.current.has(id)) continue;
         seenRef.current.add(id);
-        const name = inv.from?.displayName ?? inv.from?.username ?? "Någon";
+        const name = inv.from?.displayName ?? inv.from?.username ?? t("someone");
         next.push({
           id,
           message: `${name} bjöd in dig till grupp ${inv.groupCode}`,
@@ -73,6 +76,8 @@ export default function InviteToasts() {
     if (next.length > 0) {
       setToasts((prev) => [...prev, ...next]);
     }
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [social]);
 
   const removeToast = (id: string) => {

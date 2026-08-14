@@ -26,6 +26,7 @@ import GenrePicker from "@/app/components/discover/GenrePicker";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { PROVIDERS } from "@/lib/providers";
 import { toggleKeywordGroup } from "@/lib/subgenres";
+import { useTranslations } from "next-intl";
 
 type SettingsResp = {
   ok: boolean;
@@ -66,6 +67,7 @@ export default function GroupSettingsModal({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useTranslations("groupSettings");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export default function GroupSettingsModal({
       .then((j) => {
         if (cancelled) return;
         if (!j.ok || !j.settings) {
-          setError(j.message ?? "Kunde inte läsa inställningarna.");
+          setError(j.message ?? t("loadFailed"));
           return;
         }
         const n = j.memberCount ?? 0;
@@ -111,7 +113,7 @@ export default function GroupSettingsModal({
         setMediaFilter(j.settings.mediaFilter ?? "both");
       })
       .catch(() => {
-        if (!cancelled) setError("Nätverksfel. Försök igen.");
+        if (!cancelled) setError(t("networkError"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -119,6 +121,9 @@ export default function GroupSettingsModal({
     return () => {
       cancelled = true;
     };
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, code]);
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) => {
@@ -163,12 +168,12 @@ export default function GroupSettingsModal({
         setError(j.message ?? "Kunde inte spara.");
         return;
       }
-      notify("Gruppinställningar sparade");
+      notify(t("saved"));
       // Ladda om gruppens kortlek så nya filter slår igenom direkt.
       void ensureGroupDeck(code, { force: true });
       onClose();
     } catch {
-      setError("Nätverksfel. Försök igen.");
+      setError(t("networkError"));
     } finally {
       setSaving(false);
     }
@@ -179,10 +184,10 @@ export default function GroupSettingsModal({
       <div className="space-y-6 p-2">
         <div>
           <h3 id="group-settings-title" className="text-xl font-bold">
-            Gruppinställningar
+            {t("heading")}
           </h3>
           <p className="mt-1 text-sm text-white/50">
-            Tomma val = automatik utifrån medlemmarnas profiler.
+            {t("headingHint")}
           </p>
         </div>
 
@@ -191,34 +196,33 @@ export default function GroupSettingsModal({
         )}
 
         {loading ? (
-          <p className="py-8 text-center text-sm text-white/50">Laddar…</p>
+          <p className="py-8 text-center text-sm text-white/50">{t("loading")}</p>
         ) : (
           <>
             <div className="space-y-5">
               {capacity && (
-                <SettingsSection title="Platser">
+                <SettingsSection title={t("seats")}>
                   <p className="text-sm text-white/70">
-                    {memberCount} av {capacity.max} platser använda.
+                    {t("seatsUsed", { used: memberCount, max: capacity.max })}
                   </p>
                   {capacity.limitedByFreePlan && (
                     <p className="mt-1.5 text-xs leading-relaxed text-white/40">
-                      Taket följer den som skapade gruppen. Med Premium rymmer gruppen upp till{" "}
-                      {capacity.premiumMax} personer.
+                      {t("seatsPremiumHint", { max: capacity.premiumMax })}
                     </p>
                   )}
                 </SettingsSection>
               )}
 
               <SettingsSection
-                title="Vi letar efter"
-                hint="Alla i gruppen ser samma typ av titlar när ni swipar."
+                title={t("lookingFor")}
+                hint={t("lookingForHint")}
               >
                 <SegmentedTabs
                   layoutId="group-settings-media"
                   tabs={[
-                    { id: "both" as SwipeMediaFilter, label: "Båda" },
-                    { id: "movie" as SwipeMediaFilter, label: "Film" },
-                    { id: "tv" as SwipeMediaFilter, label: "Serier" },
+                    { id: "both" as SwipeMediaFilter, label: t("filterBoth") },
+                    { id: "movie" as SwipeMediaFilter, label: t("filterMovie") },
+                    { id: "tv" as SwipeMediaFilter, label: t("filterTv") },
                   ]}
                   value={mediaFilter}
                   onChange={setMediaFilter}
@@ -226,8 +230,8 @@ export default function GroupSettingsModal({
               </SettingsSection>
 
               <SettingsSection
-                title="Genrer"
-                hint="Tryck: gillar → ogillar → neutral. Gillade genrer kan smalnas ner med sub-genrer."
+                title={t("genres")}
+                hint={t("genresHint")}
               >
                 <GenrePicker
                   genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
@@ -242,7 +246,7 @@ export default function GroupSettingsModal({
                 />
               </SettingsSection>
 
-              <SettingsSection title="Streamingtjänster" hint="Tomt = alla tjänster som någon medlem har.">
+              <SettingsSection title={t("providers")} hint={t("providersHint")}>
                 <div className="flex flex-wrap gap-2">
                   {PROVIDERS.map((p) => (
                     <ProviderChip
@@ -255,40 +259,40 @@ export default function GroupSettingsModal({
                 </div>
               </SettingsSection>
 
-              <SettingsSection title="Åldersgräns">
+              <SettingsSection title={t("ageLimit")}>
                 <div className="flex flex-wrap gap-2">
                   <Chip selected={maxCert === null} onClick={() => setMaxCert(null)}>
-                    Auto (yngsta medlemmen)
+                    {t("ageAuto")}
                   </Chip>
                   {GROUP_CERTS.map((c) => (
                     <Chip key={c} selected={maxCert === c} onClick={() => setMaxCert(c)}>
-                      {c === "0" ? "Barntillåten" : `${c} år`}
+                      {c === "0" ? t("ageAllAges") : t("ageYears", { years: c })}
                     </Chip>
                   ))}
                 </div>
               </SettingsSection>
 
               <SettingsSection
-                title="Matchtröskel"
-                hint="Hur många medlemmar som måste gilla samma titel för en match (minst 2)."
+                title={t("threshold")}
+                hint={t("thresholdHint")}
               >
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
                     <Chip selected={!thresholdCustom} onClick={() => setThresholdCustom(false)}>
-                      Standard ({defaultNeed} av {Math.max(memberCount, 1)})
+                      {t("thresholdDefault", { need: defaultNeed, of: Math.max(memberCount, 1) })}
                     </Chip>
                     <Chip
                       selected={thresholdCustom}
                       onClick={() => canCustomizeThreshold && setThresholdCustom(true)}
                       className={!canCustomizeThreshold ? "cursor-not-allowed opacity-40" : undefined}
                     >
-                      Anpassad
+                      {t("thresholdCustom")}
                     </Chip>
                   </div>
 
                   {!canCustomizeThreshold && (
                     <p className="text-xs text-white/40">
-                      Gruppen behöver minst 2 medlemmar för en anpassad tröskel.
+                      {t("thresholdNeedsTwo")}
                     </p>
                   )}
 
@@ -306,7 +310,7 @@ export default function GroupSettingsModal({
                       <div className="flex items-center justify-between text-xs text-white/40">
                         <span>{MIN_MATCH_THRESHOLD}</span>
                         <span className="font-mono text-sm font-semibold text-cyan-300">
-                          Matchning kräver: {shownThreshold} av {sliderMax} personer
+                          {t("thresholdValue", { need: shownThreshold, of: sliderMax })}
                         </span>
                         <span>{sliderMax}</span>
                       </div>
@@ -318,10 +322,10 @@ export default function GroupSettingsModal({
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="secondary" onClick={onClose}>
-                Avbryt
+                {t("cancel")}
               </Button>
               <Button type="button" disabled={saving} onClick={() => void save()}>
-                {saving ? "Sparar…" : "Spara"}
+                {saving ? t("saving") : t("save")}
               </Button>
             </div>
           </>

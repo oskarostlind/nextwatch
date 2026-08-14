@@ -2,8 +2,10 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 export default function SignupVerifyPage() {
+  const t = useTranslations("auth");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,7 @@ export default function SignupVerifyPage() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.message || data?.error || "Något gick fel.");
+        throw new Error(data?.message || data?.error || t("genericErrorShort"));
       }
       setSent(true);
     } catch (e) {
@@ -33,7 +35,7 @@ export default function SignupVerifyPage() {
 
   return (
     <main className="mx-auto max-w-md px-4 py-12">
-      <h1 className="text-2xl font-semibold text-neutral-100 mb-2">Aktivera ditt konto</h1>
+      <h1 className="text-2xl font-semibold text-neutral-100 mb-2">{t("activateAccount")}</h1>
       <p className="text-neutral-400 mb-6">
         Ange din e-post så skickar vi en verifieringslänk. Öppna länken på samma enhet för
         att aktivera kontot.
@@ -60,7 +62,7 @@ export default function SignupVerifyPage() {
 
         {sent ? (
           <div className="rounded-lg border border-emerald-700 bg-emerald-900/30 text-emerald-300 px-3 py-2">
-            Klart! Kolla din inbox. Klicka på länken i mejlet för att aktivera.
+            {t("checkInbox")}
           </div>
         ) : (
           <button
@@ -68,7 +70,7 @@ export default function SignupVerifyPage() {
             disabled={loading}
             className="w-full rounded-xl bg-cyan-500 text-black font-medium py-2.5 hover:bg-cyan-400 disabled:opacity-60"
           >
-            {loading ? "Skickar…" : "Skicka verifieringslänk"}
+            {loading ? t("sending") : t("sendVerifyLink")}
           </button>
         )}
       </form>

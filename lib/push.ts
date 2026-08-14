@@ -20,6 +20,8 @@ import crypto from "node:crypto";
 import http2 from "node:http2";
 import { prisma } from "@/lib/prisma";
 import { groupMatchNeed } from "@/lib/groupSettings";
+import { getTranslations } from "next-intl/server";
+import { DEFAULT_LOCALE, normalizeLocale } from "@/lib/i18nConfig";
 
 export type PushPayload = {
   title: string;
@@ -299,5 +301,44 @@ export async function notifyGroupMatchIfNeeded(
     );
   } catch (e) {
     console.warn("[push] notifyGroupMatchIfNeeded misslyckades:", e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Som sendPushToUser, men texterna slås upp på MOTTAGARENS språk.
+ *
+ * Notiser skickas från någon annans request (en vän som bjuder in, en cron),
+ * så nw_lang-cookien hör till fel person. Språket måste därför komma från
+ * mottagarens Profile.uiLanguage.
+ */
+export async function sendLocalizedPushToUser(
+  userId: string,
+  opts: {
+    /** Nyckel under namnrymden "push", t.ex. "friendRequest". */
+    key: string;
+    values?: Record<string, string | number>;
+    data?: Record<string, string>;
+  }
+): Promise<void> {
+  let locale = DEFAULT_LOCALE;
+  try {
+    const prof = await prisma.profile.findUnique({
+      where: { userId },
+      select: { uiLanguage: true },
+    });
+    locale = normalizeLocale(prof?.uiLanguage);
+  } catch {
+    /* faller tillbaka på svenska */
+  }
+
+  try {
+    const t = await getTranslations({ locale, namespace: `push.${opts.key}` });
+    await sendPushToUser(userId, {
+      title: t("title", opts.values),
+      body: t("body", opts.values),
+      data: opts.data,
+    });
+  } catch (e) {
+    console.warn("[push] kunde inte lokalisera notis", opts.key, e instanceof Error ? e.message : e);
   }
 }

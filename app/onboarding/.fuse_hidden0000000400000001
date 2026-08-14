@@ -1,0 +1,757 @@
+// app/onboarding/page_client.tsx
+"use client";
+
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { sanitizeUsernameInput, usernameValidRequired } from "@/lib/usernameClient";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import { ProviderChip } from "@/app/components/ui/ProviderChip";
+import GuestEntryButton from "@/app/components/auth/GuestEntryButton";
+import { replayAnonLikes } from "@/lib/anonLikes";
+import GenrePicker from "@/app/components/discover/GenrePicker";
+import { GROUP_GENRES } from "@/lib/groupSettings";
+import { toggleKeywordGroup } from "@/lib/subgenres";
+import { useLocale, useTranslations } from "next-intl";
+import { LOCALES, tmdbLanguage, type AppLocale } from "@/lib/i18nConfig";
+import { writeUiLanguageCookie } from "@/lib/uiLanguage";
+
+// ---------- typer ----------
+type Fav = { id: number; title: string; year?: string; poster?: string | null };
+
+function SearchBox({
+  label,
+  placeholder,
+  type, // "movie" | "tv"
+  value,
+  onSelect,
+  locale,
+}: {
+  label: string;
+  placeholder: string;
+  type: "movie" | "tv";
+  value: Fav | null;
+  onSelect: (v: Fav | null) => void;
+  /** TMDB-språk, härlett ur användarens språkval. */
+  locale: string;
+}) {
+  const t = useTranslations("onboarding");
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Fav[]>([]);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!boxRef.current) return;
+      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      const query = q.trim();
+      if (value || query.length < 2) {
+        setItems([]);
+        return;
+      }
+      try {
+        const url = `/api/tmdb/search?type=${type}&q=${encodeURIComponent(
+          query
+        )}&locale=${encodeURIComponent(locale)}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return;
+        const data: { ok?: boolean; results?: Fav[] } = await res.json();
+        if (!active || !data?.ok) return;
+        setItems(data.results ?? []);
+        setOpen(true);
+      } catch {
+        // tyst
+      }
+    };
+    const t = setTimeout(run, 180);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [q, type, locale, value]);
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <label className="mb-1 block text-sm text-white/70">{label}</label>
+      <div className="flex gap-2">
+        <input
+          className="mt-0 w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
+          placeholder={placeholder}
+          value={value ? value.title : q}
+          onChange={(e) => {
+            onSelect(null);
+            setQ(e.target.value);
+          }}
+          onFocus={() => {
+            if (items.length > 0) setOpen(true);
+          }}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="rounded-xl border border-white/10 px-3 hover:bg-white/10"
+            title={t("clear")}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {open && items.length > 0 && (
+        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-black/70 backdrop-blur">
+          {items.map((it) => (
+            <button
+              key={`${type}-${it.id}`}
+              type="button"
+              onClick={() => {
+                onSelect(it);
+                setQ("");
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-3 p-2 text-left hover:bg-white/10"
+            >
+              <div className="relative h-10 w-7 shrink-0 overflow-hidden rounded">
+                <Image
+                  src={
+                    it.poster ??
+                    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='40'/%3E"
+                  }
+                  alt={it.title}
+                  width={28}
+                  height={40}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm">
+                  {it.title} {it.year ? `(${it.year})` : ""}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- constants ----------
+const PROVIDERS = [
+  "Netflix",
+  "Disney+",
+  "Prime Video",
+  "Max",
+  "Viaplay",
+  "Apple TV+",
+  "SkyShowtime",
+  "SVT Play",
+  "TV4 Play",
+] as const;
+
+// Bara stegordningen bor här; rubrik och underrubrik hämtas ur
+// messages/*.json (onboarding.steps.<key>.title / .subtitle).
+const STEPS = [
+  { id: 0, key: "about" },
+  { id: 1, key: "services" },
+  { id: 2, key: "taste" },
+  { id: 3, key: "account" },
+] as const;
+
+export default function Client({
+  initialName = "",
+  hasAccount = false,
+}: {
+  /** Förifyllt visningsnamn (t.ex. namnet Apple gav vid Sign in with Apple). */
+  initialName?: string;
+  /** true = användaren är redan inloggad (Apple/lösenord) → inget kontosteg. */
+  hasAccount?: boolean;
+} = {}) {
+  const router = useRouter();
+  const t = useTranslations("onboarding");
+  const activeLocale = useLocale() as AppLocale;
+
+  const [step, setStep] = useState(0);
+  const [displayName, setDisplayName] = useState(initialName);
+  const [username, setUsername] = useState("");
+  const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid">("idle");
+  const [ageInput, setAgeInput] = useState("");
+  // Guideline 1.2: UGC-appar måste låta användaren godkänna regler mot stötande
+  // innehåll innan hen kan delta. Obligatorisk — steg 0 släpper inte igenom.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  function parsedAge(): number | null {
+    const n = Number(ageInput.trim());
+    if (!Number.isFinite(n)) return null;
+    const age = Math.floor(n);
+    if (age < 7 || age > 99) return null;
+    return age;
+  }
+  // Startar på det språk appen faktiskt renderas i (cookien), inte på ett
+  // hårdkodat "sv" — annars visar väljaren Svenska för en engelsk användare.
+  const [language, setLanguage] = useState<AppLocale>(activeLocale);
+  const [providers, setProviders] = useState<string[]>([]);
+  const [favoriteMovie, setFavoriteMovie] = useState<Fav | null>(null);
+  const [favoriteShow, setFavoriteShow] = useState<Fav | null>(null);
+  const [likeGenres, setLikeGenres] = useState<string[]>([]);
+  const [dislikeGenres, setDislikeGenres] = useState<string[]>([]);
+  const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // TMDB-sökningen följer det språk användaren just valt i steg 2 — väljer man
+  // English ska titelsöket också ge engelska titlar, direkt.
+  const searchLocale = tmdbLanguage(language);
+
+  // Språkvalet slår igenom direkt i onboardingen: cookien skrivs och
+  // server-komponenterna ritas om. Profilen persisteras ändå i
+  // save-onboarding-anropet, så inget dubbelsparande behövs här.
+  async function changeLanguage(next: AppLocale) {
+    if (next === language) return;
+    setLanguage(next);
+    writeUiLanguageCookie(next);
+    router.refresh();
+  }
+
+  function toggleProvider(p: string) {
+    setProviders((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+  }
+  // Tri-state-cykeln (gillar → ogillar → neutral) och sub-genre-städningen
+  // när en genre lämnar "gillar" hanteras av GenrePicker självt (samma
+  // kontrakt som Gruppinställningar/Profil) — de här är bara "toggla
+  // medlemskap i respektive lista", ett per läge.
+  function toggleLike(g: string) {
+    setLikeGenres((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
+    );
+  }
+  function onUsernameChange(e: ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+    const lower = raw.toLowerCase();
+    const next = sanitizeUsernameInput(raw);
+    setUsername(next);
+    setUsernameBlockedChars(lower.length > 0 && lower !== next);
+    setUsernameStatus("idle");
+  }
+
+  // Debounced tillgänglighetskoll för användarnamn
+  useEffect(() => {
+    if (!usernameValidRequired(username)) {
+      setUsernameStatus(username.length > 0 ? "invalid" : "idle");
+      return;
+    }
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/user/username/check?u=${encodeURIComponent(username)}`, {
+          cache: "no-store",
+        });
+        const data = (await res.json()) as { ok?: boolean; available?: boolean };
+        if (!res.ok || !data.ok) {
+          setUsernameStatus("invalid");
+          return;
+        }
+        setUsernameStatus(data.available ? "available" : "taken");
+      } catch {
+        setUsernameStatus("idle");
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [username]);
+
+  // Visningsnamnet är AVSIKTLIGT frivilligt: en användare som loggat in med
+  // Apple ska aldrig tvingas skriva in namnet igen (App Store guideline 4).
+  // Saknas det faller vi tillbaka på användarnamnet i backend.
+  function step0Valid() {
+    return (
+      termsAccepted &&
+      parsedAge() !== null &&
+      usernameValidRequired(username) &&
+      usernameStatus === "available"
+    );
+  }
+
+  function goNext() {
+    setErr(null);
+    if (step === 0 && !step0Valid()) {
+      if (!usernameValidRequired(username)) {
+        setErr(t("errUsernameFormat"));
+      } else if (usernameStatus === "taken") {
+        setErr(t("errUsernameTaken"));
+      } else if (usernameStatus === "checking") {
+        setErr(t("errUsernameChecking"));
+      } else if (ageInput.trim() && parsedAge() === null) {
+        setErr(t("errAge"));
+      } else if (!termsAccepted) {
+        setErr(t("errTerms"));
+      } else {
+        setErr(t("errRequired"));
+      }
+      return;
+    }
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  }
+
+  function goBack() {
+    setErr(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
+  function toggleDislike(g: string) {
+    setDislikeGenres((prev) =>
+      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
+    );
+  }
+  function toggleFavoriteKeywordIds(ids: number[]) {
+    setFavoriteKeywordIds((prev) => toggleKeywordGroup(prev, ids));
+  }
+
+  async function saveAndContinue(redirect: string) {
+    setErr(null);
+    if (!step0Valid()) {
+      setErr(t("errCheckUsernameAge"));
+      setStep(0);
+      return;
+    }
+    setLoading(true);
+
+    const payload = {
+      displayName: displayName.trim() || null,
+      username,
+      age: parsedAge(),
+      uiLanguage: language,
+      providers,
+      favoriteMovie,
+      favoriteShow,
+      favoriteGenres: likeGenres,
+      dislikedGenres: dislikeGenres,
+      favoriteKeywordIds,
+      termsAccepted,
+    };
+
+    try {
+      const res = await fetch("/api/profile/save-onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json()) as { message?: string };
+        throw new Error(errBody.message ?? t("errGeneric"));
+      }
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      if (!data.ok) throw new Error(data.message ?? t("errGeneric"));
+
+      // Startsidan är spelbar innan man har konto, och gaten lovar att swipesen
+      // "följer med". Här infrias löftet: likesen har legat i localStorage och
+      // spelas upp mot profilen nu när den finns. Best-effort — en misslyckad
+      // titel får aldrig blockera onboardingen.
+      await replayAnonLikes().catch(() => 0);
+
+      router.replace(redirect);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t("errGeneric"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+
+    // Steg 0–2: Enter/Nästa går bara vidare — sparar aldrig profilen här.
+    if (step < STEPS.length - 1) {
+      goNext();
+    }
+  }
+
+  const progress = ((step + 1) / STEPS.length) * 100;
+
+  // Redan inloggad (t.ex. via Apple) → sista steget är inte "skapa konto" utan
+  // bara en bekräftelse. Att visa registreringsval här skulle be om e-post som
+  // vi redan har.
+  const stepMeta = STEPS.map((s) => ({
+    id: s.id,
+    title: hasAccount && s.id === 3 ? t("steps.done.title") : t(`steps.${s.key}.title`),
+    subtitle: hasAccount && s.id === 3 ? t("steps.done.subtitle") : t(`steps.${s.key}.subtitle`),
+  }));
+
+  return (
+    <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-4 py-10">
+      {/* Header */}
+      <div className="mb-7 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400/80">
+          {t("welcome")}
+        </p>
+        <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{stepMeta[step].title}</h1>
+        <p className="mt-1.5 text-sm text-neutral-400">{stepMeta[step].subtitle}</p>
+      </div>
+
+      {/* Progress */}
+      <div className="mb-6">
+        <div className="mb-2 flex justify-between text-[11px] font-medium">
+          {stepMeta.map((s, i) => (
+            <span
+              key={s.id}
+              className={i < step ? "text-cyan-400/70" : i === step ? "text-cyan-300" : "text-neutral-600"}
+            >
+              {s.title}
+            </span>
+          ))}
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-neutral-900/70 p-5 shadow-2xl shadow-black/40 ring-1 ring-white/5 backdrop-blur-md sm:p-6">
+        {err && (
+          <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {err}
+          </div>
+        )}
+
+        <form
+          onSubmit={onSubmit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && step >= STEPS.length - 1) {
+              e.preventDefault();
+            }
+          }}
+          className="space-y-5"
+        >
+          {/* Mjuk övergång mellan stegen. En keyad motion.div per steg gör att
+              AnimatePresence tonar in det nya steget — mjukare än ett hårt hopp. */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="space-y-5"
+            >
+          {/* Steg 1: Om dig */}
+          {step === 0 && (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  {t.rich("displayNameLabel", {
+                    optional: (chunks) => <span className="text-neutral-500">{chunks}</span>,
+                  })}
+                </label>
+                <input
+                  className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  placeholder={t("displayNamePlaceholder")}
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  autoComplete="name"
+                  autoFocus={!initialName}
+                />
+                {initialName ? (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {t("displayNameFromApple")}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  {t("usernameLabel")} <span className="text-cyan-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+                    @
+                  </span>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-8 pr-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    placeholder="film_ninja.42"
+                    value={username}
+                    onChange={onUsernameChange}
+                    autoComplete="username"
+                    spellCheck={false}
+                    required
+                    minLength={3}
+                    maxLength={20}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {t("usernameHint")}
+                </p>
+                {usernameBlockedChars ? (
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameBlockedChars")}</p>
+                ) : null}
+                {usernameStatus === "checking" && (
+                  <p className="mt-1 text-xs text-neutral-400">{t("usernameChecking")}</p>
+                )}
+                {usernameStatus === "available" && (
+                  <p className="mt-1 text-xs text-emerald-400">{t("usernameAvailable")}</p>
+                )}
+                {usernameStatus === "taken" && (
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameTaken")}</p>
+                )}
+                {usernameStatus === "invalid" && username.length > 0 && (
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameInvalid")}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">
+                  {t("ageLabel")} <span className="text-cyan-400">*</span>
+                </label>
+                <p className="mb-2 text-xs text-neutral-500">
+                  {t("ageHint")}
+                </p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={7}
+                    max={99}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-500/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    placeholder={t("agePlaceholder")}
+                    value={ageInput}
+                    onChange={(e) => setAgeInput(e.target.value.replace(/[^\d]/g, ""))}
+                    required
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
+                    {t("ageUnit")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Guideline 1.2: uttryckligt godkännande av villkoren, med regeln
+                  mot stötande innehåll och nåbara länkar. */}
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
+                  required
+                />
+                {/* Guideline 1.2: länkarna till villkor och integritetspolicy
+                    måste vara klickbara här — de bor i översättningen som
+                    <terms>/<privacy> och byggs till <a> nedan. */}
+                <span>
+                  {t.rich("termsAccept", {
+                    terms: (chunks) => (
+                      <a href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
+                        {chunks}
+                      </a>
+                    ),
+                    privacy: (chunks) => (
+                      <a href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
+                        {chunks}
+                      </a>
+                    ),
+                  })}
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Steg 2: Tjänster */}
+          {step === 1 && (
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1 block text-sm text-neutral-300">{t("languageLabel")}</label>
+                <select
+                  className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
+                  value={language}
+                  onChange={(e) => void changeLanguage(e.target.value as AppLocale)}
+                >
+                  {LOCALES.map((l) => (
+                    <option key={l} value={l}>
+                      {l === "sv" ? "Svenska" : "English"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-2 text-sm text-neutral-300">{t("providersLabel")}</div>
+                <p className="mb-3 text-xs text-neutral-500">
+                  {t("providersHint")}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {PROVIDERS.map((p) => (
+                    <ProviderChip
+                      key={p}
+                      label={p}
+                      selected={providers.includes(p)}
+                      onClick={() => toggleProvider(p)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Steg 3: Smak */}
+          {step === 2 && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-4">
+                <SearchBox
+                  label={t("favoriteMovie")}
+                  placeholder={t("searchTitle")}
+                  type="movie"
+                  value={favoriteMovie}
+                  onSelect={setFavoriteMovie}
+                  locale={searchLocale}
+                />
+                <SearchBox
+                  label={t("favoriteShow")}
+                  placeholder={t("searchTitle")}
+                  type="tv"
+                  value={favoriteShow}
+                  onSelect={setFavoriteShow}
+                  locale={searchLocale}
+                />
+              </div>
+
+              <div>
+                <div className="mb-2 text-sm text-neutral-300">{t("genres")}</div>
+                <GenrePicker
+                  genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
+                  selectedGenreIds={likeGenres}
+                  onToggleGenre={toggleLike}
+                  dislikedGenreIds={dislikeGenres}
+                  onToggleDislikedGenre={toggleDislike}
+                  selectedKeywordIds={favoriteKeywordIds}
+                  onToggleKeywordIds={toggleFavoriteKeywordIds}
+                  wrap
+                  subLayout="card"
+                  emptyStateHint={t("genresEmptyHint")}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Steg 4: Välj gäst eller konto */}
+          {step === 3 && hasAccount && (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-400">
+                {t("doneLinked")}
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/swipe")}
+                className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
+              >
+                <p className="font-semibold text-cyan-300">{t("startSwiping")}</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  {t("startSwipingHint")}
+                </p>
+              </button>
+            </div>
+          )}
+
+          {step === 3 && !hasAccount && (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-400">
+                {t("donePickPath")}
+              </p>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/swipe")}
+                className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
+              >
+                <p className="font-semibold text-cyan-300">{t("continueAsGuest")}</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  {t("continueAsGuestHint")}
+                </p>
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void saveAndContinue("/auth/register")}
+                className="w-full rounded-2xl border border-white/15 bg-white/5 p-5 text-left transition hover:bg-white/10 disabled:opacity-50"
+              >
+                <p className="font-semibold text-white">{t("createAccount")}</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  {t("createAccountHint")}
+                </p>
+              </button>
+            </div>
+          )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Navigation */}
+          {step < 3 && (
+            <div className="flex items-center justify-between pt-2">
+              {step === 0 ? (
+                <Link href="/" className="text-sm text-neutral-400 underline hover:text-neutral-200">
+                  {t("back")}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
+                >
+                  {t("previous")}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={goNext}
+                className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
+              >
+                {t("next")}
+              </button>
+            </div>
+          )}
+
+          {/* Hoppa över hela onboardingen och börja swipa som gäst direkt. */}
+          {step === 0 && (
+            <div className="pt-1 text-center">
+              <GuestEntryButton
+                label={t("guestSkip")}
+                className="text-sm text-neutral-400 underline underline-offset-2 transition hover:text-neutral-200 disabled:opacity-50"
+              />
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={loading}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-50"
+              >
+                {t("previous")}
+              </button>
+              {loading && (
+                <span className="text-sm text-neutral-400">{t("savingProfile")}</span>
+              )}
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}

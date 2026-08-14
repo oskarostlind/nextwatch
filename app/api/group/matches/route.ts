@@ -13,6 +13,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 const MAX_MATCHES = 50;
 
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Du är inte med i gruppen." }, { status: 403 });
     }
 
-    const locale = jar.get("nw_locale")?.value ?? "sv-SE";
+    const locale = await tmdbLanguageFromCookies();
 
     const rows = await prisma.groupMatch.findMany({
       where: { groupCode: code },

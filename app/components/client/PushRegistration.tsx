@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
+import { useTranslations } from "next-intl";
 
 /**
  * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
@@ -40,6 +41,7 @@ function snoozeSoftAsk(): void {
  *     (appStateChange / visibilitychange) tills en token faktiskt sparats.
  */
 export default function PushRegistration() {
+  const t = useTranslations("push");
   const pendingToken = useRef<string | null>(null);
   const [softAskOpen, setSoftAskOpen] = useState(false);
   // Sätts av effekten; anropas av soft-askens "Ja"-knapp.
@@ -192,10 +194,9 @@ export default function PushRegistration() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-[70] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
       <div className="mx-auto max-w-sm rounded-2xl border border-white/15 bg-neutral-900 p-4 shadow-2xl">
-        <p className="text-sm font-semibold text-white">Vill du få notiser? 🔔</p>
+        <p className="text-sm font-semibold text-white">{t("softAskTitle")}</p>
         <p className="mt-1 text-sm leading-relaxed text-white/60">
-          Vi säger till när din grupp matchar, när vänner skickar filmtips och när dagens
-          rekommendation landar. Du väljer själv vilka typer i inställningarna.
+          {t("softAskBody")}
         </p>
         <div className="mt-3 flex gap-2">
           <button
@@ -207,7 +208,7 @@ export default function PushRegistration() {
             }}
             className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
           >
-            Ja, aktivera
+            {t("softAskYes")}
           </button>
           <button
             type="button"
@@ -217,7 +218,7 @@ export default function PushRegistration() {
             }}
             className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/5"
           >
-            Inte nu
+            {t("softAskLater")}
           </button>
         </div>
       </div>

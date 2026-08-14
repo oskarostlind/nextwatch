@@ -4,6 +4,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import nextDynamic from "next/dynamic";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { LOCALES, bcp47, normalizeLocale, tmdbLanguage, type AppLocale } from "@/lib/i18nConfig";
+import { setUiLanguage, writeUiLanguageCookie } from "@/lib/uiLanguage";
 import LogoutButton from "@/app/components/auth/LogoutButton";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
@@ -136,15 +140,19 @@ function SearchBox({
   type,
   value,
   onSelect,
-  locale = "sv-SE",
+  locale,
 }: {
   label: string;
   placeholder: string;
   type: "movie" | "tv";
   value: Fav;
   onSelect: (v: Fav) => void;
+  /** TMDB-språk. Utelämnat = följ gränssnittsspråket. */
   locale?: string;
 }) {
+  const t = useTranslations("profile");
+  const uiLocale = useLocale();
+  const searchLocale = locale ?? tmdbLanguage(uiLocale);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -170,9 +178,9 @@ function SearchBox({
     }
     setLoading(true);
     setSearched(false);
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
-        const u = `/api/tmdb/search?q=${encodeURIComponent(query)}&type=${type}&locale=${encodeURIComponent(locale)}`;
+        const u = `/api/tmdb/search?q=${encodeURIComponent(query)}&type=${type}&locale=${encodeURIComponent(searchLocale)}`;
         const res = await fetch(u, { cache: "no-store" });
         if (!res.ok) {
           if (active) {
@@ -200,9 +208,9 @@ function SearchBox({
     }, 200);
     return () => {
       active = false;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
-  }, [q, type, locale, value]);
+  }, [q, type, searchLocale, value]);
 
   useEffect(() => {
     const onDocClick = (ev: MouseEvent) => {
@@ -240,8 +248,8 @@ function SearchBox({
               setItems([]);
               setOpen(false);
             }}
-            aria-label="Rensa"
-            title="Rensa"
+            aria-label={t("clear")}
+            title={t("clear")}
           >
             ✕
           </button>
@@ -251,7 +259,7 @@ function SearchBox({
       {open && (loading || searched || items.length > 0) && (
         <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 shadow-lg backdrop-blur">
           {loading ? (
-            <div className="px-4 py-3 text-sm text-white/60">Söker…</div>
+            <div className="px-4 py-3 text-sm text-white/60">{t("searching")}</div>
           ) : items.length > 0 ? (
             <ul className="max-h-64 overflow-auto">
               {items.map((it) => (
@@ -292,7 +300,7 @@ function SearchBox({
               ))}
             </ul>
           ) : (
-            <div className="px-4 py-3 text-sm text-white/60">Inga träffar — prova en annan sökning.</div>
+            <div className="px-4 py-3 text-sm text-white/60">{t("noSearchResults")}</div>
           )}
         </div>
       )}
@@ -302,13 +310,37 @@ function SearchBox({
 
 // —————————————————————— Huvudkomponent ——————————————————————
 export default function ProfileClient({ initial }: Props) {
+  const t = useTranslations("profile");
+  const ta = useTranslations("avatars");
   const [displayName, setDisplayName] = useState<string>(initial?.displayName ?? "");
   const [avatarId, setAvatarId] = useState<string | null>(initial?.avatarId ?? null);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [username, setUsername] = useState<string>(initial?.username ?? "");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
   const [dob, setDob] = useState<string>(toInputDate(initial?.dob ?? null));
-  const [uiLanguage, setUiLanguage] = useState<string>(initial?.uiLanguage ?? "sv");
+  // Cookien är sanningen för vilket språk som RENDERAS just nu; profilfältet är
+  // bara persisteringen av samma val. Startar vi från profilen i stället kan
+  // knappen visa "Svenska" markerad medan appen redan talar engelska.
+  const activeLocale = useLocale() as AppLocale;
+  const [uiLanguage, setUiLanguageState] = useState<AppLocale>(activeLocale);
+  const [langBusy, setLangBusy] = useState(false);
+  const router = useRouter();
+  const adoptedProfileLang = useRef(false);
+
+  // Byter språk direkt: cookie → server components ritas om (router.refresh)
+  // → profilen uppdateras i bakgrunden. Ingen "Spara" behövs, och inget
+  // helsidesomladdning som hade slängt swipe-kortleken.
+  const changeLanguage = async (next: AppLocale) => {
+    if (next === uiLanguage || langBusy) return;
+    setLangBusy(true);
+    setUiLanguageState(next);
+    try {
+      await setUiLanguage(next);
+      router.refresh();
+    } finally {
+      setLangBusy(false);
+    }
+  };
 
   const [favoriteGenres, setFavoriteGenres] = useState<string[]>(
     initial?.favoriteGenres ? toSvGenres(initial.favoriteGenres) : []
@@ -333,10 +365,10 @@ export default function ProfileClient({ initial }: Props) {
   const [tasteSuggestMsg, setTasteSuggestMsg] = useState<string | null>(null);
 
   const TABS = [
-    { id: "bas" as const, label: "Profil" },
-    { id: "smak" as const, label: "Smak" },
-    { id: "tjanster" as const, label: "Tjänster" },
-    { id: "installningar" as const, label: "Inställningar" },
+    { id: "bas" as const, label: t("tabProfile") },
+    { id: "smak" as const, label: t("tabTaste") },
+    { id: "tjanster" as const, label: t("tabServices") },
+    { id: "installningar" as const, label: t("tabSettings") },
   ];
 
   // Bakåtkompatibel hydrering om initial saknar fält.
@@ -353,7 +385,19 @@ export default function ProfileClient({ initial }: Props) {
         setFavoriteKeywordIds(p.favoriteKeywordIds.filter((id): id is number => typeof id === "number"));
       }
       if (Array.isArray(p.providers)) setProviders(toProviderIds(p.providers));
-      if (typeof p.uiLanguage === "string") setUiLanguage(p.uiLanguage);
+      // Kontots språk vinner över enhetens cookie EN gång vid hydrering: loggar
+      // du in på en ny telefon ska appen byta till ditt sparade språk i stället
+      // för att fastna på det webbläsaren råkade föreslå. adoptedProfileLang
+      // gör det till en engångshändelse så refresh:en aldrig loopar.
+      if (typeof p.uiLanguage === "string" && !adoptedProfileLang.current) {
+        const fromProfile = normalizeLocale(p.uiLanguage);
+        adoptedProfileLang.current = true;
+        if (fromProfile !== activeLocale) {
+          setUiLanguageState(fromProfile);
+          writeUiLanguageCookie(fromProfile);
+          router.refresh();
+        }
+      }
       if (typeof p.displayName === "string") setDisplayName(p.displayName);
       if (typeof p.avatarId === "string") setAvatarId(p.avatarId);
       else if (p.avatarId === null) setAvatarId(null);
@@ -399,6 +443,10 @@ export default function ProfileClient({ initial }: Props) {
       } catch { /* noop */ }
     })();
     return () => { ignore = true; };
+    // Körs medvetet EN gång vid mount. activeLocale/router läses bara i
+    // engångsövertagandet av kontots språk (adoptedProfileLang), och att lägga
+    // dem i deps skulle hämta om profilen vid varje språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canSubmit = useMemo(
@@ -416,7 +464,7 @@ export default function ProfileClient({ initial }: Props) {
 
   const submit = async () => {
     if (!canSubmit) {
-      setMsg("Fyll i namn och födelsedatum. Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .).");
+      setMsg(t("validationRequired"));
       return;
     }
     setBusy(true);
@@ -441,10 +489,10 @@ export default function ProfileClient({ initial }: Props) {
       });
       const payload = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || payload.ok === false) {
-        setMsg(payload.error ?? "Kunde inte spara profil.");
+        setMsg(payload.error ?? t("saveProfileFailed"));
         return;
       }
-      const message = "Sparat.";
+      const message = t("savedDot");
 
       // Tjänster/genrer/favoriter påverkar rekommendationerna. Den cachade
       // solo-kortleken (24h TTL) byggdes med de GAMLA värdena, så den måste
@@ -463,13 +511,13 @@ export default function ProfileClient({ initial }: Props) {
       });
       const udata = (await ures.json()) as { ok?: boolean; message?: string };
       if (!ures.ok || udata.ok === false) {
-        setMsg(`${message} ${udata.message ?? "Kunde inte spara användarnamn."}`.trim());
+        setMsg(`${message} ${udata.message ?? t("saveUsernameFailed")}`.trim());
         return;
       }
 
       setMsg(message);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Ett fel uppstod.");
+      setMsg(e instanceof Error ? e.message : t("genericError"));
     } finally {
       setBusy(false);
     }
@@ -504,24 +552,24 @@ export default function ProfileClient({ initial }: Props) {
         | { ok: true; lowConfidence: boolean; genres: string[]; keywordIds: number[] }
         | { ok: false; message?: string };
       if (!res.ok || !data.ok) {
-        setTasteSuggestMsg((!data.ok && data.message) || "Kunde inte hämta förslag.");
+        setTasteSuggestMsg((!data.ok && data.message) || t("suggestFetchFailed"));
         return;
       }
       if (data.lowConfidence) {
-        setTasteSuggestMsg("Betygsätt fler titlar först så kan vi föreslå åt dig.");
+        setTasteSuggestMsg(t("suggestNeedMore"));
         return;
       }
       if (data.genres.length === 0 && data.keywordIds.length === 0) {
-        setTasteSuggestMsg("Hittade inget tydligt mönster i din historik än.");
+        setTasteSuggestMsg(t("suggestNoPattern"));
         return;
       }
       const suggestedGenres = data.genres;
       setFavoriteGenres((old) => Array.from(new Set([...old, ...suggestedGenres])));
       setDislikedGenres((old) => old.filter((g) => !suggestedGenres.includes(g)));
       setFavoriteKeywordIds((old) => Array.from(new Set([...old, ...data.keywordIds])));
-      setTasteSuggestMsg("Förslag ifyllt nedan — justera vid behov och spara.");
+      setTasteSuggestMsg(t("suggestApplied"));
     } catch {
-      setTasteSuggestMsg("Nätverksfel.");
+      setTasteSuggestMsg(t("networkError"));
     } finally {
       setTasteSuggestBusy(false);
     }
@@ -529,7 +577,7 @@ export default function ProfileClient({ initial }: Props) {
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="Ditt konto" title="Profil" right={<LogoutButton />} />
+      <PageHeader eyebrow={t("eyebrow")} title={t("tabProfile")} right={<LogoutButton />} />
 
       <div className="mb-6">
         <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="profile-tabs" />
@@ -541,14 +589,14 @@ export default function ProfileClient({ initial }: Props) {
             {/* Frivillig avatar ur förvalt bibliotek. Griden (16 st) tog för
                 mycket plats inline — nu vald avatar + knapp som öppnar modal. */}
             <div className="min-w-0">
-              <label className="mb-1 block text-sm text-white/70">Profilbild</label>
+              <label className="mb-1 block text-sm text-white/70">{t("avatarLabel")}</label>
               <div className="flex items-center gap-4">
                 <Avatar avatarId={avatarId} name={displayName} size={56} />
                 <div className="grid gap-1">
                   <Button variant="secondary" onClick={() => setAvatarModalOpen(true)}>
-                    {avatarId ? "Byt profilbild" : "Välj profilbild"}
+                    {avatarId ? t("avatarChange") : t("avatarPick")}
                   </Button>
-                  <p className="text-xs text-white/45">Frivilligt — syns hos vänner och i grupper.</p>
+                  <p className="text-xs text-white/45">{t("avatarHint")}</p>
                 </div>
               </div>
             </div>
@@ -558,15 +606,15 @@ export default function ProfileClient({ initial }: Props) {
             {avatarModalOpen && (
               <Modal open onClose={() => setAvatarModalOpen(false)} labelledBy="avatar-picker-heading">
                 <h3 id="avatar-picker-heading" className="mb-3 text-lg font-bold text-white">
-                  Välj profilbild
+                  {t("avatarPick")}
                 </h3>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                   {AVATARS.map((a) => (
                     <button
                       key={a.id}
                       type="button"
-                      title={a.label}
-                      aria-label={a.label}
+                      title={ta(a.id)}
+                      aria-label={ta(a.id)}
                       aria-pressed={avatarId === a.id}
                       onClick={() => {
                         // Klick på redan vald avmarkerar (null rensar valet vid spara).
@@ -580,7 +628,7 @@ export default function ProfileClient({ initial }: Props) {
                       }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/avatars/${a.id}.svg`} alt={a.label} className="h-auto w-full" draggable={false} />
+                      <img src={`/avatars/${a.id}.svg`} alt={ta(a.id)} className="h-auto w-full" draggable={false} />
                     </button>
                   ))}
                 </div>
@@ -589,17 +637,17 @@ export default function ProfileClient({ initial }: Props) {
 
             <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">
-                <label className="mb-1 block text-sm text-white/70">Visningsnamn</label>
+                <label className="mb-1 block text-sm text-white/70">{t("displayNameLabel")}</label>
                 <input
                   className={FIELD_CLASS}
-                  placeholder="Ditt namn"
+                  placeholder={t("displayNamePlaceholder")}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   autoComplete="name"
                 />
               </div>
               <div className="min-w-0 max-w-full overflow-hidden">
-                <label className="mb-1 block text-sm text-white/70">Födelsedatum</label>
+                <label className="mb-1 block text-sm text-white/70">{t("dobLabel")}</label>
                 <input
                   type="date"
                   className={dateFieldClass}
@@ -609,10 +657,10 @@ export default function ProfileClient({ initial }: Props) {
               </div>
             </div>
             <div className="min-w-0">
-              <label className="mb-1 block text-sm text-white/70">Användarnamn</label>
+              <label className="mb-1 block text-sm text-white/70">{t("usernameLabel")}</label>
               <input
                 className={FIELD_CLASS}
-                placeholder="t.ex. film_ninja.42"
+                placeholder={t("usernamePlaceholder")}
                 value={username}
                 onChange={onUsernameChange}
                 autoComplete="username"
@@ -620,25 +668,27 @@ export default function ProfileClient({ initial }: Props) {
                 spellCheck={false}
               />
               <p className="mt-1 text-xs text-white/50">
-                3–20 tecken (a–z, 0–9, _, .) — visas för vänner.
+                {t("usernameHint")}
               </p>
               {usernameBlockedChars ? (
-                <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort.</p>
+                <p className="mt-1 text-xs text-rose-400">{t("usernameBlockedChars")}</p>
               ) : null}
               {!usernameValidOrEmpty(username) ? (
-                <p className="mt-1 text-xs text-rose-400">Ange minst 3 tecken eller lämna tomt.</p>
+                <p className="mt-1 text-xs text-rose-400">{t("usernameTooShort")}</p>
               ) : null}
             </div>
             <div>
-              <label className="mb-1 block text-sm text-white/70">Språk</label>
+              <label className="mb-1 block text-sm text-white/70">{t("languageLabel")}</label>
               <div className="flex gap-2">
-                {["sv", "en"].map((code) => (
+                {LOCALES.map((code) => (
                   <button
                     key={code}
                     type="button"
-                    onClick={() => setUiLanguage(code)}
+                    onClick={() => void changeLanguage(code)}
+                    disabled={langBusy}
+                    aria-pressed={uiLanguage === code}
                     className={cx(
-                      "rounded-xl border px-4 py-2 text-sm transition",
+                      "rounded-xl border px-4 py-2 text-sm transition disabled:opacity-60",
                       uiLanguage === code ? "border-cyan-400 bg-cyan-400/10 text-cyan-300" : "border-white/10 bg-white/5 hover:bg-white/10"
                     )}
                   >
@@ -646,6 +696,7 @@ export default function ProfileClient({ initial }: Props) {
                   </button>
                 ))}
               </div>
+              <p className="mt-1 text-xs text-white/45">{t("languageInstantHint")}</p>
             </div>
           </div>
         )}
@@ -655,14 +706,14 @@ export default function ProfileClient({ initial }: Props) {
             <TasteProfilePanel />
 
             <div className="border-t border-white/10 pt-5">
-              <h3 className="mb-1 text-sm font-semibold text-white/85">Redigera smak</h3>
+              <h3 className="mb-1 text-sm font-semibold text-white/85">{t("editTaste")}</h3>
               <p className="mb-4 text-xs text-white/45">
-                Dina val här påverkar både rekommendationer och smakprofilen ovan.
+                {t("editTasteHint")}
               </p>
               <div className="grid gap-5">
                 <div className="grid grid-cols-1 gap-4">
-                  <SearchBox label="Favoritfilm" placeholder="Sök film…" type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
-                  <SearchBox label="Favoritserie" placeholder="Sök serie…" type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
+                  <SearchBox label={t("favoriteMovie")} placeholder={t("searchMovie")} type="movie" value={favoriteMovie} onSelect={setFavoriteMovie} />
+                  <SearchBox label={t("favoriteShow")} placeholder={t("searchShow")} type="tv" value={favoriteShow} onSelect={setFavoriteShow} />
                 </div>
                 <GenreSuggestions
                   favoriteGenres={favoriteGenres}
@@ -675,18 +726,18 @@ export default function ProfileClient({ initial }: Props) {
                 />
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm text-white/70">Genrer</label>
+                    <label className="block text-sm text-white/70">{t("genres")}</label>
                     <button
                       type="button"
                       onClick={applyTasteSuggestion}
                       disabled={tasteSuggestBusy}
                       className="shrink-0 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-200 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {tasteSuggestBusy ? "Analyserar…" : "Fyll i från mina betyg"}
+                      {tasteSuggestBusy ? t("analyzing") : t("fillFromRatings")}
                     </button>
                   </div>
                   <p className="mb-2 text-[11px] text-white/40">
-                    Automatiskt baserat på din betygshistorik — du väljer alltid det sista ordet.
+                    {t("fillFromRatingsHint")}
                   </p>
                   {tasteSuggestMsg && (
                     <p className="mb-2 text-xs text-cyan-200/80">{tasteSuggestMsg}</p>
@@ -701,7 +752,7 @@ export default function ProfileClient({ initial }: Props) {
                     onToggleKeywordIds={toggleFavoriteKeywordIds}
                     wrap
                     subLayout="card"
-                    emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                    emptyStateHint={t("genresEmptyHint")}
                   />
                 </div>
               </div>
@@ -711,7 +762,7 @@ export default function ProfileClient({ initial }: Props) {
 
         {tab === "tjanster" && (
           <div>
-            <p className="mb-3 text-sm text-white/50">Välj de streamingtjänster du har.</p>
+            <p className="mb-3 text-sm text-white/50">{t("providersHint")}</p>
             <div className="flex flex-wrap gap-2">
               {PROVIDERS.map((p) => (
                 <ProviderChip
@@ -731,7 +782,7 @@ export default function ProfileClient({ initial }: Props) {
       {tab !== "installningar" && (
         <div className="mt-5 flex items-center gap-3">
           <Button onClick={submit} disabled={busy || !canSubmit}>
-            {busy ? "Sparar…" : "Spara"}
+            {busy ? t("saving") : t("save")}
           </Button>
           {msg && <p className="text-sm text-neutral-300">{msg}</p>}
         </div>
@@ -759,13 +810,15 @@ type BillingStatus = {
   renewsAt: string | null;
 };
 
-const NOTIF_LABELS: { key: keyof NotifPrefs; label: string; hint: string }[] = [
-  { key: "dailyRecs", label: "Dagens tips", hint: "En daglig film-/serierekommendation." },
-  { key: "groupMatches", label: "Gruppmatchningar", hint: "När din grupp hittar en gemensam titel." },
-  { key: "friendRequests", label: "Vänförfrågningar", hint: "Nya förfrågningar och accepterade vänner." },
-  { key: "groupInvites", label: "Gruppinbjudningar", hint: "När någon bjuder in dig till en grupp." },
-  { key: "shares", label: "Filmtips från vänner", hint: "När en vän skickar dig ett filmtips i chatten." },
-  { key: "marketing", label: "Nyheter & erbjudanden", hint: "Enstaka uppdateringar om NextWatch." },
+// Bara ordningen bor här — etikett och hjälptext hämtas ur messages/*.json
+// under profile.notif.<key>.label / .hint när raden renderas.
+const NOTIF_KEYS: (keyof NotifPrefs)[] = [
+  "dailyRecs",
+  "groupMatches",
+  "friendRequests",
+  "groupInvites",
+  "shares",
+  "marketing",
 ];
 
 function Toggle({
@@ -811,6 +864,8 @@ function isNativeIOS(): boolean {
 }
 
 function SettingsTab() {
+  const t = useTranslations("profile");
+  const locale = useLocale();
   const swipeSettings = useSwipeSettings();
   const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
@@ -868,11 +923,11 @@ function SettingsTab() {
       if (!res.ok) {
         setPrefs(prev); // rulla tillbaka
         const j = (await res.json().catch(() => ({}))) as { message?: string };
-        setNote(j.message ?? "Kunde inte spara inställningen.");
+        setNote(j.message ?? t("savePrefFailed"));
       }
     } catch {
       setPrefs(prev);
-      setNote("Nätverksfel.");
+      setNote(t("networkError"));
     } finally {
       setSavingKey(null);
     }
@@ -887,10 +942,10 @@ function SettingsTab() {
       if (j.ok && j.url) {
         window.location.href = j.url;
       } else {
-        setNote(j.message ?? "Kunde inte öppna prenumerationshanteringen.");
+        setNote(j.message ?? t("openPortalFailed"));
       }
     } catch {
-      setNote("Nätverksfel.");
+      setNote(t("networkError"));
     } finally {
       setPortalBusy(false);
     }
@@ -910,10 +965,10 @@ function SettingsTab() {
         window.location.href = "/";
         return;
       }
-      setNote(j.message ?? "Kunde inte radera kontot.");
+      setNote(j.message ?? t("deleteAccountFailed"));
       setDeleteConfirm(false);
     } catch {
-      setNote("Nätverksfel.");
+      setNote(t("networkError"));
       setDeleteConfirm(false);
     } finally {
       setDeleting(false);
@@ -926,21 +981,23 @@ function SettingsTab() {
     <div className="grid gap-8">
       {/* Prenumeration */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-white/80">Prenumeration</h3>
+        <h3 className="text-sm font-semibold text-white/80">{t("subscription")}</h3>
         {billing === null ? (
-          <p className="text-sm text-white/50">Laddar…</p>
+          <p className="text-sm text-white/50">{t("loading")}</p>
         ) : billing.isPremium ? (
           <div className="grid gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
             <div className="flex items-center gap-2">
               <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                {billing.plan === "lifetime" ? "Premium (lifetime)" : "Premium"}
+                {billing.plan === "lifetime" ? t("premiumLifetime") : "Premium"}
               </span>
               {billing.status ? <span className="text-xs text-white/50">{billing.status}</span> : null}
             </div>
             <p className="text-sm text-white/60">
-              Du har en annonsfri upplevelse.
+              {t("adFreeExperience")}
               {billing.renewsAt
-                ? ` Förnyas/upphör ${new Date(billing.renewsAt).toLocaleDateString("sv-SE")}.`
+                ? ` ${t("renewsAt", {
+                    date: new Date(billing.renewsAt).toLocaleDateString(bcp47(locale)),
+                  })}`
                 : ""}
             </p>
             {billing.plan !== "lifetime" &&
@@ -948,31 +1005,32 @@ function SettingsTab() {
                 <div className="grid gap-2">
                   {ios && (
                     <Button variant="secondary" onClick={() => void openSubscriptionManagement()}>
-                      Hantera i App Store
+                      {t("manageInAppStore")}
                     </Button>
                   )}
                   <p className="text-xs text-white/50">
-                    Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn →
-                    Prenumerationer.
+                    {t("manageAppleHint")}
                   </p>
                 </div>
               ) : (
                 <Button variant="secondary" onClick={openStripePortal} disabled={portalBusy}>
-                  {portalBusy ? "Öppnar…" : "Hantera prenumeration"}
+                  {portalBusy ? t("opening") : t("manageSubscription")}
                 </Button>
               ))}
           </div>
         ) : (
           <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
             <p className="text-sm text-white/70">
-              Du använder <span className="font-semibold">gratisversionen</span> med annonser.
+              {t.rich("onFreePlan", {
+                strong: (chunks) => <span className="font-semibold">{chunks}</span>,
+              })}
             </p>
-            <p className="text-sm text-white/50">Uppgradera till Premium (19 kr/mån) för en helt annonsfri upplevelse.</p>
+            <p className="text-sm text-white/50">{t("upgradeHint")}</p>
             <a
               href="/premium"
               className="inline-flex w-fit items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400"
             >
-              Uppgradera till Premium
+              {t("upgradeCta")}
             </a>
           </div>
         )}
@@ -982,13 +1040,13 @@ function SettingsTab() {
           pill direkt på /swipe (där man ser effekten); här finns bara det som
           inte behöver vara ett svep bort. */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-white/80">Förslag</h3>
+        <h3 className="text-sm font-semibold text-white/80">{t("suggestions")}</h3>
 
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Visa hyr- och köpalternativ</div>
+            <div className="text-sm text-white/85">{t("showPaidOptions")}</div>
             <div className="text-xs text-white/45">
-              Av som standard. På visar vi även titlar du behöver betala extra för att se.
+              {t("showPaidOptionsHint")}
             </div>
           </div>
           <Toggle
@@ -999,9 +1057,9 @@ function SettingsTab() {
 
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Visa barn- och familjeinnehåll</div>
+            <div className="text-sm text-white/85">{t("showKidsContent")}</div>
             <div className="text-xs text-white/45">
-              Av som standard. På tar med barnserier (t.ex. My Little Pony) i förslagen.
+              {t("showKidsContentHint")}
             </div>
           </div>
           <Toggle
@@ -1013,19 +1071,19 @@ function SettingsTab() {
 
       {/* Notiser */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-white/80">Notiser</h3>
+        <h3 className="text-sm font-semibold text-white/80">{t("notifications")}</h3>
         {prefs === null ? (
-          <p className="text-sm text-white/50">Laddar…</p>
+          <p className="text-sm text-white/50">{t("loading")}</p>
         ) : (
           <div className="grid gap-1">
-            {NOTIF_LABELS.map(({ key, label, hint }) => (
+            {NOTIF_KEYS.map((key) => (
               <div
                 key={key}
                 className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3"
               >
                 <div className="min-w-0">
-                  <div className="text-sm text-white/85">{label}</div>
-                  <div className="text-xs text-white/45">{hint}</div>
+                  <div className="text-sm text-white/85">{t(`notif.${key}.label`)}</div>
+                  <div className="text-xs text-white/45">{t(`notif.${key}.hint`)}</div>
                 </div>
                 <Toggle
                   checked={prefs[key]}
@@ -1037,31 +1095,29 @@ function SettingsTab() {
           </div>
         )}
         <p className="text-xs text-white/40">
-          Push kräver att du tillåtit notiser för appen i systeminställningarna.
+          {t("pushHint")}
         </p>
       </section>
 
       {/* Radera konto — App Store-krav (Guideline 5.1.1(v)). */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-rose-300/80">Radera konto</h3>
+        <h3 className="text-sm font-semibold text-rose-300/80">{t("deleteAccount")}</h3>
         <div className="grid gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
           <p className="text-sm text-white/70">
-            Raderar ditt konto och all din data permanent: profil, betyg, watchlist,
-            grupper och vänner. Det går inte att ångra.
+            {t("deleteAccountBody")}
           </p>
           {billing?.source === "apple" && (
             <p className="text-xs text-white/50">
-              Har du en prenumeration via App Store? Säg upp den separat i Inställningar → ditt
-              namn → Prenumerationer — att radera kontot här stänger inte av Apple-debiteringen.
+              {t("deleteAccountAppleHint")}
             </p>
           )}
           {!deleteConfirm ? (
             <Button variant="secondary" onClick={() => setDeleteConfirm(true)}>
-              Radera mitt konto
+              {t("deleteAccountCta")}
             </Button>
           ) : (
             <div className="grid gap-2">
-              <p className="text-sm font-semibold text-rose-200">Är du helt säker?</p>
+              <p className="text-sm font-semibold text-rose-200">{t("deleteAccountConfirm")}</p>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -1069,10 +1125,10 @@ function SettingsTab() {
                   disabled={deleting}
                   className="inline-flex items-center justify-center rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
                 >
-                  {deleting ? "Raderar…" : "Ja, radera permanent"}
+                  {deleting ? t("deleting") : t("deleteAccountYes")}
                 </button>
                 <Button variant="secondary" onClick={() => setDeleteConfirm(false)} disabled={deleting}>
-                  Avbryt
+                  {t("cancel")}
                 </Button>
               </div>
             </div>
@@ -1082,81 +1138,83 @@ function SettingsTab() {
 
       {/* Genomgång — låter användaren titta på swipe-tutorialen igen på begäran. */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-white/80">Genomgång</h3>
+        <h3 className="text-sm font-semibold text-white/80">{t("tours")}</h3>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Swipe-genomgången</div>
+            <div className="text-sm text-white/85">{t("tourSwipe")}</div>
             <div className="text-xs text-white/45">
-              Gilla, ogilla, mer info och sett + betygsätt — så funkar korten.
+              {t("tourSwipeHint")}
             </div>
           </div>
           <Button variant="secondary" onClick={() => { window.location.href = "/swipe?tour=swipe-gestures"; }}>
-            Visa igen
+            {t("showAgain")}
           </Button>
         </div>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Vän-genomgången</div>
+            <div className="text-sm text-white/85">{t("tourFriends")}</div>
             <div className="text-xs text-white/45">
-              Lägg till vänner, förfrågningar och vad vänner låser upp.
+              {t("tourFriendsHint")}
             </div>
           </div>
           <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=friends-tour"; }}>
-            Visa igen
+            {t("showAgain")}
           </Button>
         </div>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Grupp-genomgången</div>
+            <div className="text-sm text-white/85">{t("tourGroups")}</div>
             <div className="text-xs text-white/45">
-              Skapa eller gå med, bjud in, inställningar och gruppswipe.
+              {t("tourGroupsHint")}
             </div>
           </div>
           <Button variant="secondary" onClick={() => { window.location.href = "/group?tour=groups-tour"; }}>
-            Visa igen
+            {t("showAgain")}
           </Button>
         </div>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
-            <div className="text-sm text-white/85">Watchlist-genomgången</div>
+            <div className="text-sm text-white/85">{t("tourWatchlist")}</div>
             <div className="text-xs text-white/45">
-              Sparade titlar, betygsätt det du sett och Kolla nu.
+              {t("tourWatchlistHint")}
             </div>
           </div>
           <Button variant="secondary" onClick={() => { window.location.href = "/watchlist?tour=watchlist-tour"; }}>
-            Visa igen
+            {t("showAgain")}
           </Button>
         </div>
       </section>
 
       {/* Om — legal/support-länkarna Apple kräver + TMDB-attribution (TMDB:s villkor). */}
       <section className="grid gap-3">
-        <h3 className="text-sm font-semibold text-white/80">Om NextWatch</h3>
+        <h3 className="text-sm font-semibold text-white/80">{t("about")}</h3>
         <div className="grid gap-1 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm">
           <a href="/legal/privacy" className="py-1.5 text-white/85 transition hover:text-white">
-            Integritetspolicy
+            {t("privacyPolicy")}
           </a>
           <a href="/legal/terms" className="py-1.5 text-white/85 transition hover:text-white">
-            Användarvillkor
+            {t("terms")}
           </a>
           <a href="/support" className="py-1.5 text-white/85 transition hover:text-white">
-            Support &amp; vanliga frågor
+            {t("support")}
           </a>
           <a href="mailto:support@nextwatch.se" className="py-1.5 text-white/85 transition hover:text-white">
-            Kontakta oss
+            {t("contact")}
           </a>
         </div>
         <p className="px-1 text-xs leading-relaxed text-white/40">
-          Film- och seriedata från{" "}
-          <a
-            href="https://www.themoviedb.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-[#01b4e4]"
-          >
-            TMDB
-          </a>
-          . Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB.
+          {t.rich("tmdbAttribution", {
+            tmdb: (chunks) => (
+              <a
+                href="https://www.themoviedb.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#01b4e4]"
+              >
+                {chunks}
+              </a>
+            ),
+          })}
         </p>
       </section>
 

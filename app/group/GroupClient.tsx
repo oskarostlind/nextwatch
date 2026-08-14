@@ -11,6 +11,7 @@ import { GROUP_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import type { GroupInitial } from "./page";
+import { useTranslations } from "next-intl";
 
 export type { PublicMember, GroupInitial } from "./page";
 
@@ -20,6 +21,7 @@ type Tab = "group" | "matches" | "friends";
 const MATCHES_SEEN_PREFIX = "nw_matches_seen:";
 
 export default function GroupClient({ initial }: { initial: GroupInitial }) {
+  const t = useTranslations("group");
   const [tab, setTab] = useState<Tab>("group");
   const [groupGuideOpen, setGroupGuideOpen] = useState(false);
 
@@ -84,11 +86,11 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
   const tabs = useMemo(
     () => [
-      { id: "group" as const, label: "Grupp" },
-      { id: "matches" as const, label: hasUnseenMatch ? "Matchningar •" : "Matchningar" },
-      { id: "friends" as const, label: "Vänner" },
+      { id: "group" as const, label: t("tabGroup") },
+      { id: "matches" as const, label: hasUnseenMatch ? t("tabMatchesUnseen") : t("tabMatches") },
+      { id: "friends" as const, label: t("tabFriends") },
     ],
-    [hasUnseenMatch]
+    [hasUnseenMatch, t]
   );
 
   // "Visa igen"-knappen för vän-genomgången (Profil → Inställningar) länkar
@@ -121,7 +123,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
   return (
     <div className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4">
-      <PageHeader eyebrow="Socialt" title="Tillsammans" subtitle="Swipa i grupp eller lägg till vänner." />
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")} subtitle={t("subtitle")} />
 
       <IncomingInvites />
 

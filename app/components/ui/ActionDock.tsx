@@ -1,6 +1,7 @@
 "use client";
 
 import { X, Info, Undo2, Heart } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type VibratingNavigator = Navigator & {
   vibrate?: (pattern: number | number[]) => boolean;
@@ -66,6 +67,7 @@ export default function ActionDock({
   onLike,
   disabled,
 }: Props) {
+  const t = useTranslations("actions");
   return (
     <div className="flex shrink-0 items-center justify-center gap-4 px-4 pb-1 pt-2">
       <RoundBtn
@@ -85,7 +87,7 @@ export default function ActionDock({
       </RoundBtn>
 
       <RoundBtn
-        title="Ångra"
+        title={t("undo")}
         intent="undo"
         disabled={disabled}
         onClick={() => {

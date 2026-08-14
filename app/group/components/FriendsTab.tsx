@@ -13,6 +13,7 @@ import { refreshThreads, useShareThreads } from "@/lib/threadsStore";
 import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
 import { FRIENDS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { FriendsInitial } from "../page";
+import { useTranslations } from "next-intl";
 
 type SearchRow = {
   id: string;
@@ -21,7 +22,13 @@ type SearchRow = {
   is_friend: boolean;
 };
 
-async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: string }> {
+// networkError skickas in i stället för att slås upp här: funktionen ligger
+// på modulnivå och har ingen tillgång till useTranslations.
+async function apiCall<T>(
+  url: string,
+  payload: unknown,
+  networkError: string
+): Promise<T | { error: string }> {
   try {
     const res = await fetch(url, {
       method: payload ? "POST" : "GET",
@@ -32,18 +39,19 @@ async function apiCall<T>(url: string, payload?: unknown): Promise<T | { error: 
     if (!res.ok) throw new Error("API Error");
     return (await res.json()) as T;
   } catch {
-    return { error: "Nätverksfel. Försök igen." };
+    return { error: networkError };
   }
 }
 
 const cardClass = "rounded-2xl border border-white/10 bg-white/5 p-4";
 const sectionTitleClass = "text-sm font-semibold text-white/70 uppercase tracking-wide";
 
-function displayName(u: { displayName?: string | null; username?: string | null; id?: string }) {
-  return u.displayName ?? u.username ?? "Okänd";
-}
-
 export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
+  const t = useTranslations("friends");
+  // Fallback-etiketten är översatt, så helpern måste bo inne i komponenten
+  // (den låg tidigare på modulnivå med hårdkodad "Okänd").
+  const displayName = (u: { displayName?: string | null; username?: string | null; id?: string }) =>
+    u.displayName ?? u.username ?? t("unknown");
   // Delad social-store: förladdad vid appstart + hålls färsk av den globala
   // pollern (SocialPreloader i AppShell) — ingen egen fetch/interval här.
   const social = useSocial();
@@ -111,9 +119,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
 
     const timer = setTimeout(async () => {
       setIsSearching(true);
-      const res = await apiCall<{ ok: boolean; results: SearchRow[] }>(
-        `/api/friends/search?q=${encodeURIComponent(query)}`
-      );
+      const res = await apiCall<{ ok: boolean; results: SearchRow[] }>(`/api/friends/search?q=${encodeURIComponent(query)}`, undefined, t("networkError"));
       if (res && !("error" in res) && res.ok) {
         setSearchResults(res.results);
       }
@@ -121,10 +127,13 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
     }, 300);
 
     return () => clearTimeout(timer);
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   const sendFriendRequest = async (userId: string) => {
-    const res = await apiCall<{ requestId: string }>("/api/friends/request", { toUserId: userId });
+    const res = await apiCall<{ requestId: string }>("/api/friends/request", { toUserId: userId }, t("networkError"));
     if (!("error" in res)) {
       setSentToIds((prev) => new Set(prev).add(userId));
       void refreshSocial();
@@ -132,14 +141,14 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   };
 
   const acceptRequest = async (requestId: string) => {
-    const res = await apiCall<{ ok: boolean }>("/api/friends/accept", { requestId });
+    const res = await apiCall<{ ok: boolean }>("/api/friends/accept", { requestId }, t("networkError"));
     if (!("error" in res)) {
       void refreshSocial();
     }
   };
 
   const declineRequest = async (requestId: string) => {
-    const res = await apiCall<{ ok: boolean }>("/api/friends/decline", { requestId });
+    const res = await apiCall<{ ok: boolean }>("/api/friends/decline", { requestId }, t("networkError"));
     if (!("error" in res)) {
       void refreshSocial();
     }
@@ -149,7 +158,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
   // filmchatt — måste kunna ta sig ur kontakten igen.
   const removeFriend = async (userId: string) => {
     setManaging(true);
-    const res = await apiCall<{ ok: boolean }>("/api/friends/remove", { userId });
+    const res = await apiCall<{ ok: boolean }>("/api/friends/remove", { userId }, t("networkError"));
     setManaging(false);
     if (!("error" in res)) {
       setManageId(null);
@@ -159,7 +168,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
 
   const blockFriend = async (userId: string) => {
     setManaging(true);
-    const res = await apiCall<{ ok: boolean }>("/api/friends/block", { userId, block: true });
+    const res = await apiCall<{ ok: boolean }>("/api/friends/block", { userId, block: true }, t("networkError"));
     setManaging(false);
     if (!("error" in res)) {
       setManageId(null);
@@ -176,13 +185,13 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
           <input
             className={`${fieldClass} pl-10 pr-10 text-sm`}
-            placeholder="Sök användarnamn för att lägga till vän"
+            placeholder={t("searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {isSearching && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
-              Söker…
+              {t("searching")}
             </span>
           )}
         </div>
@@ -193,14 +202,14 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         <div className={cardClass}>
           <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
             <Search className="h-4 w-4 text-white/50" />
-            Sökresultat
+            {t("searchResults")}
           </h3>
           <ul className="flex flex-col gap-2">
             {searchResults.map((user) => {
               const isAlreadyFriend = user.is_friend;
               const isSent =
                 sentToIds.has(user.id) || pendingOut.some((p) => p.to.id === user.id);
-              const name = user.display_name ?? user.username ?? "Okänd";
+              const name = user.display_name ?? user.username ?? t("unknown");
 
               return (
                 <li
@@ -210,11 +219,11 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   <span className="font-medium text-white/90">{name}</span>
                   {isAlreadyFriend ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-400">
-                      <Check className="h-3 w-3" /> Vän
+                      <Check className="h-3 w-3" /> {t("friend")}
                     </span>
                   ) : isSent ? (
                     <span className="rounded-full border border-white/20 px-3 py-1 text-xs font-medium text-white/50">
-                      Skickad
+                      {t("sent")}
                     </span>
                   ) : (
                     <button
@@ -222,7 +231,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                       onClick={() => void sendFriendRequest(user.id)}
                       className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500 px-4 py-2 text-xs font-bold text-black transition active:scale-[0.98] hover:bg-cyan-400"
                     >
-                      <Plus className="h-3.5 w-3.5" /> Lägg till
+                      <Plus className="h-3.5 w-3.5" /> {t("add")}
                     </button>
                   )}
                 </li>
@@ -236,12 +245,12 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
       <div className={cardClass} data-tour="friends-list">
         <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
           <Users className="h-4 w-4 text-white/50" />
-          Dina vänner ({friends.length})
+          {t("yourFriends", { count: friends.length })}
         </h3>
         {friends.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-8 text-center">
             <Users className="mx-auto mb-2 h-10 w-10 text-white/20" />
-            <p className="text-sm text-white/50">Inga vänner än. Sök och lägg till någon ovan.</p>
+            <p className="text-sm text-white/50">{t("noFriends")}</p>
           </div>
         ) : (
           <>
@@ -249,7 +258,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
               <input
                 value={friendFilter}
                 onChange={(e) => setFriendFilter(e.target.value)}
-                placeholder="Filtrera dina vänner…"
+                placeholder={t("filterPlaceholder")}
                 className={`${fieldClass} mb-2 text-sm`}
               />
             )}
@@ -273,7 +282,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   {/* Filmchatten: egen knapp så profilklicket lämnas ifred. */}
                   <button
                     type="button"
-                    aria-label={`Filmtips med ${displayName(f)}`}
+                    aria-label={t("chatWithAria", { name: displayName(f) })}
                     onClick={() => setChatFriendId(f.id)}
                     className="relative shrink-0 rounded-full p-2.5 text-cyan-300/80 transition hover:bg-cyan-500/15 hover:text-cyan-200"
                   >
@@ -286,7 +295,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Hantera ${displayName(f)}`}
+                    aria-label={t("manageAria", { name: displayName(f) })}
                     onClick={() => setManageId(manageId === f.id ? null : f.id)}
                     className="shrink-0 rounded-full p-2.5 text-white/40 transition hover:bg-white/10 hover:text-white/80"
                   >
@@ -301,7 +310,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                         onClick={() => removeFriend(f.id)}
                         className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/20 disabled:opacity-50"
                       >
-                        Ta bort vän
+                        {t("removeFriend")}
                       </button>
                       <button
                         type="button"
@@ -309,7 +318,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                         onClick={() => blockFriend(f.id)}
                         className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/25 disabled:opacity-50"
                       >
-                        Blockera
+                        {t("block")}
                       </button>
                       <button
                         type="button"
@@ -317,10 +326,10 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                         onClick={() => setReportFriendId(f.id)}
                         className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/20 disabled:opacity-50"
                       >
-                        Anmäl
+                        {t("report")}
                       </button>
                       <span className="text-[11px] text-white/60">
-                        Blockering tar bort vänskapen och stoppar nya förfrågningar.
+                        {t("blockHint")}
                       </span>
                     </div>
                   )}
@@ -366,7 +375,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         <div className={cardClass} data-tour="friends-requests">
           <h3 className={`mb-3 flex items-center gap-2 ${sectionTitleClass}`}>
             <UserPlus className="h-4 w-4 text-white/50" />
-            Förfrågningar
+            {t("requests")}
           </h3>
           <ul className="flex flex-col gap-2">
             {pendingIn.map((r) => (
@@ -384,14 +393,14 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                     onClick={() => void declineRequest(r.requestId)}
                     className="rounded-xl border border-white/15 px-3 py-2 text-xs text-white/70 hover:bg-white/5"
                   >
-                    Avvisa
+                    {t("decline")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void acceptRequest(r.requestId)}
                     className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-medium text-white"
                   >
-                    Acceptera
+                    {t("accept")}
                   </button>
                 </div>
               </li>
@@ -405,7 +414,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
                   <Avatar avatarId={r.to.avatarId} name={displayName(r.to)} size={30} />
                   <span className="truncate text-sm font-medium text-white/90">{displayName(r.to)}</span>
                 </span>
-                <span className="text-xs text-white/60">Väntar…</span>
+                <span className="text-xs text-white/60">{t("pending")}</span>
               </li>
             ))}
           </ul>

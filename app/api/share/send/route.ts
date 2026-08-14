@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { sendPushToUser } from "@/lib/push";
+import { sendLocalizedPushToUser } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
       select: { displayName: true, user: { select: { username: true } } },
     });
     const senderName = sender?.displayName ?? sender?.user?.username ?? "En vän";
-    await sendPushToUser(toUserId, {
-      title: "Nytt filmtips 🍿",
-      body: `${senderName} tipsade dig om ${title}`,
+    await sendLocalizedPushToUser(toUserId, {
+      key: "shareReceived",
+      values: { name: senderName, title },
       data: { type: "share_received", friendId: me },
     });
   })().catch(() => {});

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { replayAnonLikes } from "@/lib/anonLikes";
+import { useTranslations } from "next-intl";
 
 /**
  * Ett klick in i gästläge: skapar en minimal profil (utan onboarding) och
@@ -10,11 +11,14 @@ import { replayAnonLikes } from "@/lib/anonLikes";
  */
 export default function GuestEntryButton({
   className,
-  label = "Hoppa in som gäst",
+  label,
 }: {
   className?: string;
+  /** Utelämnad = standardtexten "Hoppa in som gäst" på valt språk. */
   label?: string;
 }) {
+  const t = useTranslations("auth");
+  const buttonLabel = label ?? t("guestEntry");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,9 +36,9 @@ export default function GuestEntryButton({
         window.location.href = "/swipe";
         return;
       }
-      setError(j.message ?? "Kunde inte starta gästläge.");
+      setError(j.message ?? t("guestFailed"));
     } catch {
-      setError("Nätverksfel.");
+      setError(t("networkErrorDot"));
     } finally {
       setLoading(false);
     }
@@ -51,7 +55,7 @@ export default function GuestEntryButton({
           "w-full rounded-xl border border-white/15 bg-white/5 py-2 font-medium text-white transition hover:bg-white/10 disabled:opacity-60"
         }
       >
-        {loading ? "Startar…" : label}
+        {loading ? t("starting") : buttonLabel}
       </button>
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
     </div>

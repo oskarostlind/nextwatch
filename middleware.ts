@@ -2,6 +2,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { signUid, verifyUid } from "@/lib/session";
+import { LANG_COOKIE, localeFromAcceptLanguage } from "@/lib/i18nConfig";
 
 function makeUid(): string {
   const c = crypto as Crypto & { randomUUID?: () => string };
@@ -81,6 +82,18 @@ export async function middleware(req: NextRequest) {
   const mustSetRegion = !req.cookies.get("nw_region");
   const mustSetLocale = !req.cookies.get("nw_locale");
 
+  // Gränssnittsspråket (nw_lang) är skilt från nw_locale: nw_locale beskriver
+  // var användaren är (SE, formatering, TMDB-region), nw_lang vilket språk
+  // appen ska tala. Vi gissar bara en gång, från Accept-Language — därefter
+  // äger profilens språkväljare cookien och middleware rör den aldrig igen.
+  const uiLang = localeFromAcceptLanguage(req.headers.get("accept-language"));
+  const mustSetLang = !req.cookies.get(LANG_COOKIE);
+  if (mustSetLang) {
+    // Sätts på request-cookies också, så att i18n/request.ts ser rätt språk
+    // redan under den här renderingen i stället för först vid nästa navigering.
+    req.cookies.set(LANG_COOKIE, uiLang);
+  }
+
   // Backcompat: rewrite /api/profile/get -> /api/profile (med normaliserade cookies).
   const res =
     pathname === "/api/profile/get"
@@ -102,6 +115,9 @@ export async function middleware(req: NextRequest) {
   }
   if (mustSetLocale && !isPrefetch) {
     res.cookies.set("nw_locale", locale, FLAG_COOKIE);
+  }
+  if (mustSetLang && !isPrefetch) {
+    res.cookies.set(LANG_COOKIE, uiLang, FLAG_COOKIE);
   }
 
   return res;

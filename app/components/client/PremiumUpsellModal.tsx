@@ -13,8 +13,10 @@ import { notify } from "@/app/components/lib/notify";
 // maybeTriggerAdUpsell bor i lib/adUpsellEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
 import { UPSELL_EVENT, maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
+import { useTranslations } from "next-intl";
 
 export default function PremiumUpsellModal() {
+  const t = useTranslations("upsell");
   const [open, setOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [watching, setWatching] = useState(false);
@@ -59,16 +61,16 @@ export default function PremiumUpsellModal() {
           >
             <button
               type="button"
-              aria-label="Stäng"
+              aria-label={t("close")}
               onClick={() => setOpen(false)}
               className="absolute right-3 top-3 rounded-full p-1 text-neutral-400 transition hover:bg-white/10 hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
             <div className="text-3xl">✨</div>
-            <h2 className="text-lg font-semibold text-white">Trött på annonser?</h2>
+            <h2 className="text-lg font-semibold text-white">{t("heading")}</h2>
             <p className="text-sm leading-relaxed text-neutral-300">
-              Bli Premium för 19 kr/mån — helt annonsfritt och obegränsat med swipes.
+              {t("body")}
             </p>
             <button
               type="button"
@@ -83,7 +85,7 @@ export default function PremiumUpsellModal() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 font-semibold text-neutral-950 transition hover:bg-amber-300 disabled:opacity-50"
             >
               <Crown className="h-4 w-4" />
-              {buying ? "Öppnar…" : "Bli Premium – 19 kr/mån"}
+              {buying ? t("opening") : t("cta")}
             </button>
             {rewardAvailable && (
               <button
@@ -103,7 +105,7 @@ export default function PremiumUpsellModal() {
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
               >
                 <PlayCircle className="h-4 w-4" />
-                {watching ? "Laddar video…" : "Titta på en video – slipp annonser i 24h"}
+                {watching ? t("loadingVideo") : t("watchAd")}
               </button>
             )}
             <button
@@ -111,7 +113,7 @@ export default function PremiumUpsellModal() {
               onClick={() => setOpen(false)}
               className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-300"
             >
-              Nej tack, fortsätt swipa
+              {t("dismiss")}
             </button>
           </motion.div>
         </div>

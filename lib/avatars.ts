@@ -5,25 +5,26 @@
 // hela setet delar formspråk (rundad kvadrat, diagonal gradient, vitt motiv).
 // Frivilligt val: null/undefined är giltigt och UI faller tillbaka på initial.
 
-export type AvatarDef = { id: string; label: string };
+/** Etiketten slås upp som avatars.<id> i messages/*.json. */
+export type AvatarDef = { id: string };
 
 export const AVATARS: AvatarDef[] = [
-  { id: "popcorn", label: "Popcorn" },
-  { id: "klappa", label: "Klappa" },
-  { id: "stjarna", label: "Stjärna" },
-  { id: "hjarta", label: "Hjärta" },
-  { id: "robot", label: "Robot" },
-  { id: "alien", label: "Alien" },
-  { id: "spoke", label: "Spöke" },
-  { id: "katt", label: "Katt" },
-  { id: "raket", label: "Raket" },
-  { id: "biljett", label: "Biljett" },
-  { id: "tv", label: "TV" },
-  { id: "vhs", label: "VHS" },
-  { id: "kamera", label: "Kamera" },
-  { id: "mane", label: "Måne" },
-  { id: "glasogon", label: "3D-glasögon" },
-  { id: "pizza", label: "Pizza" },
+  { id: "popcorn" },
+  { id: "klappa" },
+  { id: "stjarna" },
+  { id: "hjarta" },
+  { id: "robot" },
+  { id: "alien" },
+  { id: "spoke" },
+  { id: "katt" },
+  { id: "raket" },
+  { id: "biljett" },
+  { id: "tv" },
+  { id: "vhs" },
+  { id: "kamera" },
+  { id: "mane" },
+  { id: "glasogon" },
+  { id: "pizza" },
 ];
 
 const VALID_IDS = new Set(AVATARS.map((a) => a.id));

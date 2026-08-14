@@ -2,6 +2,7 @@
 
 import { SegmentedTabs } from "@/app/components/ui/kit";
 import GenrePicker from "@/app/components/discover/GenrePicker";
+import { useTranslations } from "next-intl";
 
 export const MOVIE_GENRES = [
   ["28", "Action"], ["12", "Äventyr"], ["16", "Animerat"], ["35", "Komedi"],
@@ -17,26 +18,26 @@ export const TV_GENRES = [
 
 /** Sortering för Discover (TMDB discover API). */
 export const DISCOVER_SORT_OPTIONS = [
-  { value: "popularity.desc", label: "Populärast" },
-  { value: "vote_average.desc", label: "Högst betyg" },
-  { value: "primary_release_date.desc", label: "Nyast (film)" },
-  { value: "first_air_date.desc", label: "Nyast (serie)" },
+  { value: "popularity.desc", labelKey: "popular" },
+  { value: "vote_average.desc", labelKey: "topRated" },
+  { value: "primary_release_date.desc", labelKey: "newestMovie" },
+  { value: "first_air_date.desc", labelKey: "newestTv" },
 ] as const;
 
 /** Sortering för watchlist (klient-side på laddade items). */
 export const WATCHLIST_SORT_OPTIONS = [
-  { value: "addedAt", label: "Senast tillagd" },
-  { value: "popularity", label: "Populärast" },
-  { value: "voteAverage", label: "Högst betyg" },
-  { value: "year", label: "Nyast" },
+  { value: "addedAt", labelKey: "recentlyAdded" },
+  { value: "popularity", labelKey: "popular" },
+  { value: "voteAverage", labelKey: "topRated" },
+  { value: "year", labelKey: "newest" },
 ] as const;
 
 /** Sortering för Betyg-fliken. Betygsraderna saknar popularitet/röstsnitt,
  *  men bär användarens EGET betyg — det är den intressanta sorteringen här. */
 export const RATED_SORT_OPTIONS = [
-  { value: "userRating", label: "Högst betyg" },
-  { value: "year", label: "Nyast" },
-  { value: "title", label: "Titel A–Ö" },
+  { value: "userRating", labelKey: "topRated" },
+  { value: "year", labelKey: "newest" },
+  { value: "title", labelKey: "titleAz" },
 ] as const;
 
 export type MediaTypeFilter = "movie" | "tv";
@@ -68,6 +69,7 @@ export default function MediaFilters({
   mode = "discover",
   layoutId = "media-filters-type",
 }: Props) {
+  const t = useTranslations("filters");
   const genreList = type === "movie" ? MOVIE_GENRES : TV_GENRES;
   const sortOptions =
     mode === "watchlist"
@@ -86,22 +88,22 @@ export default function MediaFilters({
           <SegmentedTabs
             layoutId={layoutId}
             tabs={[
-              { id: "movie" as MediaTypeFilter, label: "Film" },
-              { id: "tv" as MediaTypeFilter, label: "Serier" },
+              { id: "movie" as MediaTypeFilter, label: t("movies") },
+              { id: "tv" as MediaTypeFilter, label: t("series") },
             ]}
             value={type}
             onChange={(t) => onTypeChange(t)}
           />
         </div>
         <select
-          aria-label="Sortera"
+          aria-label={t("sortAria")}
           value={sort}
           onChange={(e) => onSortChange(e.target.value)}
           className="shrink-0 rounded-full border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-cyan-500/40"
         >
           {sortOptions.map((o) => (
             <option key={o.value} value={o.value}>
-              {o.label}
+              {t(`sort.${o.labelKey}`)}
             </option>
           ))}
         </select>

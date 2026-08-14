@@ -1,0 +1,1170 @@
+{
+  "actions": {
+    "undo": "Ångra"
+  },
+  "auth": {
+    "activateAccount": "Aktivera ditt konto",
+    "appleIosOnly": "Logga in med Apple finns i iOS-appen. Använd e-post på webben.",
+    "backToSignIn": "Tillbaka till inloggningen",
+    "backToStart": "Tillbaka till startsidan",
+    "checkInbox": "Klart! Kolla din inbox. Klicka på länken i mejlet för att aktivera.",
+    "chooseNewPassword": "Välj nytt lösenord",
+    "continueWithoutAccount": "Fortsätt utan konto →",
+    "email": "E-post",
+    "emailVerified": "E-post verifierad — öppnar appen…",
+    "forgotBody": "Fyll i din e-postadress så skickar vi en länk för att välja ett nytt lösenord.",
+    "forgotPassword": "Glömt lösenord?",
+    "forgotTitle": "Glömt lösenord?",
+    "genericError": "Något gick fel. Försök igen.",
+    "genericErrorShort": "Något gick fel.",
+    "guestEntry": "Hoppa in som gäst",
+    "guestFailed": "Kunde inte starta gästläge.",
+    "invalidLink": "Ogiltig länk",
+    "invalidLinkBody": "Länken saknar token. Begär en ny återställningslänk.",
+    "nativeHint": "När du verifierat kan du byta tillbaka hit — vi uppdaterar automatiskt. Du kan också trycka \"Ta mig tillbaka till appen\" i Safari efter verifieringen.",
+    "networkError": "Nätverksfel",
+    "networkErrorDot": "Nätverksfel.",
+    "networkRetry": "Nätverksfel. Försök igen.",
+    "newPassword": "Nytt lösenord",
+    "newUser": "Ny användare? <link>Skapa konto</link>",
+    "noPassword": "Har du inget lösenord? <link>Skapa konto</link>",
+    "or": "eller",
+    "orWithEmail": "eller med e-post",
+    "password": "Lösenord",
+    "passwordsDontMatch": "Lösenorden matchar inte.",
+    "passwordTooShort": "Lösenordet måste vara minst 8 tecken.",
+    "passwordUpdated": "Lösenordet är uppdaterat",
+    "registerBody": "Spara ditt konto med e-post eller Apple så du kan logga in igen på andra enheter.",
+    "repeatPassword": "Upprepa lösenordet",
+    "requestNewLink": "Begär ny länk",
+    "resetSent": "Om kontot finns har vi skickat en återställningslänk till <email></email>. Kolla även skräpposten.",
+    "saveNewPassword": "Spara nytt lösenord",
+    "saving": "Sparar…",
+    "sending": "Skickar…",
+    "sendResetLink": "Skicka återställningslänk",
+    "sendVerifyLink": "Skicka verifieringslänk",
+    "signIn": "Logga in",
+    "signingIn": "Loggar in…",
+    "starting": "Startar…",
+    "termsAccept": "Jag godkänner <terms>användarvillkoren</terms> och <privacy>integritetspolicyn</privacy>, och accepterar att stötande innehåll eller kränkande beteende inte tolereras.",
+    "verifyLinkSent": "Verifieringslänk skickad.",
+    "verifySentBody": "Vi har skickat en länk för att bekräfta din e-post. Öppna mejlet och klicka på länken."
+  },
+  "avatars": {
+    "alien": "Alien",
+    "biljett": "Biljett",
+    "glasogon": "3D-glasögon",
+    "hjarta": "Hjärta",
+    "kamera": "Kamera",
+    "katt": "Katt",
+    "klappa": "Klappa",
+    "mane": "Måne",
+    "pizza": "Pizza",
+    "popcorn": "Popcorn",
+    "raket": "Raket",
+    "robot": "Robot",
+    "spoke": "Spöke",
+    "stjarna": "Stjärna",
+    "tv": "TV",
+    "vhs": "VHS"
+  },
+  "comingSoon": {
+    "eyebrow": "På gång",
+    "iosOnlyNote": "Påminnelser kan sättas i iOS-appen. Här ser du vad som är på väg.",
+    "reminderSet": "Påminns",
+    "remindMe": "Påminn mig",
+    "subtitle": "Nya filmer på väg – få en påminnelse när de släpps.",
+    "title": "Kommer snart"
+  },
+  "common": {
+    "back": "Tillbaka",
+    "cancel": "Avbryt",
+    "close": "Stäng",
+    "done": "Klar",
+    "loading": "Laddar…",
+    "movie": "Film",
+    "next": "Nästa",
+    "no": "Nej",
+    "remove": "Ta bort",
+    "retry": "Försök igen",
+    "save": "Spara",
+    "saved": "Sparat!",
+    "saving": "Sparar…",
+    "search": "Sök",
+    "series": "Serie",
+    "somethingWentWrong": "Något gick fel. Försök igen.",
+    "unknown": "Okänd",
+    "yes": "Ja"
+  },
+  "discover": {
+    "eyebrow": "Utforska",
+    "loadingInfo": "Laddar info…",
+    "next": "Nästa →",
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "noResults": "Inga träffar för \"{query}\".",
+    "noStreamingData": "Ingen tillgänglig streamingdata för din region just nu.",
+    "openProvider": "Öppna {provider}",
+    "prev": "← Föregående",
+    "rate": "Betygsätt",
+    "searchFailed": "Sökningen misslyckades",
+    "searchPlaceholder": "Sök titel…",
+    "subtitle": "Bläddra bland filmer och serier.",
+    "tipFriend": "Tipsa en vän",
+    "title": "Discover"
+  },
+  "email": {
+    "reset": {
+      "cta": "Välj nytt lösenord",
+      "fallback": "Om knappen inte fungerar, kopiera länken:",
+      "heading": "Återställ ditt lösenord",
+      "intro": "Du (eller någon annan) har begärt att återställa lösenordet för ditt NextWatch-konto.",
+      "subject": "Återställ ditt lösenord",
+      "validity": "Länken är giltig i 1 timme. Om du inte begärde detta kan du ignorera mejlet."
+    },
+    "verify": {
+      "cta": "Verifiera e-post",
+      "fallback": "Om knappen inte fungerar, kopiera länken:",
+      "heading": "Bekräfta din e-post",
+      "intro": "Klicka på knappen för att verifiera din e-postadress.",
+      "subject": "Bekräfta din e-post",
+      "validity": "Giltig i 24 timmar."
+    }
+  },
+  "filmChat": {
+    "add": "Lägg till",
+    "added": "Tillagd ✓",
+    "addToWatchlist": "Lägg till i watchlist",
+    "closeSearch": "Stäng sök",
+    "loadingInfo": "Laddar info…",
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "noStreamingData": "Ingen streamingdata för din region just nu.",
+    "noTips": "Inga tips än — skicka det första med <plus></plus>-knappen nedan.",
+    "reaction": {
+      "seen": "Redan sett",
+      "skip": "Vill inte se",
+      "want": "Vill kolla"
+    },
+    "read": "· Läst",
+    "searchMovie": "Sök film att tipsa om…",
+    "searchTv": "Sök serie att tipsa om…",
+    "sent": "· Skickat",
+    "shareATitle": "Tipsa om en titel"
+  },
+  "filters": {
+    "movies": "Film",
+    "series": "Serier",
+    "sort": {
+      "newest": "Nyast",
+      "newestMovie": "Nyast (film)",
+      "newestTv": "Nyast (serie)",
+      "popular": "Populärast",
+      "recentlyAdded": "Senast tillagd",
+      "titleAz": "Titel A–Ö",
+      "topRated": "Högst betyg"
+    },
+    "sortAria": "Sortera"
+  },
+  "friendProfile": {
+    "activeDaysAgo": "Aktiv för {count, plural, one {# dag} other {# dagar}} sedan",
+    "activeHoursAgo": "Aktiv för {count} tim sedan",
+    "activeJustNow": "Aktiv nyss",
+    "activeMinutesAgo": "Aktiv för {count} min sedan",
+    "likes": "Gillar",
+    "loadFailed": "Kunde inte hämta profilen.",
+    "networkError": "Nätverksfel.",
+    "neverActive": "Aldrig aktiv",
+    "noLikesYet": "Har inte gillat något än.",
+    "openChat": "Öppna filmchatt",
+    "recentFavorites": "Senaste favoriter",
+    "reportUser": "Anmäl användare"
+  },
+  "friends": {
+    "accept": "Acceptera",
+    "add": "Lägg till",
+    "block": "Blockera",
+    "blockHint": "Blockering tar bort vänskapen och stoppar nya förfrågningar.",
+    "chatWithAria": "Filmtips med {name}",
+    "decline": "Avvisa",
+    "filterPlaceholder": "Filtrera dina vänner…",
+    "friend": "Vän",
+    "manageAria": "Hantera {name}",
+    "networkError": "Nätverksfel. Försök igen.",
+    "noFriends": "Inga vänner än. Sök och lägg till någon ovan.",
+    "pending": "Väntar…",
+    "removeFriend": "Ta bort vän",
+    "report": "Anmäl",
+    "requests": "Förfrågningar",
+    "searching": "Söker…",
+    "searchPlaceholder": "Sök användarnamn för att lägga till vän",
+    "searchResults": "Sökresultat",
+    "sent": "Skickad",
+    "unknown": "Okänd",
+    "yourFriends": "Dina vänner ({count})"
+  },
+  "genrePicker": {
+    "dislikes": "Ogillar",
+    "likes": "Gillar",
+    "refine": "Förfina {genre}",
+    "subcategory": "Underkategori",
+    "tapHint": "— tryck en genre för att växla."
+  },
+  "genres": {
+    "Action": "Action",
+    "Action & Äventyr": "Action & Äventyr",
+    "Animerat": "Animerat",
+    "Äventyr": "Äventyr",
+    "Dokumentär": "Dokumentär",
+    "Drama": "Drama",
+    "Familj": "Familj",
+    "Fantasy": "Fantasy",
+    "Historia": "Historia",
+    "Komedi": "Komedi",
+    "Krig": "Krig",
+    "Krig & Politik": "Krig & Politik",
+    "Kriminal": "Kriminal",
+    "Musik": "Musik",
+    "Mysterium": "Mysterium",
+    "Mystik": "Mystik",
+    "Romantik": "Romantik",
+    "Sci-Fi": "Sci-Fi",
+    "Sci-Fi & Fantasy": "Sci-Fi & Fantasy",
+    "Skräck": "Skräck",
+    "Thriller": "Thriller",
+    "Western": "Western"
+  },
+  "genreSuggestions": {
+    "saveToConfirm": "Spara för att bekräfta."
+  },
+  "gestureTour": {
+    "dislike": {
+      "hint": "Dra kortet åt vänster om det inte är din grej.",
+      "label": "Ogilla"
+    },
+    "info": {
+      "hint": "Tryck på kortet för att vända på det.",
+      "label": "Mer info"
+    },
+    "like": {
+      "hint": "Dra kortet åt höger för att gilla.",
+      "label": "Gilla"
+    },
+    "progress": "Så funkar swipen — {step}/{total}",
+    "seen": {
+      "hint": "Dra kortet uppåt om du redan sett den — sen får du betygsätta den.",
+      "label": "Sett + betygsätt"
+    },
+    "skip": "Hoppa över"
+  },
+  "group": {
+    "accept": "Acceptera",
+    "alreadyMember": "Med i gruppen",
+    "close": "Stäng",
+    "codeCopied": "Kod kopierad!",
+    "commonWatchlist": "Gemensamt i era watchlists",
+    "commonWatchlistHint": "Titlar som flera av er redan sparat — börja kvällen här.",
+    "copy": "Kopiera",
+    "createGroup": "Skapa ny grupp",
+    "createGroupHeading": "Skapa grupp",
+    "createGroupHint": "Starta en ny grupp och dela koden med vänner.",
+    "decline": "Avvisa",
+    "eyebrow": "Socialt",
+    "groupCode": "Gruppkod",
+    "groupLabel": "Grupp:",
+    "groupSettings": "Gruppinställningar",
+    "invite": "Bjud in",
+    "invited": "Inbjuden",
+    "inviteFriendsHeading": "Bjud in vänner",
+    "invitesHeading": "Gruppinbjudningar",
+    "invitesYouTo": "Bjuder in till",
+    "join": "Gå med",
+    "joinFailed": "Kunde inte gå med i gruppen.",
+    "joinGroupHeading": "Gå med i grupp",
+    "joinGroupHint": "Har du fått en kod? Skriv in den här.",
+    "leave": "Lämna",
+    "linkCopied": "Länk kopierad!",
+    "member": "medlem",
+    "members": "Medlemmar ({count})",
+    "networkError": "Nätverksfel. Försök igen.",
+    "removeFromGroup": "Ta bort ur gruppen",
+    "removeMemberAria": "Ta bort {name}",
+    "removeMemberFailed": "Kunde inte ta bort medlemmen.",
+    "report": "Anmäl",
+    "shareText": "Gå med i min grupp: {code}",
+    "shareTitle": "NextWatch-grupp",
+    "someone": "Någon",
+    "startGroupSwipe": "Starta gruppswipe",
+    "subtitle": "Swipa i grupp eller lägg till vänner.",
+    "tabFriends": "Vänner",
+    "tabGroup": "Grupp",
+    "tabMatches": "Matchningar",
+    "tabMatchesUnseen": "Matchningar •",
+    "title": "Tillsammans",
+    "unknown": "Okänd",
+    "you": "Du"
+  },
+  "groupMatches": {
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "noGroup": "Gå med i eller skapa en grupp för att se era matchningar.",
+    "noImage": "Ingen bild",
+    "noMatches": "Inga matchningar än — swipa tillsammans för att hitta något ni alla gillar.",
+    "noStreamingData": "Ingen tillgänglig streamingdata för din region just nu.",
+    "openProvider": "Öppna {provider}"
+  },
+  "groupMatchPage": {
+    "eyebrow": "Grupp",
+    "loading": "Laddar…",
+    "matchSubtitle": "Gruppstorlek: {size} · Kräver {need} likes · Nuvarande: {count}",
+    "matchTitle": "Gruppens träff",
+    "noCode": "Ingen kod. Gå till <link>gruppsidan</link>.",
+    "noMatchSubtitle": "Fortsätt svepa!",
+    "noMatchTitle": "Ingen träff ännu",
+    "openOnTmdb": "Öppna på TMDb",
+    "sizeNeed": "Gruppstorlek: {size}. Kräver minst {need} likes på samma titel.",
+    "typeMovie": "film",
+    "typeTv": "serie"
+  },
+  "groupSettings": {
+    "ageAllAges": "Barntillåten",
+    "ageAuto": "Auto (yngsta medlemmen)",
+    "ageLimit": "Åldersgräns",
+    "ageYears": "{years} år",
+    "cancel": "Avbryt",
+    "filterBoth": "Båda",
+    "filterMovie": "Film",
+    "filterTv": "Serier",
+    "genres": "Genrer",
+    "genresHint": "Tryck: gillar → ogillar → neutral. Gillade genrer kan smalnas ner med sub-genrer.",
+    "heading": "Gruppinställningar",
+    "headingHint": "Tomma val = automatik utifrån medlemmarnas profiler.",
+    "loadFailed": "Kunde inte läsa inställningarna.",
+    "loading": "Laddar…",
+    "lookingFor": "Vi letar efter",
+    "lookingForHint": "Alla i gruppen ser samma typ av titlar när ni swipar.",
+    "networkError": "Nätverksfel. Försök igen.",
+    "providers": "Streamingtjänster",
+    "providersHint": "Tomt = alla tjänster som någon medlem har.",
+    "save": "Spara",
+    "saved": "Gruppinställningar sparade",
+    "saving": "Sparar…",
+    "seats": "Platser",
+    "seatsPremiumHint": "Taket följer den som skapade gruppen. Med Premium rymmer gruppen upp till {max} personer.",
+    "seatsUsed": "{used} av {max} platser använda.",
+    "threshold": "Matchtröskel",
+    "thresholdCustom": "Anpassad",
+    "thresholdDefault": "Standard ({need} av {of})",
+    "thresholdHint": "Hur många medlemmar som måste gilla samma titel för en match (minst 2).",
+    "thresholdNeedsTwo": "Gruppen behöver minst 2 medlemmar för en anpassad tröskel.",
+    "thresholdValue": "Matchning kräver: {need} av {of} personer"
+  },
+  "groupSwipe": {
+    "fewLeftFetching": "Få förslag kvar – hämtar fler och vidgar sökningen vid behov…",
+    "lookingForMore": "Letar efter fler förslag…",
+    "nothingToUndo": "Inget att ångra",
+    "outOfSuggestions": "Slut på förslag nu.",
+    "retry": "Försök igen",
+    "undoFailed": "Kunde inte ångra på servern",
+    "widenedDroppedGenres": "Få träffar med era filter — vidgade sökningen (släppte genre/sub-genre) för fler förslag.",
+    "widenedSubgenres": "Få träffar med era sub-genrer — vidgade sökningen för fler förslag."
+  },
+  "guide": {
+    "done": "Klart",
+    "next": "Nästa",
+    "skip": "Hoppa över"
+  },
+  "imdb": {
+    "close": "Stäng",
+    "heading": "Importera från IMDb",
+    "importing": "Importerar…",
+    "networkError": "Nätverksfel vid import.",
+    "pickFile": "Välj CSV-fil",
+    "resultFailed": ", {count} misslyckades",
+    "resultImported": "{count} importerade",
+    "resultSkipped": ", {count} hoppades över",
+    "step1": "Logga in på imdb.com (desktop/webb — export finns inte i mobilappen).",
+    "step2": "Gå till din profil → <target></target>.",
+    "step3": "Klicka på ⋮ (tre prickar) uppe till höger → <export>Export</export>.",
+    "step4": "Ladda ner CSV-filen och välj den här nedan."
+  },
+  "landing": {
+    "continueAsGuest": "Fortsätt som gäst",
+    "createFreeAccount": "Skapa gratis konto",
+    "filmsWaiting": "{count, plural, one {# film} other {# filmer}} väntar på dig",
+    "guestEntry": "Hoppa in som gäst →",
+    "headline": "Vad ska <accent>ni</accent> se ikväll?",
+    "like": "Gilla",
+    "nope": "Nope",
+    "privacy": "Integritetspolicy",
+    "promiseGroup": "Swipa med vänner. Ni matchar när ni gillar samma film.",
+    "promiseStreaming": "Bara det ni faktiskt kan streama, med länk direkt dit.",
+    "promiseTaste": "Vi lärde oss din smak av swipesen. Nu blir förslagen dina.",
+    "signIn": "Logga in",
+    "support": "Support",
+    "terms": "Villkor",
+    "tmdbAttribution": "Data från <tmdb>TMDB</tmdb> — ej godkänd/certifierad av TMDB"
+  },
+  "language": {
+    "en": "English",
+    "label": "Språk",
+    "sv": "Svenska"
+  },
+  "legalPrivacy": {
+    "linkHome": "Till startsidan",
+    "linkSupport": "Support",
+    "linkTerms": "Användarvillkor",
+    "metaDescription": "Så hanterar NextWatch dina personuppgifter.",
+    "metaTitle": "Integritetspolicy – NextWatch",
+    "sections": {
+      "changes": {
+        "body": "Vid väsentliga ändringar uppdaterar vi denna sida och datumet ovan. Väsentliga förändringar meddelas i appen.",
+        "heading": "8. Ändringar"
+      },
+      "collected": {
+        "heading": "2. Vilka uppgifter samlar vi in?",
+        "items": {
+          "i0": "<strong>Kontouppgifter:</strong> e-postadress, lösenord (lagras alltid krypterat/hashat), visningsnamn, användarnamn, födelsedatum (används för åldersanpassade rekommendationer) och vald profilbild.",
+          "i1": "<strong>Smak- och användningsdata:</strong> dina swipes, betyg, watchlist, favoritgenrer/-titlar, valda streamingtjänster, grupper du deltar i, vänner och filmtips du skickar/tar emot.",
+          "i2": "<strong>Tekniska uppgifter:</strong> en anonym identifierare (cookie), region och språk, samt push-token om du tillåter notiser.",
+          "i3": "<strong>Köpuppgifter:</strong> vid premiumköp hanteras betalningen av Stripe (webb) eller Apple (appen). Vi ser aldrig dina kortuppgifter — bara att köpet genomförts."
+        }
+      },
+      "controller": {
+        "body": "NextWatch (”vi”) tillhandahåller appen och webbtjänsten NextWatch – en tjänst för att hitta filmer och serier, själv eller i grupp. Vi är personuppgiftsansvariga för den behandling som beskrivs här. Kontakt: <mail>support@nextwatch.se</mail>.",
+        "heading": "1. Vem är ansvarig?"
+      },
+      "cookies": {
+        "body": "Vi använder ett fåtal nödvändiga cookies: en identifierare som håller dig inloggad (signerad, kan inte förfalskas) samt region/språk. Inga tredjeparts-spårningscookies på webben.",
+        "heading": "7. Cookies"
+      },
+      "purposes": {
+        "heading": "3. Varför behandlar vi uppgifterna?",
+        "items": {
+          "i0": "Leverera tjänsten: rekommendationer, grupper, vänner, watchlist (avtal).",
+          "i1": "Personliga rekommendationer utifrån din smakprofil (avtal/berättigat intresse).",
+          "i2": "Notiser du valt att få — kan stängas av per typ i profilens inställningar (samtycke).",
+          "i3": "Annonser i gratisversionen av appen via Google AdMob. Med ditt samtycke (via Apples spårningsdialog och Googles samtyckesformulär) kan annonser anpassas; nekar du visas endast icke-anpassade annonser (samtycke).",
+          "i4": "Drift, felsökning och missbruksskydd (berättigat intresse)."
+        }
+      },
+      "retention": {
+        "body": "Så länge du har ett konto. Raderar du kontot (Profil → Inställningar → Radera konto) tas alla dina uppgifter bort permanent: profil, betyg, watchlist, grupper, vänner, filmtips och push-tokens. Inaktiva grupper gallras automatiskt. Vissa köpunderlag kan behöva sparas längre enligt bokföringslag.",
+        "heading": "5. Hur länge sparas uppgifterna?"
+      },
+      "rights": {
+        "body": "Du har rätt till tillgång, rättelse, radering, begränsning, dataportabilitet och att invända mot behandling. Du kan när som helst återkalla samtycken (notiser i appens inställningar, annonsspårning i iOS-inställningarna). Kontakta <mail>support@nextwatch.se</mail> — och du kan alltid klaga hos Integritetsskyddsmyndigheten (IMY).",
+        "heading": "6. Dina rättigheter (GDPR)"
+      },
+      "sharing": {
+        "heading": "4. Vilka delar vi uppgifter med?",
+        "items": {
+          "i0": "<strong>TMDB</strong> (The Movie Database) — film- och seriedata hämtas därifrån; dina sökningar skickas dit utan koppling till ditt konto.",
+          "i1": "<strong>Google AdMob</strong> — annonser i appen (se ovan).",
+          "i2": "<strong>Stripe</strong> — betalningar på webben.",
+          "i3": "<strong>Apple</strong> — köp och push-notiser i iOS-appen.",
+          "i4": "<strong>Driftleverantörer</strong> — hosting (Vercel), databas (Neon) och e-postutskick. De behandlar uppgifter endast för vår räkning.",
+          "i5": "<strong>Andra användare</strong> — visningsnamn, användarnamn, profilbild, favoritgenrer och en topp-3 härledd ur dina likes visas för dina vänner; grupper ser gemensam aktivitet. Vi säljer aldrig dina uppgifter."
+        }
+      }
+    },
+    "title": "Integritetspolicy",
+    "translationNote": "Den svenska versionen av denna policy är den som gäller juridiskt. En engelsk översättning finns för läsbarhet.",
+    "updated": "Senast uppdaterad: {date}",
+    "updatedDate": "22 juli 2026"
+  },
+  "legalTerms": {
+    "linkHome": "Till startsidan",
+    "linkPrivacy": "Integritetspolicy",
+    "linkSupport": "Support",
+    "metaDescription": "Villkor för att använda NextWatch.",
+    "metaTitle": "Användarvillkor – NextWatch",
+    "sections": {
+      "account": {
+        "body": "Du kan använda tjänsten som gäst eller med konto. Du ansvarar för att uppgifterna du lämnar stämmer och för att hålla dina inloggningsuppgifter hemliga. Rekommendationer åldersanpassas utifrån ditt födelsedatum. Tjänsten riktar sig inte till barn under 13 år.",
+        "heading": "2. Konto och ålder"
+      },
+      "changes": {
+        "body": "Vi kan uppdatera tjänsten och dessa villkor; väsentliga ändringar meddelas i appen. Du kan när som helst radera ditt konto i profilens inställningar. Svensk lag gäller.",
+        "heading": "7. Ändringar och upphörande"
+      },
+      "conduct": {
+        "body": "Använd tjänsten som en schysst människa: inga intrångsförsök, ingen spam via filmtips/vänförfrågningar, inget missbruk av API:er. Vi kan stänga av konton som missbrukar tjänsten.",
+        "heading": "4. Uppförande"
+      },
+      "contact": {
+        "body": "Frågor? Mejla <mail>support@nextwatch.se</mail>.",
+        "heading": "8. Kontakt"
+      },
+      "liability": {
+        "body": "Tjänsten tillhandahålls i befintligt skick. Vi ansvarar inte för indirekta skador eller för innehåll hos tredje part (streamingtjänster, TMDB, annonsörer). Inget i dessa villkor begränsar rättigheter du har enligt tvingande konsumentlagstiftning.",
+        "heading": "6. Ansvarsbegränsning"
+      },
+      "premium": {
+        "body": "Gratisversionen finansieras med annonser. Premium (annonsfritt och obegränsat med swipes) köps via App Store i iOS-appen eller via Stripe på webben. Prenumerationer förnyas tills de sägs upp — i App Store-inställningarna respektive via ”Hantera prenumeration” i profilen. Ångerrätt och återbetalningar för App Store-köp hanteras av Apple enligt deras villkor.",
+        "heading": "3. Premium och betalning"
+      },
+      "service": {
+        "body": "NextWatch hjälper dig hitta filmer och serier — själv eller i grupp — utifrån din smak och de streamingtjänster du har. NextWatch är inte en streamingtjänst: vi visar var titlar finns och länkar dit, men tillhandahåller inget innehåll själva.",
+        "heading": "1. Tjänsten"
+      },
+      "thirdParty": {
+        "body": "Film- och seriedata (titlar, bilder, beskrivningar, betyg) kommer från The Movie Database (TMDB). Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB. Streamingtillgänglighet kan ändras utan förvarning och vi garanterar inte att uppgifterna alltid är korrekta.",
+        "heading": "5. Innehåll och tredje part"
+      }
+    },
+    "title": "Användarvillkor",
+    "translationNote": "Den svenska versionen av dessa villkor är den som gäller juridiskt. En engelsk översättning finns för läsbarhet.",
+    "updated": "Senast uppdaterade: {date}",
+    "updatedDate": "22 juli 2026"
+  },
+  "match": {
+    "and": "och",
+    "availableOn": "Tillgänglig på",
+    "evidenceCast": "skådespelaren {label}",
+    "evidenceCreator": "skaparen {label}",
+    "evidenceDirector": "regissören {label}",
+    "evidenceKeyword": "teman som {label}",
+    "front": "Framsida",
+    "headingGroup": "Gruppmatch!",
+    "headingSolo": "Toppmatch för dig!",
+    "keepSwiping": "Fortsätt swipa",
+    "moreInfo": "Mer info",
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "savedByMany": "{names} hade den redan i sina watchlists.",
+    "savedByOne": "{names} hade den redan i sin watchlist.",
+    "watchNowOn": "Kolla nu på {provider}",
+    "youLike": "Du gillar {list}."
+  },
+  "modals": {
+    "dragToRate": "Dra för att betygsätta",
+    "saveRating": "Spara betyg ({value}/10)",
+    "saving": "Sparar…",
+    "skip": "Hoppa över"
+  },
+  "nav": {
+    "discover": "Utforska",
+    "group": "Grupp",
+    "profile": "Profil",
+    "swipe": "Rekommendationer",
+    "watchlist": "Watchlist"
+  },
+  "onboarding": {
+    "ageHint": "Vi använder åldern för att filtrera innehåll efter åldersgräns.",
+    "ageLabel": "Hur gammal är du?",
+    "agePlaceholder": "t.ex. 18",
+    "ageUnit": "år",
+    "back": "Tillbaka",
+    "clear": "Rensa",
+    "continueAsGuest": "Fortsätt som gäst",
+    "continueAsGuestHint": "Börja swipa direkt. Du kan skapa konto senare under Profil.",
+    "createAccount": "Skapa konto",
+    "createAccountHint": "Spara med e-post eller Apple så du kan logga in igen på andra enheter.",
+    "displayNameFromApple": "Hämtat från ditt Apple-ID. Ändra om du vill.",
+    "displayNameLabel": "Visningsnamn <optional>(valfritt)</optional>",
+    "displayNamePlaceholder": "Ditt namn…",
+    "doneLinked": "Profilen är klar och kopplad till ditt konto.",
+    "donePickPath": "Profilen är klar! Välj hur du vill fortsätta.",
+    "errAge": "Ange en giltig ålder (7–99 år).",
+    "errCheckUsernameAge": "Kontrollera användarnamn och ålder.",
+    "errGeneric": "Ett fel uppstod.",
+    "errRequired": "Fyll i alla obligatoriska fält.",
+    "errTerms": "Du behöver godkänna villkoren för att fortsätta.",
+    "errUsernameChecking": "Vänta medan vi kollar användarnamnet…",
+    "errUsernameFormat": "Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).",
+    "errUsernameTaken": "Användarnamnet är upptaget. Välj ett annat.",
+    "favoriteMovie": "Favoritfilm (valfritt)",
+    "favoriteShow": "Favoritserie (valfritt)",
+    "genres": "Genrer",
+    "genresEmptyHint": "Tomma val = automatik utifrån din smakprofil.",
+    "guestSkip": "Hoppa in som gäst istället",
+    "languageLabel": "Språk",
+    "next": "Nästa →",
+    "previous": "← Föregående",
+    "providersHint": "Välj de tjänster du har – vi visar bara titlar du kan streama.",
+    "providersLabel": "Dina streamingtjänster",
+    "savingProfile": "Sparar profil…",
+    "searchTitle": "Sök titel…",
+    "startSwiping": "Börja swipa",
+    "startSwipingHint": "Vi sparar profilen och tar dig vidare.",
+    "steps": {
+      "about": {
+        "subtitle": "Namn, användarnamn och ålder",
+        "title": "Om dig"
+      },
+      "account": {
+        "subtitle": "Gäst eller registrera dig",
+        "title": "Konto"
+      },
+      "done": {
+        "subtitle": "Spara profilen och börja swipa",
+        "title": "Klart"
+      },
+      "services": {
+        "subtitle": "Språk och streaming",
+        "title": "Tjänster"
+      },
+      "taste": {
+        "subtitle": "Favoriter och genrer",
+        "title": "Smak"
+      }
+    },
+    "termsAccept": "Jag godkänner <terms>användarvillkoren</terms> och <privacy>integritetspolicyn</privacy>, och accepterar att stötande innehåll eller kränkande beteende inte tolereras.",
+    "usernameAvailable": "✓ Tillgängligt",
+    "usernameBlockedChars": "Otillåtna tecken tas bort automatiskt.",
+    "usernameChecking": "Kollar tillgänglighet…",
+    "usernameHint": "3–20 tecken: a–z, 0–9, _ och . Vänner söker dig med detta namn.",
+    "usernameInvalid": "Ogiltigt format",
+    "usernameLabel": "Användarnamn",
+    "usernameTaken": "Upptaget – välj ett annat",
+    "welcome": "Välkommen till NextWatch"
+  },
+  "overlay": {
+    "didntSee": "Såg den inte / hoppa över",
+    "groupMatchRate": "Ni matchade på denna — såg du den?"
+  },
+  "premium": {
+    "bulletAdFree": "Helt annonsfritt",
+    "bulletGroups": "Grupper upp till 20 personer — gratis rymmer 3",
+    "bulletSwipes": "Obegränsat med swipes — gratis ingår 100 per dygn",
+    "bulletTaste": "Din smakprofil: se vilka teman, regissörer och skådespelare dina swipes pekar mot",
+    "buyCta": "Bli Premium – 19 kr/mån",
+    "eula": "Användarvillkor (EULA)",
+    "eyebrow": "Uppgradera",
+    "intro": "Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.",
+    "legalApple": "Betalningen dras från ditt Apple-konto när du bekräftar köpet. Förnyelsen sker inom 24 timmar före periodens slut om du inte säger upp innan dess. Du hanterar och avslutar prenumerationen i Inställningar på din enhet.",
+    "legalName": "<name>NextWatch Premium</name> — 19 kr per månad. Prenumerationen förnyas automatiskt varje månad tills du säger upp den.",
+    "legalStripe": "Betalningen hanteras av Stripe. Du kan avsluta prenumerationen när som helst.",
+    "openingAppStore": "Öppnar App Store…",
+    "ourTerms": "Våra villkor",
+    "privacy": "Integritetspolicy",
+    "restore": "Återställ tidigare köp",
+    "restoreFailed": "Kunde inte återställa köp.",
+    "restoring": "Återställer…",
+    "startingStripe": "Startar Stripe…",
+    "subtitle": "19 kr/mån – avsluta när du vill."
+  },
+  "premiumSuccess": {
+    "body": "Din premium bör aktiveras inom några sekunder. Ladda om sidan om det inte syns direkt.",
+    "title": "Tack för köpet!"
+  },
+  "profile": {
+    "about": "Om NextWatch",
+    "adFreeExperience": "Du har en annonsfri upplevelse.",
+    "analyzing": "Analyserar…",
+    "avatarChange": "Byt profilbild",
+    "avatarHint": "Frivilligt — syns hos vänner och i grupper.",
+    "avatarLabel": "Profilbild",
+    "avatarPick": "Välj profilbild",
+    "cancel": "Avbryt",
+    "clear": "Rensa",
+    "contact": "Kontakta oss",
+    "deleteAccount": "Radera konto",
+    "deleteAccountAppleHint": "Har du en prenumeration via App Store? Säg upp den separat i Inställningar → ditt namn → Prenumerationer — att radera kontot här stänger inte av Apple-debiteringen.",
+    "deleteAccountBody": "Raderar ditt konto och all din data permanent: profil, betyg, watchlist, grupper och vänner. Det går inte att ångra.",
+    "deleteAccountConfirm": "Är du helt säker?",
+    "deleteAccountCta": "Radera mitt konto",
+    "deleteAccountFailed": "Kunde inte radera kontot.",
+    "deleteAccountYes": "Ja, radera permanent",
+    "deleting": "Raderar…",
+    "displayNameLabel": "Visningsnamn",
+    "displayNamePlaceholder": "Ditt namn",
+    "dobLabel": "Födelsedatum",
+    "editTaste": "Redigera smak",
+    "editTasteHint": "Dina val här påverkar både rekommendationer och smakprofilen ovan.",
+    "eyebrow": "Ditt konto",
+    "favoriteMovie": "Favoritfilm",
+    "favoriteShow": "Favoritserie",
+    "fillFromRatings": "Fyll i från mina betyg",
+    "fillFromRatingsHint": "Automatiskt baserat på din betygshistorik — du väljer alltid det sista ordet.",
+    "genericError": "Ett fel uppstod.",
+    "genres": "Genrer",
+    "genresEmptyHint": "Tomma val = automatik utifrån din smakprofil.",
+    "languageInstantHint": "Språk byts direkt — du behöver inte spara.",
+    "languageLabel": "Språk",
+    "loading": "Laddar…",
+    "manageAppleHint": "Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn → Prenumerationer.",
+    "manageInAppStore": "Hantera i App Store",
+    "manageSubscription": "Hantera prenumeration",
+    "networkError": "Nätverksfel.",
+    "noSearchResults": "Inga träffar — prova en annan sökning.",
+    "notif": {
+      "dailyRecs": {
+        "hint": "En daglig film-/serierekommendation.",
+        "label": "Dagens tips"
+      },
+      "friendRequests": {
+        "hint": "Nya förfrågningar och accepterade vänner.",
+        "label": "Vänförfrågningar"
+      },
+      "groupInvites": {
+        "hint": "När någon bjuder in dig till en grupp.",
+        "label": "Gruppinbjudningar"
+      },
+      "groupMatches": {
+        "hint": "När din grupp hittar en gemensam titel.",
+        "label": "Gruppmatchningar"
+      },
+      "marketing": {
+        "hint": "Enstaka uppdateringar om NextWatch.",
+        "label": "Nyheter & erbjudanden"
+      },
+      "shares": {
+        "hint": "När en vän skickar dig ett filmtips i chatten.",
+        "label": "Filmtips från vänner"
+      }
+    },
+    "notifications": "Notiser",
+    "onFreePlan": "Du använder <strong>gratisversionen</strong> med annonser.",
+    "opening": "Öppnar…",
+    "openPortalFailed": "Kunde inte öppna prenumerationshanteringen.",
+    "premiumLifetime": "Premium (lifetime)",
+    "privacyPolicy": "Integritetspolicy",
+    "providersHint": "Välj de streamingtjänster du har.",
+    "pushHint": "Push kräver att du tillåtit notiser för appen i systeminställningarna.",
+    "renewsAt": "Förnyas/upphör {date}.",
+    "save": "Spara",
+    "savedDot": "Sparat.",
+    "savePrefFailed": "Kunde inte spara inställningen.",
+    "saveProfileFailed": "Kunde inte spara profil.",
+    "saveUsernameFailed": "Kunde inte spara användarnamn.",
+    "saving": "Sparar…",
+    "searching": "Söker…",
+    "searchMovie": "Sök film…",
+    "searchShow": "Sök serie…",
+    "showAgain": "Visa igen",
+    "showKidsContent": "Visa barn- och familjeinnehåll",
+    "showKidsContentHint": "Av som standard. På tar med barnserier (t.ex. My Little Pony) i förslagen.",
+    "showPaidOptions": "Visa hyr- och köpalternativ",
+    "showPaidOptionsHint": "Av som standard. På visar vi även titlar du behöver betala extra för att se.",
+    "subscription": "Prenumeration",
+    "suggestApplied": "Förslag ifyllt nedan — justera vid behov och spara.",
+    "suggestFetchFailed": "Kunde inte hämta förslag.",
+    "suggestions": "Förslag",
+    "suggestNeedMore": "Betygsätt fler titlar först så kan vi föreslå åt dig.",
+    "suggestNoPattern": "Hittade inget tydligt mönster i din historik än.",
+    "support": "Support & vanliga frågor",
+    "tabProfile": "Profil",
+    "tabServices": "Tjänster",
+    "tabSettings": "Inställningar",
+    "tabTaste": "Smak",
+    "terms": "Användarvillkor",
+    "tmdbAttribution": "Film- och seriedata från <tmdb>TMDB</tmdb>. Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB.",
+    "tourFriends": "Vän-genomgången",
+    "tourFriendsHint": "Lägg till vänner, förfrågningar och vad vänner låser upp.",
+    "tourGroups": "Grupp-genomgången",
+    "tourGroupsHint": "Skapa eller gå med, bjud in, inställningar och gruppswipe.",
+    "tours": "Genomgång",
+    "tourSwipe": "Swipe-genomgången",
+    "tourSwipeHint": "Gilla, ogilla, mer info och sett + betygsätt — så funkar korten.",
+    "tourWatchlist": "Watchlist-genomgången",
+    "tourWatchlistHint": "Sparade titlar, betygsätt det du sett och Kolla nu.",
+    "upgradeCta": "Uppgradera till Premium",
+    "upgradeHint": "Uppgradera till Premium (19 kr/mån) för en helt annonsfri upplevelse.",
+    "usernameBlockedChars": "Otillåtna tecken tas bort.",
+    "usernameHint": "3–20 tecken (a–z, 0–9, _, .) — visas för vänner.",
+    "usernameLabel": "Användarnamn",
+    "usernamePlaceholder": "t.ex. film_ninja.42",
+    "usernameTooShort": "Ange minst 3 tecken eller lämna tomt.",
+    "validationRequired": "Fyll i namn och födelsedatum. Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .)."
+  },
+  "push": {
+    "dailyRec": {
+      "body": "{title} – en {media} vi tror du gillar!",
+      "movie": "film",
+      "series": "serie",
+      "title": "Dagens tips 🎬"
+    },
+    "friendAccepted": {
+      "body": "{name} accepterade din vänförfrågan",
+      "title": "Vänförfrågan accepterad"
+    },
+    "friendRequest": {
+      "body": "{name} vill bli vän med dig",
+      "title": "Ny vänförfrågan"
+    },
+    "groupInvite": {
+      "body": "{name} bjöd in dig till en grupp",
+      "title": "Gruppinbjudan"
+    },
+    "groupInviteAccepted": {
+      "body": "{name} gick med i din grupp {code} – dags att swipa!",
+      "title": "Inbjudan accepterad"
+    },
+    "shareReceived": {
+      "body": "{name} tipsade dig om {title}",
+      "title": "Nytt filmtips 🍿"
+    },
+    "softAskBody": "Vi säger till när din grupp matchar, när vänner skickar filmtips och när dagens rekommendation landar. Du väljer själv vilka typer i inställningarna.",
+    "softAskLater": "Inte nu",
+    "softAskTitle": "Vill du få notiser? 🔔",
+    "softAskYes": "Ja, aktivera"
+  },
+  "report": {
+    "alsoBlock": "Blockera användaren också",
+    "aUser": "användare",
+    "close": "Stäng",
+    "describeLabel": "Beskriv gärna (valfritt)",
+    "describePlaceholder": "Vad hände?",
+    "heading": "Anmäl {name}",
+    "intro": "Vi granskar alla anmälningar inom 24 timmar och tar bort innehåll eller stänger av konton som bryter mot villkoren.",
+    "networkError": "Nätverksfel. Försök igen.",
+    "reason": {
+      "badContent": "Olämpligt innehåll",
+      "badName": "Olämpligt namn eller användarnamn",
+      "harassment": "Trakasserier eller hot",
+      "other": "Annat",
+      "spam": "Spam"
+    },
+    "send": "Skicka anmälan",
+    "sendFailed": "Kunde inte skicka anmälan.",
+    "sending": "Skickar…",
+    "thanks": "Tack! Anmälan är mottagen.",
+    "thanksBlocked": "Tack! Anmälan är mottagen och användaren är blockerad."
+  },
+  "share": {
+    "close": "Stäng",
+    "heading": "Tipsa en vän",
+    "loadingFriends": "Laddar vänner…",
+    "noFriends": "Inga vänner än — lägg till någon under Grupp → Vänner först.",
+    "retry": "Försök igen",
+    "searchFriend": "Sök vän…",
+    "send": "Skicka",
+    "sending": "Skickar…",
+    "sent": "Skickat ✓",
+    "unknown": "Okänd"
+  },
+  "subgenres": {
+    "Actionkomedi": "Actionkomedi",
+    "AI & robotar": "AI & robotar",
+    "Aliens": "Aliens",
+    "Andra världskriget": "Andra världskriget",
+    "Anime": "Anime",
+    "Antiken": "Antiken",
+    "Bil & jakt": "Bil & jakt",
+    "Biografiskt": "Biografiskt",
+    "Buddy": "Buddy",
+    "Coming of age": "Coming of age",
+    "Crime thriller": "Crime thriller",
+    "Cyberpunk": "Cyberpunk",
+    "Detektiv": "Detektiv",
+    "Dramatisk romantik": "Dramatisk romantik",
+    "Dystopi": "Dystopi",
+    "Episkt": "Episkt",
+    "Expedition": "Expedition",
+    "Familj": "Familj",
+    "Film noir": "Film noir",
+    "Första världskriget": "Första världskriget",
+    "Found footage": "Found footage",
+    "Heist": "Heist",
+    "Hemsökt hus": "Hemsökt hus",
+    "Historisk romantik": "Historisk romantik",
+    "Hovdrama": "Hovdrama",
+    "Kalla kriget": "Kalla kriget",
+    "Kampsport": "Kampsport",
+    "Katastrof": "Katastrof",
+    "Konsertfilm": "Konsertfilm",
+    "Konspirationer": "Konspirationer",
+    "Krig": "Krig",
+    "Krigsdrama": "Krigsdrama",
+    "Kroppsskräck": "Kroppsskräck",
+    "Maffia": "Maffia",
+    "Medeltiden": "Medeltiden",
+    "Medicinskt": "Medicinskt",
+    "Monster": "Monster",
+    "Mörk komedi": "Mörk komedi",
+    "Musik-dok": "Musik-dok",
+    "Musikal": "Musikal",
+    "Natur": "Natur",
+    "Neo-western": "Neo-western",
+    "Ockult & demoner": "Ockult & demoner",
+    "Överlevnad": "Överlevnad",
+    "Övernaturligt": "Övernaturligt",
+    "Övernaturligt mysterium": "Övernaturligt mysterium",
+    "Parodi": "Parodi",
+    "Post-apokalyps": "Post-apokalyps",
+    "Psykologisk": "Psykologisk",
+    "Psykologisk skräck": "Psykologisk skräck",
+    "Rättegång": "Rättegång",
+    "Romcom": "Romcom",
+    "Rymden": "Rymden",
+    "Sagor": "Sagor",
+    "Seriemördare": "Seriemördare",
+    "Sjöröveri": "Sjöröveri",
+    "Skattjakt": "Skattjakt",
+    "Slasher": "Slasher",
+    "Spionage": "Spionage",
+    "Sport": "Sport",
+    "Sport-dok": "Sport-dok",
+    "Stop-motion": "Stop-motion",
+    "Superhjälte": "Superhjälte",
+    "Svärd & magi": "Svärd & magi",
+    "Techno-thriller": "Techno-thriller",
+    "Tidsresor": "Tidsresor",
+    "Tonårskomedi": "Tonårskomedi",
+    "True crime": "True crime",
+    "Ungdomsromantik": "Ungdomsromantik",
+    "Urban fantasy": "Urban fantasy",
+    "Vampyr": "Vampyr",
+    "Vietnamkriget": "Vietnamkriget",
+    "Whodunit": "Whodunit",
+    "Zombie": "Zombie"
+  },
+  "support": {
+    "faq": {
+      "bug": {
+        "a": "Underbart — mejla oss! Beskriv vad du gjorde, vad som hände och gärna en skärmdump.",
+        "q": "Jag hittar en bugg!"
+      },
+      "cancelPremium": {
+        "a": "Köpt i iOS-appen: Inställningar → ditt Apple-ID → Prenumerationer, eller via ”Hantera i App Store” i profilen. Köpt på webben: ”Hantera prenumeration” i profilens inställningar.",
+        "q": "Hur säger jag upp Premium?"
+      },
+      "deleteAccount": {
+        "a": "Profil → Inställningar → Radera konto. All din data tas bort permanent. Har du en aktiv App Store-prenumeration behöver den sägas upp separat hos Apple.",
+        "q": "Hur raderar jag mitt konto?"
+      },
+      "groups": {
+        "a": "Skapa en grupp under Grupp-fliken och dela koden, eller bjud in vänner direkt. När tillräckligt många gillat samma titel får ni en matchning. Under gruppens sida ser ni också titlar som flera av er redan har i sina watchlists.",
+        "q": "Hur fungerar grupper?"
+      },
+      "noRecs": {
+        "a": "Kontrollera att du valt minst en streamingtjänst i Profil → Tjänster. Förslagen filtreras på tjänsterna du (eller din grupp) faktiskt har. Titlar du redan swipat återkommer efter din valda återvinningstid.",
+        "q": "Jag ser inga rekommendationer / det står ”Slut på förslag”"
+      },
+      "notifications": {
+        "a": "Kontrollera dels iOS-inställningarna för NextWatch, dels vilka notistyper du slagit på under Profil → Inställningar → Notiser.",
+        "q": "Varför får jag inga notiser?"
+      }
+    },
+    "faqHeading": "Vanliga frågor",
+    "intro": "Behöver du hjälp? Mejla <mail>support@nextwatch.se</mail> — vi svarar normalt inom 1–2 vardagar.",
+    "linkHome": "Till startsidan",
+    "linkPrivacy": "Integritetspolicy",
+    "linkTerms": "Användarvillkor",
+    "metaDescription": "Hjälp och kontakt för NextWatch.",
+    "metaTitle": "Support – NextWatch",
+    "title": "Support"
+  },
+  "swipe": {
+    "adSlot": "Reklamplats",
+    "adSlotHint": "Swipa vidare som vanligt — eller slipp annonserna helt.",
+    "deckError": {
+      "deck_fetch_failed": "Kunde inte hämta förslag.",
+      "deck_fetch_failed_retry": "Kunde inte hämta förslag. Försök igen.",
+      "group_deck_fetch_failed": "Kunde inte hämta gruppförslag.",
+      "network_check_connection": "Nätverksfel. Kontrollera anslutningen.",
+      "network_error": "Nätverksfel."
+    },
+    "filterAria": "Visa i swipen",
+    "filterBoth": "Båda",
+    "filterMovie": "Film",
+    "filterTv": "Serier",
+    "groupLabel": "Grupp:",
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "nothingToUndo": "Inget att ångra",
+    "ratePrompt": "Vad tyckte du?",
+    "ratingSaveFailed": "Kunde inte spara betyget",
+    "retry": "Försök igen",
+    "settingsAria": "Inställningar för förslag",
+    "shareTip": "Tipsa",
+    "undoFailed": "Kunde inte ångra på servern",
+    "upgradeCta": "Uppgradera till Premium",
+    "whyThis": "Varför det här?"
+  },
+  "swipeLimit": {
+    "body": "{limit} swipes per dag ingår gratis. Kom igen imorgon – eller bli Premium för obegränsat swipande.",
+    "cta": "Bli Premium – 19 kr/mån",
+    "heading": "Du har nått dagens gräns",
+    "opening": "Öppnar…",
+    "resetHint": "Gränsen nollställs löpande under dygnet."
+  },
+  "taste": {
+    "adjustHint": "Stämmer något inte? Justera under \"Redigera smak\" nedan.",
+    "analyzing": "Analyserar din smak…",
+    "headingGroup": "Er gruppsmak",
+    "headingSolo": "Din smakprofil",
+    "networkError": "Nätverksfel.",
+    "notEnoughData": "Swipa, betygsätt och fyll i favoriter nedan — då bygger vi en profil åt dig.",
+    "premiumBody": "Se vilka teman, regissörer och skådespelare dina swipes egentligen pekar mot — och få förslag på genrer du missat.",
+    "premiumCta": "Bli Premium – 19 kr/mån",
+    "premiumTitle": "Smakprofil ingår i Premium",
+    "rowBasedOn": "Baserat på",
+    "rowCast": "Skådespelare",
+    "rowDirectors": "Regissörer / skapare",
+    "rowGenres": "Genrer du dras till",
+    "rowKeywords": "Teman",
+    "statAvgRating": "Snittbetyg",
+    "statAvgRatingCount": "Snittbetyg ({count})",
+    "statLiked": "Gillade",
+    "statSwipes": "Swipes",
+    "subtitleGroup": "Vad algoritmen har läst ut ur ert beteende — inte vad ni kryssat i.",
+    "subtitleSolo": "Vad algoritmen har läst ut ur ditt beteende — inte vad du kryssat i.",
+    "swipeMoreHint": "<link>Swipa mer</link> för att finslipa profilen."
+  },
+  "tips": {
+    "aFriend": "En vän",
+    "latest": "Senast: {title}",
+    "newTips": "{count, plural, one {# nytt tips} other {# nya tips}} från {name}"
+  },
+  "tours": {
+    "friendsTour": {
+      "s0": {
+        "body": "Sök på användarnamn här och skicka en vänförfrågan.",
+        "title": "Lägg till vänner"
+      },
+      "s1": {
+        "body": "Inkommande vänförfrågningar dyker upp här — acceptera eller avvisa dem.",
+        "title": "Förfrågningar"
+      },
+      "s2": {
+        "body": "Bjud in vänner till en grupp för att swipa tillsammans, eller tipsa dem om filmer och serier.",
+        "title": "Det här låser vänner upp"
+      }
+    },
+    "groupGuide": {
+      "s0": {
+        "body": "Växla mellan gruppswiping och att hitta vänner.",
+        "title": "Grupp eller vänner"
+      },
+      "s1": {
+        "body": "Skapa en ny grupp eller gå med med en kod du fått av en vän.",
+        "title": "Skapa eller gå med"
+      },
+      "s2": {
+        "body": "När ni är i en grupp — starta gruppswipe här. Ni röstar tillsammans tills ni matchar.",
+        "title": "Gruppswipe"
+      },
+      "s3": {
+        "body": "Sök på användarnamn och skicka en vänförfrågan.",
+        "title": "Lägg till vänner"
+      }
+    },
+    "groupsTour": {
+      "s0": {
+        "body": "Skapa en ny grupp och dela koden, eller gå med i en vän grupps kod.",
+        "title": "Skapa eller gå med"
+      },
+      "s1": {
+        "body": "Lägg till vänner i gruppen så kan ni swipa tillsammans.",
+        "title": "Bjud in vänner"
+      },
+      "s2": {
+        "body": "Ställ in vilka genrer ni swipar på och hur många som behöver gilla en titel för match.",
+        "title": "Inställningar"
+      },
+      "s3": {
+        "body": "Starta gruppswipen — ni röstar tillsammans tills tillräckligt många gillar samma titel.",
+        "title": "Swipa tillsammans"
+      }
+    },
+    "navGuide": {
+      "s0": {
+        "body": "Din personliga swipe-feed med filmer och serier.",
+        "title": "Rekommendationer"
+      },
+      "s1": {
+        "body": "Skapa eller gå med i en grupp och lägg till vänner.",
+        "title": "Grupp & vänner"
+      },
+      "s2": {
+        "body": "Bläddra och filtrera titlar efter genre och typ.",
+        "title": "Discover"
+      },
+      "s3": {
+        "body": "Allt du gillat och dina betyg samlade på ett ställe.",
+        "title": "Watchlist"
+      },
+      "s4": {
+        "body": "Inställningar, tjänster och ditt konto.",
+        "title": "Profil"
+      }
+    },
+    "swipeGuide": {
+      "s0": {
+        "body": "Här får du rekommendationer anpassade efter din smak. Swipa för att hitta nästa titel att titta på.",
+        "title": "Välkommen till NextWatch"
+      },
+      "s1": {
+        "body": "Dra kortet åt höger för att gilla — titeln sparas i din watchlist.",
+        "title": "Gilla"
+      },
+      "s2": {
+        "body": "Dra åt vänster om titeln inte känns rätt. Den döljs en tid så du slipper se den igen.",
+        "title": "Nope"
+      },
+      "s3": {
+        "body": "Dra uppåt om du redan sett titeln. Du kan betygsätta den efteråt.",
+        "title": "Sett"
+      },
+      "s4": {
+        "body": "Tryck på kortet för att vända det och läsa mer om filmen eller serien.",
+        "title": "Mer info"
+      },
+      "s5": {
+        "body": "Eller använd knapparna: Nej, Info, Ångra och Gilla.",
+        "title": "Knapparna"
+      }
+    },
+    "watchlistTour": {
+      "s0": {
+        "body": "Titlar du gillar i swipen samlas under Watchlist. Betyg-fliken visar allt du redan sett och betygsatt.",
+        "title": "Din watchlist"
+      },
+      "s1": {
+        "body": "Swipa höger på en titel du vill se, så sparas den automatiskt i den här listan.",
+        "title": "Så hamnar titlar här"
+      },
+      "s2": {
+        "body": "Tryck på en titel och välj Betygsätt — då flyttas den till Betyg-fliken med ditt betyg.",
+        "title": "Betygsätt det du sett"
+      },
+      "s3": {
+        "body": "Öppna en titel och tryck Kolla nu för att gå direkt till streamingtjänsten du har den på.",
+        "title": "Kolla nu"
+      }
+    }
+  },
+  "upsell": {
+    "body": "Bli Premium för 19 kr/mån — helt annonsfritt och obegränsat med swipes.",
+    "close": "Stäng",
+    "cta": "Bli Premium – 19 kr/mån",
+    "dismiss": "Nej tack, fortsätt swipa",
+    "heading": "Trött på annonser?",
+    "loadingVideo": "Laddar video…",
+    "opening": "Öppnar…",
+    "watchAd": "Titta på en video – slipp annonser i 24h"
+  },
+  "watch": {
+    "closeTrailer": "Stäng trailer",
+    "group": {
+      "paid": "Hyr eller köp",
+      "stream": "Streama"
+    },
+    "paidOnly": "Endast att hyra eller köpa",
+    "unavailable": "Ej tillgänglig",
+    "watchNow": "Kolla nu"
+  },
+  "watchlist": {
+    "cancel": "Avbryt",
+    "editRatingHeading": "Ändra ditt betyg",
+    "emptyMoviesHasTv": "Inga filmer i listan — men du har serier. Byt till Serier ovanför.",
+    "emptyTvHasMovies": "Inga serier i listan — men du har filmer. Byt till Film ovanför.",
+    "emptyWatchlist": "Din watchlist är tom. Swipa höger på titlar du vill se, så hamnar de här.",
+    "importImdb": "Importera från IMDb",
+    "loadingInfo": "Laddar info…",
+    "loadingRatings": "Laddar dina betyg…",
+    "noDescription": "Ingen beskrivning tillgänglig.",
+    "noMatches": "Inga träffar.",
+    "noRating": "Betyg saknas",
+    "noRatingsYet": "Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.",
+    "noStreamingData": "Ingen tillgänglig streamingdata för din region just nu.",
+    "openProvider": "Öppna {provider}",
+    "rate": "Betygsätt",
+    "ratePromptHeading": "Vad tyckte du?",
+    "removeFromWatchlist": "Ta bort från watchlist",
+    "searchPlaceholder": "Sök titel…",
+    "tabRatings": "Betyg",
+    "tabWatchlist": "Watchlist",
+    "tipFriend": "Tipsa en vän",
+    "tmdbRating": "Betyg: {value}",
+    "yourRating": "Ditt betyg: {value}/10"
+  }
+}

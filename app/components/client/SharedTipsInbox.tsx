@@ -10,32 +10,34 @@ import { MessageCircle, ChevronRight } from "lucide-react";
 import Avatar from "@/app/components/ui/Avatar";
 import FilmChatModal from "@/app/components/client/FilmChatModal";
 import { refreshThreads, useShareThreads, type ShareThread } from "@/lib/threadsStore";
+import { useTranslations } from "next-intl";
 
 export default function SharedTipsInbox({ onAdded }: { onAdded?: () => void }) {
+  const t = useTranslations("tips");
   // Delade threads-storen — samma poll som navbadgen och vänlistan.
   const { threads: allThreads } = useShareThreads();
   const threads = allThreads.filter((t) => t.unseen > 0);
   const [chatFriend, setChatFriend] = useState<ShareThread | null>(null);
 
-  const name = (t: ShareThread) => t.displayName ?? t.username ?? "En vän";
+  const name = (thread: ShareThread) => thread.displayName ?? thread.username ?? t("aFriend");
 
   return (
     <>
       {threads.length > 0 && (
         <section className="mb-5 grid gap-2">
-          {threads.map((t) => (
+          {threads.map((thread) => (
             <button
-              key={t.friendId}
+              key={thread.friendId}
               type="button"
-              onClick={() => setChatFriend(t)}
+              onClick={() => setChatFriend(thread)}
               className="flex w-full items-center gap-3 rounded-xl border border-cyan-400/25 bg-cyan-400/5 px-3 py-2.5 text-left transition hover:bg-cyan-400/10"
             >
-              <Avatar avatarId={t.avatarId} name={name(t)} size={34} />
+              <Avatar avatarId={thread.avatarId} name={name(thread)} size={34} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-white/90">
-                  {t.unseen} {t.unseen === 1 ? "nytt tips" : "nya tips"} från {name(t)}
+                  {t("newTips", { count: thread.unseen, name: name(thread) })}
                 </span>
-                <span className="block truncate text-xs text-white/45">Senast: {t.lastTitle}</span>
+                <span className="block truncate text-xs text-white/45">{t("latest", { title: thread.lastTitle })}</span>
               </span>
               <MessageCircle className="h-4 w-4 shrink-0 text-cyan-300" />
               <ChevronRight className="h-4 w-4 shrink-0 text-white/30" />

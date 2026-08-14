@@ -12,6 +12,9 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { computeUnifiedRecs } from "@/lib/unifiedRecs";
 import { sendPushToUser } from "@/lib/push";
+import { getTranslations } from "next-intl/server";
+import { normalizeLocale } from "@/lib/i18nConfig";
+import { tmdbLanguageFor } from "@/lib/tmdbLanguage";
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET ?? "";
@@ -74,7 +77,7 @@ export async function GET(req: Request) {
       id: true,
       lastDailyRecTmdbId: true,
       lastDailyRecMediaType: true,
-      profile: { select: { region: true, locale: true } },
+      profile: { select: { region: true, uiLanguage: true } },
     },
     orderBy: { lastDailyRecAt: { sort: "asc", nulls: "first" } },
   });
@@ -95,7 +98,10 @@ export async function GET(req: Request) {
 
     try {
       const region = user.profile?.region || "SE";
-      const locale = user.profile?.locale || "sv-SE";
+      // Både TMDB-titeln och notistexten på MOTTAGARENS språk — cronen har
+      // ingen cookie att läsa, så språket kommer från profilen.
+      const uiLanguage = normalizeLocale(user.profile?.uiLanguage);
+      const locale = tmdbLanguageFor(uiLanguage);
       const result = await computeUnifiedRecs({ uid: user.id, region, locale, groupCode: null, page: 1 });
 
       if (!result.ok || result.items.length === 0) {
@@ -110,12 +116,13 @@ export async function GET(req: Request) {
         result.items.find(
           (i) => !(i.id === user.lastDailyRecTmdbId && i.tmdbType === user.lastDailyRecMediaType),
         ) ?? result.items[0];
-      const mediaWord = pick.tmdbType === "movie" ? "film" : "serie";
+      const t = await getTranslations({ locale: uiLanguage, namespace: "push.dailyRec" });
+      const mediaWord = pick.tmdbType === "movie" ? t("movie") : t("series");
       const titleWithYear = pick.year ? `${pick.title} (${pick.year})` : pick.title;
 
       await sendPushToUser(user.id, {
-        title: "Dagens tips 🎬",
-        body: `${titleWithYear} – en ${mediaWord} vi tror du gillar!`,
+        title: t("title"),
+        body: t("body", { title: titleWithYear, media: mediaWord }),
         data: { type: "daily_rec", tmdbId: String(pick.id), tmdbType: pick.tmdbType },
       });
       await prisma.user

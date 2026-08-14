@@ -29,6 +29,7 @@
 
 import { Chip, cx } from "@/app/components/ui/kit";
 import { SUBGENRES } from "@/lib/subgenres";
+import { useTranslations } from "next-intl";
 
 export type GenreOption = { id: string; label: string };
 export type GenreChipTone = "default" | "like" | "dislike";
@@ -69,6 +70,12 @@ export default function GenrePicker({
   subLayout = "inline",
   emptyStateHint,
 }: Props) {
+  // Genre- och sub-genre-etiketterna är SVENSKA STRÄNGAR som också fungerar som
+  // identitet (de sparas i profilen och slår upp SUBGENRES). Därför översätts
+  // de bara vid rendering — nycklarna i messages/*.json ÄR den svenska texten.
+  const tg = useTranslations("genres");
+  const tsg = useTranslations("subgenres");
+  const t = useTranslations("genrePicker");
   const triState = dislikedGenreIds !== undefined;
   const selectedKw = new Set(selectedKeywordIds);
   const genreLabels = new Set(genres.map((g) => g.label));
@@ -135,7 +142,7 @@ export default function GenrePicker({
                   aria-hidden="true"
                 />
               )}
-              {g.label}
+              {tg(g.label)}
             </Chip>
           );
         })}
@@ -144,15 +151,15 @@ export default function GenrePicker({
       {triState && subLayout === "card" && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" /> Gillar
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" /> {t("likes")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-rose-400" aria-hidden="true" /> Ogillar
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-400" aria-hidden="true" /> {t("dislikes")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true" /> Underkategori
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" aria-hidden="true" /> {t("subcategory")}
           </span>
-          <span>— tryck en genre för att växla.</span>
+          <span>{t("tapHint")}</span>
         </p>
       )}
 
@@ -170,7 +177,7 @@ export default function GenrePicker({
                       onClick={() => onToggleKeywordIds(sub.keywordIds)}
                       className="px-2.5 py-1 text-xs"
                     >
-                      {sub.label}
+                      {tsg(sub.label)}
                     </Chip>
                   );
                 })}
@@ -183,7 +190,7 @@ export default function GenrePicker({
                   key={`refine-${g.id}`}
                   className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-3"
                 >
-                  <p className="mb-2 text-xs font-semibold text-cyan-300">Förfina {g.label}</p>
+                  <p className="mb-2 text-xs font-semibold text-cyan-300">{t("refine", { genre: tg(g.label) })}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {(SUBGENRES[g.label] ?? [])
                       .filter((sub) => !genreLabels.has(sub.label))
@@ -196,7 +203,7 @@ export default function GenrePicker({
                             onClick={() => onToggleKeywordIds(sub.keywordIds)}
                             className="px-2.5 py-1 text-xs"
                           >
-                            {sub.label}
+                            {tsg(sub.label)}
                           </Chip>
                         );
                       })}

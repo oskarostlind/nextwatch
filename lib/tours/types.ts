@@ -19,8 +19,9 @@ export type CoachTourStep = {
   id: string;
   /** data-tour-attribut utan hakparenteser, t.ex. "group-create-join" */
   target?: string;
-  title: string;
-  body: string;
+  /** Nyckel i messages/*.json under namnrymden "tours". */
+  titleKey: string;
+  bodyKey: string;
   placement?: "top" | "bottom" | "center";
 };
 

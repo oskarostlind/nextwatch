@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { tmdbGet } from "@/lib/tasteModel";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
         const mediaType = o.mediaType as "movie" | "tv";
         const t = await tmdbGet<TmdbTitle>(
           mediaType === "movie" ? `/movie/${o.tmdbId}` : `/tv/${o.tmdbId}`,
-          { language: "sv-SE" },
+          { language: await tmdbLanguageFromCookies() },
           "force-cache",
         ).catch(() => null);
         if (!t) return null;

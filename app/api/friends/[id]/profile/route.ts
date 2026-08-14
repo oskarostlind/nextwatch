@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
+import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: false, message: "Profilen saknas." }, { status: 404 });
   }
 
-  const locale = profile.locale || "sv-SE";
+  // Vännens topplista visas för DEN SOM TITTAR — språket ska följa
+  // betraktarens val, inte vad vännen råkar ha valt.
+  const locale = await tmdbLanguageFromCookies();
   const top3 = (
     await Promise.all(
       likes.map((l) =>

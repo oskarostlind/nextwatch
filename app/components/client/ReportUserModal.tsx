@@ -7,13 +7,16 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/app/components/ui/Modal";
+import { useTranslations } from "next-intl";
 
+// id:t skickas till servern och hamnar i anmälningsmejlet — det ska INTE
+// översättas. Bara etiketten som visas byter språk (report.reason.<key>).
 const REASONS = [
-  { id: "olämpligt-namn", label: "Olämpligt namn eller användarnamn" },
-  { id: "trakasserier", label: "Trakasserier eller hot" },
-  { id: "spam", label: "Spam" },
-  { id: "olämpligt-innehåll", label: "Olämpligt innehåll" },
-  { id: "annat", label: "Annat" },
+  { id: "olämpligt-namn", key: "badName" },
+  { id: "trakasserier", key: "harassment" },
+  { id: "spam", key: "spam" },
+  { id: "olämpligt-innehåll", key: "badContent" },
+  { id: "annat", key: "other" },
 ] as const;
 
 export default function ReportUserModal({
@@ -30,6 +33,7 @@ export default function ReportUserModal({
   /** Anropas efter lyckad anmälan (t.ex. för att uppdatera vänlistan). */
   onReported?: (opts: { blocked: boolean }) => void;
 }) {
+  const t = useTranslations("report");
   const [reason, setReason] = useState<string>(REASONS[0].id);
   const [details, setDetails] = useState("");
   const [block, setBlock] = useState(true);
@@ -59,13 +63,13 @@ export default function ReportUserModal({
       });
       const data = (await res.json()) as { ok?: boolean; message?: string; blocked?: boolean };
       if (!res.ok || !data.ok) {
-        setErr(data.message ?? "Kunde inte skicka anmälan.");
+        setErr(data.message ?? t("sendFailed"));
         return;
       }
       setDone(true);
       onReported?.({ blocked: Boolean(data.blocked) });
     } catch {
-      setErr("Nätverksfel. Försök igen.");
+      setErr(t("networkError"));
     } finally {
       setSending(false);
     }
@@ -76,25 +80,24 @@ export default function ReportUserModal({
       <div className="space-y-4 p-2">
         <div>
           <h3 className="text-lg font-bold text-white">
-            Anmäl {userLabel ? userLabel : "användare"}
+            {t("heading", { name: userLabel ?? t("aUser") })}
           </h3>
           <p className="mt-1 text-xs text-white/50">
-            Vi granskar alla anmälningar inom 24 timmar och tar bort innehåll eller stänger av
-            konton som bryter mot villkoren.
+            {t("intro")}
           </p>
         </div>
 
         {done ? (
           <div className="space-y-3">
             <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
-              Tack! Anmälan är mottagen{block ? " och användaren är blockerad" : ""}.
+              {block ? t("thanksBlocked") : t("thanks")}
             </p>
             <button
               type="button"
               onClick={onClose}
               className="w-full rounded-xl bg-white/10 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
             >
-              Stäng
+              {t("close")}
             </button>
           </div>
         ) : (
@@ -113,19 +116,19 @@ export default function ReportUserModal({
                     onChange={() => setReason(r.id)}
                     className="accent-cyan-400"
                   />
-                  {r.label}
+                  {t(`reason.${r.key}`)}
                 </label>
               ))}
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-white/50">Beskriv gärna (valfritt)</label>
+              <label className="mb-1 block text-xs text-white/50">{t("describeLabel")}</label>
               <textarea
                 value={details}
                 onChange={(e) => setDetails(e.target.value.slice(0, 1000))}
                 rows={3}
                 className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-sm outline-none focus:ring-2 focus:ring-cyan-500/40"
-                placeholder="Vad hände?"
+                placeholder={t("describePlaceholder")}
               />
             </div>
 
@@ -136,7 +139,7 @@ export default function ReportUserModal({
                 onChange={(e) => setBlock(e.target.checked)}
                 className="h-4 w-4 accent-cyan-400"
               />
-              Blockera användaren också
+              {t("alsoBlock")}
             </label>
 
             {err && (
@@ -160,7 +163,7 @@ export default function ReportUserModal({
                 disabled={sending}
                 className="flex-1 rounded-xl bg-rose-500/90 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
               >
-                {sending ? "Skickar…" : "Skicka anmälan"}
+                {sending ? t("sending") : t("send")}
               </button>
             </div>
           </>

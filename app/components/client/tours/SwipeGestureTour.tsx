@@ -30,6 +30,7 @@ import { markGuideSeen, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { useTourGate } from "@/lib/tours/useTourGate";
 import type { GestureType } from "@/lib/tours/types";
 import GestureHint from "./GestureHint";
+import { useTranslations } from "next-intl";
 
 const TOUR_ID = "swipe-gestures" as const;
 
@@ -37,24 +38,21 @@ const TOUR_ID = "swipe-gestures" as const;
 // riktig titel man faktiskt kan ha en åsikt om, inte en påhittad platshållare.
 const DEMO_MOVIE = { tmdbId: 27205, mediaType: "movie" as const, title: "Inception", year: "2010" };
 
-type Step = { id: string; gesture: GestureType; label: string; hint: string };
+/** label/hint slås upp i messages/*.json som gestureTour.<id>.label/.hint. */
+type Step = { id: string; gesture: GestureType };
 
 const STEPS: Step[] = [
-  { id: "like", gesture: "swipe-right", label: "Gilla", hint: "Dra kortet åt höger för att gilla." },
-  { id: "dislike", gesture: "swipe-left", label: "Ogilla", hint: "Dra kortet åt vänster om det inte är din grej." },
-  { id: "info", gesture: "tap", label: "Mer info", hint: "Tryck på kortet för att vända på det." },
-  {
-    id: "seen",
-    gesture: "swipe-up",
-    label: "Sett + betygsätt",
-    hint: "Dra kortet uppåt om du redan sett den — sen får du betygsätta den.",
-  },
+  { id: "like", gesture: "swipe-right" },
+  { id: "dislike", gesture: "swipe-left" },
+  { id: "info", gesture: "tap" },
+  { id: "seen", gesture: "swipe-up" },
 ];
 
 const DIST_THRESHOLD = 110;
 const VELOCITY_THRESHOLD = 700;
 
 export default function SwipeGestureTour() {
+  const t = useTranslations("gestureTour");
   const { state, complete, skip } = useTourGate(TOUR_ID);
   const [mounted, setMounted] = useState(false);
   const [demoCard, setDemoCard] = useState<Card | null>(null);
@@ -269,7 +267,7 @@ export default function SwipeGestureTour() {
     <div className="fixed inset-0 z-[75] flex flex-col bg-black/92 backdrop-blur-sm" role="dialog" aria-modal>
       <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+12px)]">
         <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400/80">
-          Så funkar swipen — {stepIndex + 1}/{STEPS.length}
+          {t("progress", { step: stepIndex + 1, total: STEPS.length })}
         </p>
         {!isFirst ? (
           <button
@@ -277,7 +275,7 @@ export default function SwipeGestureTour() {
             onClick={() => finishTour("skipped")}
             className="text-xs text-white/40 underline underline-offset-2 hover:text-white/70"
           >
-            Hoppa över
+            {t("skip")}
           </button>
         ) : (
           <span />
@@ -326,8 +324,8 @@ export default function SwipeGestureTour() {
       </div>
 
       <div className="px-6 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-2 text-center">
-        <p className="text-sm font-medium text-white/85">{step.label}</p>
-        <p className="mt-1 text-xs text-white/50">{step.hint}</p>
+        <p className="text-sm font-medium text-white/85">{t(`${step.id}.label`)}</p>
+        <p className="mt-1 text-xs text-white/50">{t(`${step.id}.hint`)}</p>
       </div>
     </div>,
     document.body

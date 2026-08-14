@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
 import AppleSignInButton from "@/app/components/auth/AppleSignInButton";
+import { useTranslations } from "next-intl";
 
 export default function RegisterClient() {
+  const t = useTranslations("auth");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -41,14 +43,14 @@ export default function RegisterClient() {
       setErr(data?.message || "Ett fel uppstod.");
       return;
     }
-    setOkMsg(data.message || "Verifieringslänk skickad.");
+    setOkMsg(data.message || t("verifyLinkSent"));
     router.replace("/auth/verify/sent");
   }
 
   return (
     <div className="space-y-5">
       <p className="text-sm text-neutral-400">
-        Spara ditt konto med e-post eller Apple så du kan logga in igen på andra enheter.
+        {t("registerBody")}
       </p>
 
       {err && <div className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-300">{err}</div>}
@@ -62,15 +64,18 @@ export default function RegisterClient() {
           className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
         />
         <span>
-          Jag godkänner{" "}
-          <Link href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
-            användarvillkoren
-          </Link>{" "}
-          och{" "}
-          <Link href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
-            integritetspolicyn
-          </Link>
-          , och accepterar att stötande innehåll eller kränkande beteende inte tolereras.
+          {t.rich("termsAccept", {
+            terms: (chunks) => (
+              <Link href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+            privacy: (chunks) => (
+              <Link href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
         </span>
       </label>
 
@@ -81,13 +86,13 @@ export default function RegisterClient() {
           <div className="w-full border-t border-white/10" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-neutral-900/80 px-2 text-neutral-500">eller med e-post</span>
+          <span className="bg-neutral-900/80 px-2 text-neutral-500">{t("orWithEmail")}</span>
         </div>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm text-white/70">E-post</label>
+          <label className="mb-1 block text-sm text-white/70">{t("email")}</label>
           <input
             type="email"
             required
@@ -99,7 +104,7 @@ export default function RegisterClient() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-white/70">Lösenord</label>
+          <label className="mb-1 block text-sm text-white/70">{t("password")}</label>
           <input
             type="password"
             required
@@ -125,10 +130,10 @@ export default function RegisterClient() {
           href="/swipe"
           className="rounded-xl border border-white/10 px-4 py-2.5 text-neutral-300 transition hover:bg-white/5"
         >
-          Fortsätt utan konto →
+          {t("continueWithoutAccount")}
         </Link>
         <Link href="/" className="text-neutral-500 underline hover:text-neutral-300">
-          Tillbaka till startsidan
+          {t("backToStart")}
         </Link>
       </div>
     </div>

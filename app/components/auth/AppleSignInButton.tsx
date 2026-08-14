@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
+import { useTranslations } from "next-intl";
 
 export default function AppleSignInButton({ disabled = false }: { disabled?: boolean } = {}) {
+  const t = useTranslations("auth");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -13,7 +15,7 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
 
     try {
       if (Capacitor.getPlatform() !== "ios") {
-        setError("Logga in med Apple finns i iOS-appen. Använd e-post på webben.");
+        setError(t("appleIosOnly"));
         return;
       }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { useTranslations } from "next-intl";
 
 type Props = {
   title: string;
@@ -32,7 +33,8 @@ export default function InfoPanel({
   onwatchlist,
   className,
 }: Props) {
-  const chips = providers.length ? providers : (unknown ? ["Okänd"] : []);
+  const t = useTranslations("common");
+  const chips = providers.length ? providers : unknown ? [t("unknown")] : [];
 
   return (
     <aside

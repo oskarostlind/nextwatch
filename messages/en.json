@@ -1,0 +1,1170 @@
+{
+  "actions": {
+    "undo": "Undo"
+  },
+  "auth": {
+    "activateAccount": "Activate your account",
+    "appleIosOnly": "Sign in with Apple is available in the iOS app. Use email on the web.",
+    "backToSignIn": "Back to sign in",
+    "backToStart": "Back to the start page",
+    "checkInbox": "Done! Check your inbox. Click the link in the email to activate.",
+    "chooseNewPassword": "Choose a new password",
+    "continueWithoutAccount": "Continue without an account →",
+    "email": "Email",
+    "emailVerified": "Email verified — opening the app…",
+    "forgotBody": "Enter your email address and we'll send you a link to choose a new password.",
+    "forgotPassword": "Forgot your password?",
+    "forgotTitle": "Forgot your password?",
+    "genericError": "Something went wrong. Please try again.",
+    "genericErrorShort": "Something went wrong.",
+    "guestEntry": "Jump in as a guest",
+    "guestFailed": "Couldn't start guest mode.",
+    "invalidLink": "Invalid link",
+    "invalidLinkBody": "The link is missing a token. Request a new reset link.",
+    "nativeHint": "Once you've verified you can switch back here — we update automatically. You can also tap \"Take me back to the app\" in Safari after verifying.",
+    "networkError": "Network error",
+    "networkErrorDot": "Network error.",
+    "networkRetry": "Network error. Please try again.",
+    "newPassword": "New password",
+    "newUser": "New here? <link>Create an account</link>",
+    "noPassword": "Don't have a password? <link>Create an account</link>",
+    "or": "or",
+    "orWithEmail": "or with email",
+    "password": "Password",
+    "passwordsDontMatch": "The passwords don't match.",
+    "passwordTooShort": "The password must be at least 8 characters.",
+    "passwordUpdated": "Your password has been updated",
+    "registerBody": "Save your account with email or Apple so you can sign in again on other devices.",
+    "repeatPassword": "Repeat the password",
+    "requestNewLink": "Request a new link",
+    "resetSent": "If that account exists we've sent a reset link to <email></email>. Check your spam folder too.",
+    "saveNewPassword": "Save new password",
+    "saving": "Saving…",
+    "sending": "Sending…",
+    "sendResetLink": "Send reset link",
+    "sendVerifyLink": "Send verification link",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "starting": "Starting…",
+    "termsAccept": "I accept the <terms>terms of use</terms> and the <privacy>privacy policy</privacy>, and agree that offensive content and abusive behaviour are not tolerated.",
+    "verifyLinkSent": "Verification link sent.",
+    "verifySentBody": "We've sent a link to confirm your email. Open the email and click the link."
+  },
+  "avatars": {
+    "alien": "Alien",
+    "biljett": "Ticket",
+    "glasogon": "3D glasses",
+    "hjarta": "Heart",
+    "kamera": "Camera",
+    "katt": "Cat",
+    "klappa": "Clapperboard",
+    "mane": "Moon",
+    "pizza": "Pizza",
+    "popcorn": "Popcorn",
+    "raket": "Rocket",
+    "robot": "Robot",
+    "spoke": "Ghost",
+    "stjarna": "Star",
+    "tv": "TV",
+    "vhs": "VHS"
+  },
+  "comingSoon": {
+    "eyebrow": "Upcoming",
+    "iosOnlyNote": "Reminders can be set in the iOS app. Here you can see what's on the way.",
+    "reminderSet": "Reminder set",
+    "remindMe": "Remind me",
+    "subtitle": "New films on the way – get a reminder when they're released.",
+    "title": "Coming soon"
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "done": "Done",
+    "loading": "Loading…",
+    "movie": "Movie",
+    "next": "Next",
+    "no": "No",
+    "remove": "Remove",
+    "retry": "Try again",
+    "save": "Save",
+    "saved": "Saved!",
+    "saving": "Saving…",
+    "search": "Search",
+    "series": "Series",
+    "somethingWentWrong": "Something went wrong. Please try again.",
+    "unknown": "Unknown",
+    "yes": "Yes"
+  },
+  "discover": {
+    "eyebrow": "Explore",
+    "loadingInfo": "Loading info…",
+    "next": "Next →",
+    "noDescription": "No description available.",
+    "noResults": "No results for \"{query}\".",
+    "noStreamingData": "No streaming data available for your region right now.",
+    "openProvider": "Open {provider}",
+    "prev": "← Previous",
+    "rate": "Rate",
+    "searchFailed": "The search failed",
+    "searchPlaceholder": "Search titles…",
+    "subtitle": "Browse films and series.",
+    "tipFriend": "Share with a friend",
+    "title": "Discover"
+  },
+  "email": {
+    "reset": {
+      "cta": "Choose a new password",
+      "fallback": "If the button doesn't work, copy this link:",
+      "heading": "Reset your password",
+      "intro": "You (or someone else) asked to reset the password for your NextWatch account.",
+      "subject": "Reset your password",
+      "validity": "The link is valid for 1 hour. If you didn't request this you can ignore this email."
+    },
+    "verify": {
+      "cta": "Verify email",
+      "fallback": "If the button doesn't work, copy this link:",
+      "heading": "Confirm your email",
+      "intro": "Click the button to verify your email address.",
+      "subject": "Confirm your email",
+      "validity": "Valid for 24 hours."
+    }
+  },
+  "filmChat": {
+    "add": "Add",
+    "added": "Added ✓",
+    "addToWatchlist": "Add to watchlist",
+    "closeSearch": "Close search",
+    "loadingInfo": "Loading info…",
+    "noDescription": "No description available.",
+    "noStreamingData": "No streaming data for your region right now.",
+    "noTips": "No tips yet — send the first one with the <plus></plus> button below.",
+    "reaction": {
+      "seen": "Already seen",
+      "skip": "Not for me",
+      "want": "Want to watch"
+    },
+    "read": "· Read",
+    "searchMovie": "Search films to share…",
+    "searchTv": "Search series to share…",
+    "sent": "· Sent",
+    "shareATitle": "Share a title"
+  },
+  "filters": {
+    "movies": "Films",
+    "series": "Series",
+    "sort": {
+      "newest": "Newest",
+      "newestMovie": "Newest (films)",
+      "newestTv": "Newest (series)",
+      "popular": "Most popular",
+      "recentlyAdded": "Recently added",
+      "titleAz": "Title A–Z",
+      "topRated": "Highest rated"
+    },
+    "sortAria": "Sort"
+  },
+  "friendProfile": {
+    "activeDaysAgo": "Active {count, plural, one {# day} other {# days}} ago",
+    "activeHoursAgo": "Active {count} h ago",
+    "activeJustNow": "Active just now",
+    "activeMinutesAgo": "Active {count} min ago",
+    "likes": "Likes",
+    "loadFailed": "Couldn't load the profile.",
+    "networkError": "Network error.",
+    "neverActive": "Never active",
+    "noLikesYet": "Hasn't liked anything yet.",
+    "openChat": "Open film chat",
+    "recentFavorites": "Recent favourites",
+    "reportUser": "Report user"
+  },
+  "friends": {
+    "accept": "Accept",
+    "add": "Add",
+    "block": "Block",
+    "blockHint": "Blocking removes the friendship and stops new requests.",
+    "chatWithAria": "Film tips with {name}",
+    "decline": "Decline",
+    "filterPlaceholder": "Filter your friends…",
+    "friend": "Friend",
+    "manageAria": "Manage {name}",
+    "networkError": "Network error. Please try again.",
+    "noFriends": "No friends yet. Search and add someone above.",
+    "pending": "Pending…",
+    "removeFriend": "Remove friend",
+    "report": "Report",
+    "requests": "Requests",
+    "searching": "Searching…",
+    "searchPlaceholder": "Search a username to add a friend",
+    "searchResults": "Search results",
+    "sent": "Sent",
+    "unknown": "Unknown",
+    "yourFriends": "Your friends ({count})"
+  },
+  "genrePicker": {
+    "dislikes": "Dislikes",
+    "likes": "Likes",
+    "refine": "Refine {genre}",
+    "subcategory": "Subcategory",
+    "tapHint": "— tap a genre to cycle."
+  },
+  "genres": {
+    "Action": "Action",
+    "Action & Äventyr": "Action & Adventure",
+    "Animerat": "Animation",
+    "Äventyr": "Adventure",
+    "Dokumentär": "Documentary",
+    "Drama": "Drama",
+    "Familj": "Family",
+    "Fantasy": "Fantasy",
+    "Historia": "History",
+    "Komedi": "Comedy",
+    "Krig": "War",
+    "Krig & Politik": "War & Politics",
+    "Kriminal": "Crime",
+    "Musik": "Music",
+    "Mysterium": "Mystery",
+    "Mystik": "Mystery",
+    "Romantik": "Romance",
+    "Sci-Fi": "Sci-Fi",
+    "Sci-Fi & Fantasy": "Sci-Fi & Fantasy",
+    "Skräck": "Horror",
+    "Thriller": "Thriller",
+    "Western": "Western"
+  },
+  "genreSuggestions": {
+    "saveToConfirm": "Save to confirm."
+  },
+  "gestureTour": {
+    "dislike": {
+      "hint": "Drag the card left if it's not your thing.",
+      "label": "Dislike"
+    },
+    "info": {
+      "hint": "Tap the card to flip it over.",
+      "label": "More info"
+    },
+    "like": {
+      "hint": "Drag the card right to like it.",
+      "label": "Like"
+    },
+    "progress": "How swiping works — {step}/{total}",
+    "seen": {
+      "hint": "Drag the card up if you've already seen it — then you can rate it.",
+      "label": "Seen + rate"
+    },
+    "skip": "Skip"
+  },
+  "group": {
+    "accept": "Accept",
+    "alreadyMember": "In the group",
+    "close": "Close",
+    "codeCopied": "Code copied!",
+    "commonWatchlist": "Shared across your watchlists",
+    "commonWatchlistHint": "Titles several of you already saved — start the evening here.",
+    "copy": "Copy",
+    "createGroup": "Create new group",
+    "createGroupHeading": "Create a group",
+    "createGroupHint": "Start a new group and share the code with friends.",
+    "decline": "Decline",
+    "eyebrow": "Social",
+    "groupCode": "Group code",
+    "groupLabel": "Group:",
+    "groupSettings": "Group settings",
+    "invite": "Invite",
+    "invited": "Invited",
+    "inviteFriendsHeading": "Invite friends",
+    "invitesHeading": "Group invites",
+    "invitesYouTo": "Invites you to",
+    "join": "Join",
+    "joinFailed": "Couldn't join the group.",
+    "joinGroupHeading": "Join a group",
+    "joinGroupHint": "Got a code? Enter it here.",
+    "leave": "Leave",
+    "linkCopied": "Link copied!",
+    "member": "member",
+    "members": "Members ({count})",
+    "networkError": "Network error. Please try again.",
+    "removeFromGroup": "Remove from group",
+    "removeMemberAria": "Remove {name}",
+    "removeMemberFailed": "Couldn't remove that member.",
+    "report": "Report",
+    "shareText": "Join my group: {code}",
+    "shareTitle": "NextWatch group",
+    "someone": "Someone",
+    "startGroupSwipe": "Start group swipe",
+    "subtitle": "Swipe as a group or add friends.",
+    "tabFriends": "Friends",
+    "tabGroup": "Group",
+    "tabMatches": "Matches",
+    "tabMatchesUnseen": "Matches •",
+    "title": "Together",
+    "unknown": "Unknown",
+    "you": "You"
+  },
+  "groupMatches": {
+    "noDescription": "No description available.",
+    "noGroup": "Join or create a group to see your matches.",
+    "noImage": "No image",
+    "noMatches": "No matches yet — swipe together to find something you all like.",
+    "noStreamingData": "No streaming data available for your region right now.",
+    "openProvider": "Open {provider}"
+  },
+  "groupMatchPage": {
+    "eyebrow": "Group",
+    "loading": "Loading…",
+    "matchSubtitle": "Group size: {size} · Needs {need} likes · Currently: {count}",
+    "matchTitle": "Your group's match",
+    "noCode": "No code. Go to the <link>group page</link>.",
+    "noMatchSubtitle": "Keep swiping!",
+    "noMatchTitle": "No match yet",
+    "openOnTmdb": "Open on TMDb",
+    "sizeNeed": "Group size: {size}. Needs at least {need} likes on the same title.",
+    "typeMovie": "film",
+    "typeTv": "series"
+  },
+  "groupSettings": {
+    "ageAllAges": "All ages",
+    "ageAuto": "Auto (youngest member)",
+    "ageLimit": "Age rating",
+    "ageYears": "{years}+",
+    "cancel": "Cancel",
+    "filterBoth": "Both",
+    "filterMovie": "Films",
+    "filterTv": "Series",
+    "genres": "Genres",
+    "genresHint": "Tap: like → dislike → neutral. Liked genres can be narrowed down with sub-genres.",
+    "heading": "Group settings",
+    "headingHint": "No selection = automatic, based on members' profiles.",
+    "loadFailed": "Couldn't load the settings.",
+    "loading": "Loading…",
+    "lookingFor": "We're looking for",
+    "lookingForHint": "Everyone in the group sees the same kind of titles when you swipe.",
+    "networkError": "Network error. Please try again.",
+    "providers": "Streaming services",
+    "providersHint": "Empty = every service any member has.",
+    "save": "Save",
+    "saved": "Group settings saved",
+    "saving": "Saving…",
+    "seats": "Seats",
+    "seatsPremiumHint": "The cap follows whoever created the group. With Premium the group fits up to {max} people.",
+    "seatsUsed": "{used} of {max} seats used.",
+    "threshold": "Match threshold",
+    "thresholdCustom": "Custom",
+    "thresholdDefault": "Default ({need} of {of})",
+    "thresholdHint": "How many members must like the same title for a match (minimum 2).",
+    "thresholdNeedsTwo": "The group needs at least 2 members for a custom threshold.",
+    "thresholdValue": "A match needs: {need} of {of} people"
+  },
+  "groupSwipe": {
+    "fewLeftFetching": "Few suggestions left – fetching more and widening the search if needed…",
+    "lookingForMore": "Looking for more suggestions…",
+    "nothingToUndo": "Nothing to undo",
+    "outOfSuggestions": "Out of suggestions for now.",
+    "retry": "Try again",
+    "undoFailed": "Couldn't undo on the server",
+    "widenedDroppedGenres": "Few hits with your filters — widened the search (dropped genre/sub-genre) for more suggestions.",
+    "widenedSubgenres": "Few hits with your sub-genres — widened the search for more suggestions."
+  },
+  "guide": {
+    "done": "Done",
+    "next": "Next",
+    "skip": "Skip"
+  },
+  "imdb": {
+    "close": "Close",
+    "heading": "Import from IMDb",
+    "importing": "Importing…",
+    "networkError": "Network error during import.",
+    "pickFile": "Choose CSV file",
+    "resultFailed": ", {count} failed",
+    "resultImported": "{count} imported",
+    "resultSkipped": ", {count} skipped",
+    "step1": "Sign in at imdb.com (desktop/web — export isn't available in the mobile app).",
+    "step2": "Go to your profile → <target></target>.",
+    "step3": "Click ⋮ (three dots) in the top right → <export>Export</export>.",
+    "step4": "Download the CSV file and pick it below."
+  },
+  "landing": {
+    "continueAsGuest": "Continue as guest",
+    "createFreeAccount": "Create a free account",
+    "filmsWaiting": "{count, plural, one {# film} other {# films}} waiting for you",
+    "guestEntry": "Jump in as a guest →",
+    "headline": "What should <accent>you</accent> watch tonight?",
+    "like": "Like",
+    "nope": "Nope",
+    "privacy": "Privacy policy",
+    "promiseGroup": "Swipe with friends. You match when you like the same film.",
+    "promiseStreaming": "Only what you can actually stream, with a link straight there.",
+    "promiseTaste": "We learned your taste from those swipes. Now the suggestions are yours.",
+    "signIn": "Sign in",
+    "support": "Support",
+    "terms": "Terms",
+    "tmdbAttribution": "Data from <tmdb>TMDB</tmdb> — not endorsed or certified by TMDB"
+  },
+  "language": {
+    "en": "English",
+    "label": "Language",
+    "sv": "Svenska"
+  },
+  "legalPrivacy": {
+    "linkHome": "Back to the start page",
+    "linkSupport": "Support",
+    "linkTerms": "Terms of Use",
+    "metaDescription": "How NextWatch handles your personal data.",
+    "metaTitle": "Privacy Policy – NextWatch",
+    "sections": {
+      "changes": {
+        "body": "If we make material changes we'll update this page and the date above. Material changes are announced in the app.",
+        "heading": "8. Changes"
+      },
+      "collected": {
+        "heading": "2. What data do we collect?",
+        "items": {
+          "i0": "<strong>Account details:</strong> email address, password (always stored encrypted/hashed), display name, username, date of birth (used for age-appropriate recommendations) and your chosen profile picture.",
+          "i1": "<strong>Taste and usage data:</strong> your swipes, ratings, watchlist, favourite genres and titles, selected streaming services, groups you belong to, friends, and film tips you send or receive.",
+          "i2": "<strong>Technical data:</strong> an anonymous identifier (cookie), region and language, plus a push token if you allow notifications.",
+          "i3": "<strong>Purchase data:</strong> for premium purchases, payment is handled by Stripe (web) or Apple (app). We never see your card details — only that the purchase went through."
+        }
+      },
+      "controller": {
+        "body": "NextWatch (\"we\") provides the NextWatch app and web service – a service for finding films and series, alone or in a group. We are the data controller for the processing described here. Contact: <mail>support@nextwatch.se</mail>.",
+        "heading": "1. Who is responsible?"
+      },
+      "cookies": {
+        "body": "We use a small number of necessary cookies: an identifier that keeps you signed in (signed, cannot be forged) plus region and language. No third-party tracking cookies on the web.",
+        "heading": "7. Cookies"
+      },
+      "purposes": {
+        "heading": "3. Why do we process the data?",
+        "items": {
+          "i0": "To deliver the service: recommendations, groups, friends, watchlist (contract).",
+          "i1": "Personal recommendations based on your taste profile (contract/legitimate interest).",
+          "i2": "Notifications you've chosen to receive — can be switched off per type in your profile settings (consent).",
+          "i3": "Ads in the free version of the app via Google AdMob. With your consent (through Apple's tracking dialog and Google's consent form) ads can be personalised; if you decline, only non-personalised ads are shown (consent).",
+          "i4": "Operations, troubleshooting and abuse prevention (legitimate interest)."
+        }
+      },
+      "retention": {
+        "body": "For as long as you have an account. If you delete your account (Profile → Settings → Delete account), all your data is permanently removed: profile, ratings, watchlist, groups, friends, film tips and push tokens. Inactive groups are pruned automatically. Some purchase records may need to be kept longer under accounting law.",
+        "heading": "5. How long is the data kept?"
+      },
+      "rights": {
+        "body": "You have the right to access, rectification, erasure, restriction, data portability and to object to processing. You can withdraw consent at any time (notifications in the app settings, ad tracking in iOS settings). Contact <mail>support@nextwatch.se</mail> — and you can always complain to the Swedish Authority for Privacy Protection (IMY).",
+        "heading": "6. Your rights (GDPR)"
+      },
+      "sharing": {
+        "heading": "4. Who do we share data with?",
+        "items": {
+          "i0": "<strong>TMDB</strong> (The Movie Database) — film and TV data comes from there; your searches are sent there without any link to your account.",
+          "i1": "<strong>Google AdMob</strong> — ads in the app (see above).",
+          "i2": "<strong>Stripe</strong> — payments on the web.",
+          "i3": "<strong>Apple</strong> — purchases and push notifications in the iOS app.",
+          "i4": "<strong>Infrastructure providers</strong> — hosting (Vercel), database (Neon) and email delivery. They process data only on our behalf.",
+          "i5": "<strong>Other users</strong> — display name, username, profile picture, favourite genres and a top 3 derived from your likes are shown to your friends; groups see shared activity. We never sell your data."
+        }
+      }
+    },
+    "title": "Privacy Policy",
+    "translationNote": "The Swedish version of this policy is the legally binding one. This English version is a translation provided for readability.",
+    "updated": "Last updated: {date}",
+    "updatedDate": "22 July 2026"
+  },
+  "legalTerms": {
+    "linkHome": "Back to the start page",
+    "linkPrivacy": "Privacy policy",
+    "linkSupport": "Support",
+    "metaDescription": "Terms for using NextWatch.",
+    "metaTitle": "Terms of Use – NextWatch",
+    "sections": {
+      "account": {
+        "body": "You can use the service as a guest or with an account. You're responsible for the accuracy of the details you provide and for keeping your login credentials secret. Recommendations are age-adjusted based on your date of birth. The service is not directed at children under 13.",
+        "heading": "2. Account and age"
+      },
+      "changes": {
+        "body": "We may update the service and these terms; material changes are announced in the app. You can delete your account at any time in your profile settings. Swedish law applies.",
+        "heading": "7. Changes and termination"
+      },
+      "conduct": {
+        "body": "Use the service like a decent person: no intrusion attempts, no spamming through film tips or friend requests, no API abuse. We may suspend accounts that abuse the service.",
+        "heading": "4. Conduct"
+      },
+      "contact": {
+        "body": "Questions? Email <mail>support@nextwatch.se</mail>.",
+        "heading": "8. Contact"
+      },
+      "liability": {
+        "body": "The service is provided as is. We're not liable for indirect damages or for third-party content (streaming services, TMDB, advertisers). Nothing in these terms limits rights you have under mandatory consumer law.",
+        "heading": "6. Limitation of liability"
+      },
+      "premium": {
+        "body": "The free version is funded by ads. Premium (ad-free and unlimited swipes) is purchased through the App Store in the iOS app or through Stripe on the web. Subscriptions renew until cancelled — in App Store settings or via \"Manage subscription\" in your profile. Withdrawal rights and refunds for App Store purchases are handled by Apple under their terms.",
+        "heading": "3. Premium and payment"
+      },
+      "service": {
+        "body": "NextWatch helps you find films and series — on your own or in a group — based on your taste and the streaming services you have. NextWatch is not a streaming service: we show where titles are available and link there, but we don't provide any content ourselves.",
+        "heading": "1. The service"
+      },
+      "thirdParty": {
+        "body": "Film and TV data (titles, images, descriptions, ratings) comes from The Movie Database (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability can change without notice and we don't guarantee that the information is always correct.",
+        "heading": "5. Content and third parties"
+      }
+    },
+    "title": "Terms of Use",
+    "translationNote": "The Swedish version of these terms is the legally binding one. This English version is a translation provided for readability.",
+    "updated": "Last updated: {date}",
+    "updatedDate": "22 July 2026"
+  },
+  "match": {
+    "and": "and",
+    "availableOn": "Available on",
+    "evidenceCast": "the actor {label}",
+    "evidenceCreator": "the creator {label}",
+    "evidenceDirector": "the director {label}",
+    "evidenceKeyword": "themes like {label}",
+    "front": "Front",
+    "headingGroup": "Group match!",
+    "headingSolo": "Top match for you!",
+    "keepSwiping": "Keep swiping",
+    "moreInfo": "More info",
+    "noDescription": "No description available.",
+    "savedByMany": "{names} already had it on their watchlists.",
+    "savedByOne": "{names} already had it on their watchlist.",
+    "watchNowOn": "Watch now on {provider}",
+    "youLike": "You like {list}."
+  },
+  "modals": {
+    "dragToRate": "Drag to rate",
+    "saveRating": "Save rating ({value}/10)",
+    "saving": "Saving…",
+    "skip": "Skip"
+  },
+  "nav": {
+    "discover": "Discover",
+    "group": "Group",
+    "profile": "Profile",
+    "swipe": "Recommendations",
+    "watchlist": "Watchlist"
+  },
+  "onboarding": {
+    "ageHint": "We use your age to filter content by age rating.",
+    "ageLabel": "How old are you?",
+    "agePlaceholder": "e.g. 18",
+    "ageUnit": "yrs",
+    "back": "Back",
+    "clear": "Clear",
+    "continueAsGuest": "Continue as guest",
+    "continueAsGuestHint": "Start swiping right away. You can create an account later under Profile.",
+    "createAccount": "Create account",
+    "createAccountHint": "Save with email or Apple so you can sign in again on other devices.",
+    "displayNameFromApple": "Taken from your Apple ID. Change it if you like.",
+    "displayNameLabel": "Display name <optional>(optional)</optional>",
+    "displayNamePlaceholder": "Your name…",
+    "doneLinked": "Your profile is ready and linked to your account.",
+    "donePickPath": "Your profile is ready! Choose how you'd like to continue.",
+    "errAge": "Enter a valid age (7–99).",
+    "errCheckUsernameAge": "Check your username and age.",
+    "errGeneric": "Something went wrong.",
+    "errRequired": "Please fill in all required fields.",
+    "errTerms": "You need to accept the terms to continue.",
+    "errUsernameChecking": "Hold on while we check the username…",
+    "errUsernameFormat": "Username must be 3–20 characters (a–z, 0–9, _, .).",
+    "errUsernameTaken": "That username is taken. Pick another one.",
+    "favoriteMovie": "Favourite film (optional)",
+    "favoriteShow": "Favourite series (optional)",
+    "genres": "Genres",
+    "genresEmptyHint": "No selection = automatic, based on your taste profile.",
+    "guestSkip": "Jump in as a guest instead",
+    "languageLabel": "Language",
+    "next": "Next →",
+    "previous": "← Previous",
+    "providersHint": "Pick the services you have – we'll only show titles you can stream.",
+    "providersLabel": "Your streaming services",
+    "savingProfile": "Saving profile…",
+    "searchTitle": "Search titles…",
+    "startSwiping": "Start swiping",
+    "startSwipingHint": "We'll save your profile and take you there.",
+    "steps": {
+      "about": {
+        "subtitle": "Name, username and age",
+        "title": "About you"
+      },
+      "account": {
+        "subtitle": "Guest or sign up",
+        "title": "Account"
+      },
+      "done": {
+        "subtitle": "Save your profile and start swiping",
+        "title": "All set"
+      },
+      "services": {
+        "subtitle": "Language and streaming",
+        "title": "Services"
+      },
+      "taste": {
+        "subtitle": "Favourites and genres",
+        "title": "Taste"
+      }
+    },
+    "termsAccept": "I accept the <terms>terms of use</terms> and the <privacy>privacy policy</privacy>, and agree that offensive content and abusive behaviour are not tolerated.",
+    "usernameAvailable": "✓ Available",
+    "usernameBlockedChars": "Unsupported characters are removed automatically.",
+    "usernameChecking": "Checking availability…",
+    "usernameHint": "3–20 characters: a–z, 0–9, _ and . Friends find you by this name.",
+    "usernameInvalid": "Invalid format",
+    "usernameLabel": "Username",
+    "usernameTaken": "Taken – pick another one",
+    "welcome": "Welcome to NextWatch"
+  },
+  "overlay": {
+    "didntSee": "Didn't watch it / skip",
+    "groupMatchRate": "You matched on this one — did you watch it?"
+  },
+  "premium": {
+    "bulletAdFree": "Completely ad-free",
+    "bulletGroups": "Groups of up to 20 people — free fits 3",
+    "bulletSwipes": "Unlimited swipes — free includes 100 per day",
+    "bulletTaste": "Your taste profile: see which themes, directors and actors your swipes point to",
+    "buyCta": "Get Premium – SEK 19/month",
+    "eula": "Terms of Use (EULA)",
+    "eyebrow": "Upgrade",
+    "intro": "Remove ads and swipe without limits. SEK 19/month, no lock-in.",
+    "legalApple": "Payment is charged to your Apple account when you confirm the purchase. It renews within 24 hours before the end of the period unless you cancel before then. You manage and cancel the subscription in Settings on your device.",
+    "legalName": "<name>NextWatch Premium</name> — SEK 19 per month. The subscription renews automatically every month until you cancel.",
+    "legalStripe": "Payment is handled by Stripe. You can cancel the subscription at any time.",
+    "openingAppStore": "Opening the App Store…",
+    "ourTerms": "Our terms",
+    "privacy": "Privacy policy",
+    "restore": "Restore previous purchases",
+    "restoreFailed": "Couldn't restore your purchases.",
+    "restoring": "Restoring…",
+    "startingStripe": "Starting Stripe…",
+    "subtitle": "SEK 19/month – cancel whenever you like."
+  },
+  "premiumSuccess": {
+    "body": "Your premium should activate within a few seconds. Reload the page if it doesn't show up right away.",
+    "title": "Thanks for your purchase!"
+  },
+  "profile": {
+    "about": "About NextWatch",
+    "adFreeExperience": "You have an ad-free experience.",
+    "analyzing": "Analysing…",
+    "avatarChange": "Change picture",
+    "avatarHint": "Optional — shown to friends and in groups.",
+    "avatarLabel": "Profile picture",
+    "avatarPick": "Choose a picture",
+    "cancel": "Cancel",
+    "clear": "Clear",
+    "contact": "Contact us",
+    "deleteAccount": "Delete account",
+    "deleteAccountAppleHint": "Do you have a subscription through the App Store? Cancel it separately in Settings → your name → Subscriptions — deleting your account here does not stop Apple billing you.",
+    "deleteAccountBody": "Permanently deletes your account and all your data: profile, ratings, watchlist, groups and friends. This can't be undone.",
+    "deleteAccountConfirm": "Are you absolutely sure?",
+    "deleteAccountCta": "Delete my account",
+    "deleteAccountFailed": "Couldn't delete your account.",
+    "deleteAccountYes": "Yes, delete permanently",
+    "deleting": "Deleting…",
+    "displayNameLabel": "Display name",
+    "displayNamePlaceholder": "Your name",
+    "dobLabel": "Date of birth",
+    "editTaste": "Edit your taste",
+    "editTasteHint": "These choices affect both your recommendations and the taste profile above.",
+    "eyebrow": "Your account",
+    "favoriteMovie": "Favourite film",
+    "favoriteShow": "Favourite series",
+    "fillFromRatings": "Fill in from my ratings",
+    "fillFromRatingsHint": "Based automatically on your rating history — you always have the final say.",
+    "genericError": "Something went wrong.",
+    "genres": "Genres",
+    "genresEmptyHint": "No selection = automatic, based on your taste profile.",
+    "languageInstantHint": "The language changes right away — no need to save.",
+    "languageLabel": "Language",
+    "loading": "Loading…",
+    "manageAppleHint": "Manage or cancel your subscription in the App Store: Settings → your name → Subscriptions.",
+    "manageInAppStore": "Manage in the App Store",
+    "manageSubscription": "Manage subscription",
+    "networkError": "Network error.",
+    "noSearchResults": "No matches — try a different search.",
+    "notif": {
+      "dailyRecs": {
+        "hint": "One film or series recommendation a day.",
+        "label": "Daily pick"
+      },
+      "friendRequests": {
+        "hint": "New requests and accepted friends.",
+        "label": "Friend requests"
+      },
+      "groupInvites": {
+        "hint": "When someone invites you to a group.",
+        "label": "Group invites"
+      },
+      "groupMatches": {
+        "hint": "When your group lands on a title everyone likes.",
+        "label": "Group matches"
+      },
+      "marketing": {
+        "hint": "Occasional updates about NextWatch.",
+        "label": "News & offers"
+      },
+      "shares": {
+        "hint": "When a friend sends you a film tip in chat.",
+        "label": "Tips from friends"
+      }
+    },
+    "notifications": "Notifications",
+    "onFreePlan": "You're on the <strong>free version</strong> with ads.",
+    "opening": "Opening…",
+    "openPortalFailed": "Couldn't open subscription management.",
+    "premiumLifetime": "Premium (lifetime)",
+    "privacyPolicy": "Privacy policy",
+    "providersHint": "Pick the streaming services you have.",
+    "pushHint": "Push requires that you've allowed notifications for the app in your system settings.",
+    "renewsAt": "Renews/ends {date}.",
+    "save": "Save",
+    "savedDot": "Saved.",
+    "savePrefFailed": "Couldn't save that setting.",
+    "saveProfileFailed": "Couldn't save your profile.",
+    "saveUsernameFailed": "Couldn't save your username.",
+    "saving": "Saving…",
+    "searching": "Searching…",
+    "searchMovie": "Search films…",
+    "searchShow": "Search series…",
+    "showAgain": "Show again",
+    "showKidsContent": "Show kids and family content",
+    "showKidsContentHint": "Off by default. On includes kids' shows (e.g. My Little Pony) in your suggestions.",
+    "showPaidOptions": "Show rent and buy options",
+    "showPaidOptionsHint": "Off by default. On also shows titles you need to pay extra to watch.",
+    "subscription": "Subscription",
+    "suggestApplied": "Suggestions filled in below — adjust if needed and save.",
+    "suggestFetchFailed": "Couldn't fetch suggestions.",
+    "suggestions": "Suggestions",
+    "suggestNeedMore": "Rate a few more titles first and we'll be able to suggest something.",
+    "suggestNoPattern": "No clear pattern in your history yet.",
+    "support": "Support & FAQ",
+    "tabProfile": "Profile",
+    "tabServices": "Services",
+    "tabSettings": "Settings",
+    "tabTaste": "Taste",
+    "terms": "Terms of use",
+    "tmdbAttribution": "Film and TV data from <tmdb>TMDB</tmdb>. This product uses the TMDB API but is not endorsed or certified by TMDB.",
+    "tourFriends": "The friends walkthrough",
+    "tourFriendsHint": "Adding friends, requests, and what friends unlock.",
+    "tourGroups": "The group walkthrough",
+    "tourGroupsHint": "Create or join, invite, settings and group swiping.",
+    "tours": "Walkthroughs",
+    "tourSwipe": "The swipe walkthrough",
+    "tourSwipeHint": "Like, dislike, more info and seen + rate — how the cards work.",
+    "tourWatchlist": "The watchlist walkthrough",
+    "tourWatchlistHint": "Saved titles, rating what you've seen, and Watch now.",
+    "upgradeCta": "Upgrade to Premium",
+    "upgradeHint": "Upgrade to Premium (SEK 19/month) for a completely ad-free experience.",
+    "usernameBlockedChars": "Unsupported characters are removed.",
+    "usernameHint": "3–20 characters (a–z, 0–9, _, .) — visible to friends.",
+    "usernameLabel": "Username",
+    "usernamePlaceholder": "e.g. film_ninja.42",
+    "usernameTooShort": "Enter at least 3 characters or leave it empty.",
+    "validationRequired": "Enter your name and date of birth. Username must be empty or 3–20 characters (a–z, 0–9, _, .)."
+  },
+  "push": {
+    "dailyRec": {
+      "body": "{title} – a {media} we think you'll like!",
+      "movie": "film",
+      "series": "series",
+      "title": "Today's pick 🎬"
+    },
+    "friendAccepted": {
+      "body": "{name} accepted your friend request",
+      "title": "Friend request accepted"
+    },
+    "friendRequest": {
+      "body": "{name} wants to be your friend",
+      "title": "New friend request"
+    },
+    "groupInvite": {
+      "body": "{name} invited you to a group",
+      "title": "Group invite"
+    },
+    "groupInviteAccepted": {
+      "body": "{name} joined your group {code} – time to swipe!",
+      "title": "Invite accepted"
+    },
+    "shareReceived": {
+      "body": "{name} shared {title} with you",
+      "title": "New film tip 🍿"
+    },
+    "softAskBody": "We'll let you know when your group matches, when friends share film tips and when today's recommendation lands. You choose which types in settings.",
+    "softAskLater": "Not now",
+    "softAskTitle": "Want notifications? 🔔",
+    "softAskYes": "Yes, turn them on"
+  },
+  "report": {
+    "alsoBlock": "Block this user too",
+    "aUser": "user",
+    "close": "Close",
+    "describeLabel": "Add a description (optional)",
+    "describePlaceholder": "What happened?",
+    "heading": "Report {name}",
+    "intro": "We review every report within 24 hours and remove content or suspend accounts that break the terms.",
+    "networkError": "Network error. Please try again.",
+    "reason": {
+      "badContent": "Inappropriate content",
+      "badName": "Inappropriate name or username",
+      "harassment": "Harassment or threats",
+      "other": "Other",
+      "spam": "Spam"
+    },
+    "send": "Send report",
+    "sendFailed": "Couldn't send the report.",
+    "sending": "Sending…",
+    "thanks": "Thanks! Your report has been received.",
+    "thanksBlocked": "Thanks! Your report has been received and the user is blocked."
+  },
+  "share": {
+    "close": "Close",
+    "heading": "Share with a friend",
+    "loadingFriends": "Loading friends…",
+    "noFriends": "No friends yet — add someone under Group → Friends first.",
+    "retry": "Try again",
+    "searchFriend": "Search friends…",
+    "send": "Send",
+    "sending": "Sending…",
+    "sent": "Sent ✓",
+    "unknown": "Unknown"
+  },
+  "subgenres": {
+    "Actionkomedi": "Action comedy",
+    "AI & robotar": "AI & robots",
+    "Aliens": "Aliens",
+    "Andra världskriget": "World War II",
+    "Anime": "Anime",
+    "Antiken": "Antiquity",
+    "Bil & jakt": "Cars & chases",
+    "Biografiskt": "Biographical",
+    "Buddy": "Buddy",
+    "Coming of age": "Coming of age",
+    "Crime thriller": "Crime thriller",
+    "Cyberpunk": "Cyberpunk",
+    "Detektiv": "Detective",
+    "Dramatisk romantik": "Romantic drama",
+    "Dystopi": "Dystopia",
+    "Episkt": "Epic",
+    "Expedition": "Expedition",
+    "Familj": "Family",
+    "Film noir": "Film noir",
+    "Första världskriget": "World War I",
+    "Found footage": "Found footage",
+    "Heist": "Heist",
+    "Hemsökt hus": "Haunted house",
+    "Historisk romantik": "Historical romance",
+    "Hovdrama": "Court drama",
+    "Kalla kriget": "Cold War",
+    "Kampsport": "Martial arts",
+    "Katastrof": "Disaster",
+    "Konsertfilm": "Concert film",
+    "Konspirationer": "Conspiracy",
+    "Krig": "War",
+    "Krigsdrama": "War drama",
+    "Kroppsskräck": "Body horror",
+    "Maffia": "Mafia",
+    "Medeltiden": "Middle Ages",
+    "Medicinskt": "Medical",
+    "Monster": "Monster",
+    "Mörk komedi": "Dark comedy",
+    "Musik-dok": "Music doc",
+    "Musikal": "Musical",
+    "Natur": "Nature",
+    "Neo-western": "Neo-western",
+    "Ockult & demoner": "Occult & demons",
+    "Överlevnad": "Survival",
+    "Övernaturligt": "Supernatural",
+    "Övernaturligt mysterium": "Supernatural mystery",
+    "Parodi": "Parody",
+    "Post-apokalyps": "Post-apocalyptic",
+    "Psykologisk": "Psychological",
+    "Psykologisk skräck": "Psychological horror",
+    "Rättegång": "Courtroom",
+    "Romcom": "Rom-com",
+    "Rymden": "Space",
+    "Sagor": "Fairy tales",
+    "Seriemördare": "Serial killer",
+    "Sjöröveri": "Pirates",
+    "Skattjakt": "Treasure hunt",
+    "Slasher": "Slasher",
+    "Spionage": "Spy",
+    "Sport": "Sports",
+    "Sport-dok": "Sports doc",
+    "Stop-motion": "Stop-motion",
+    "Superhjälte": "Superhero",
+    "Svärd & magi": "Sword & sorcery",
+    "Techno-thriller": "Techno-thriller",
+    "Tidsresor": "Time travel",
+    "Tonårskomedi": "Teen comedy",
+    "True crime": "True crime",
+    "Ungdomsromantik": "Teen romance",
+    "Urban fantasy": "Urban fantasy",
+    "Vampyr": "Vampire",
+    "Vietnamkriget": "Vietnam War",
+    "Whodunit": "Whodunit",
+    "Zombie": "Zombie"
+  },
+  "support": {
+    "faq": {
+      "bug": {
+        "a": "Wonderful — email us! Describe what you did, what happened, and ideally include a screenshot.",
+        "q": "I found a bug!"
+      },
+      "cancelPremium": {
+        "a": "Bought in the iOS app: Settings → your Apple ID → Subscriptions, or via \"Manage in the App Store\" in your profile. Bought on the web: \"Manage subscription\" in your profile settings.",
+        "q": "How do I cancel Premium?"
+      },
+      "deleteAccount": {
+        "a": "Profile → Settings → Delete account. All your data is permanently removed. If you have an active App Store subscription it needs to be cancelled separately with Apple.",
+        "q": "How do I delete my account?"
+      },
+      "groups": {
+        "a": "Create a group under the Group tab and share the code, or invite friends directly. When enough of you like the same title you get a match. The group page also shows titles several of you already have on your watchlists.",
+        "q": "How do groups work?"
+      },
+      "noRecs": {
+        "a": "Check that you've selected at least one streaming service under Profile → Services. Suggestions are filtered by the services you (or your group) actually have. Titles you've already swiped come back after your chosen recycle period.",
+        "q": "I don't see any recommendations / it says \"Out of suggestions\""
+      },
+      "notifications": {
+        "a": "Check both the iOS settings for NextWatch and which notification types you've switched on under Profile → Settings → Notifications.",
+        "q": "Why aren't I getting notifications?"
+      }
+    },
+    "faqHeading": "Frequently asked questions",
+    "intro": "Need help? Email <mail>support@nextwatch.se</mail> — we normally reply within 1–2 business days.",
+    "linkHome": "Back to the start page",
+    "linkPrivacy": "Privacy policy",
+    "linkTerms": "Terms of Use",
+    "metaDescription": "Help and contact for NextWatch.",
+    "metaTitle": "Support – NextWatch",
+    "title": "Support"
+  },
+  "swipe": {
+    "adSlot": "Ad slot",
+    "adSlotHint": "Keep swiping as usual — or skip the ads entirely.",
+    "deckError": {
+      "deck_fetch_failed": "Couldn't fetch suggestions.",
+      "deck_fetch_failed_retry": "Couldn't fetch suggestions. Please try again.",
+      "group_deck_fetch_failed": "Couldn't fetch group suggestions.",
+      "network_check_connection": "Network error. Check your connection.",
+      "network_error": "Network error."
+    },
+    "filterAria": "Show in swipe",
+    "filterBoth": "Both",
+    "filterMovie": "Films",
+    "filterTv": "Series",
+    "groupLabel": "Group:",
+    "noDescription": "No description available.",
+    "nothingToUndo": "Nothing to undo",
+    "ratePrompt": "What did you think?",
+    "ratingSaveFailed": "Couldn't save your rating",
+    "retry": "Try again",
+    "settingsAria": "Suggestion settings",
+    "shareTip": "Share",
+    "undoFailed": "Couldn't undo on the server",
+    "upgradeCta": "Upgrade to Premium",
+    "whyThis": "Why this one?"
+  },
+  "swipeLimit": {
+    "body": "{limit} swipes a day are included for free. Come back tomorrow – or get Premium for unlimited swiping.",
+    "cta": "Get Premium – SEK 19/month",
+    "heading": "You've hit today's limit",
+    "opening": "Opening…",
+    "resetHint": "The limit resets on a rolling basis through the day."
+  },
+  "taste": {
+    "adjustHint": "Something off? Adjust it under \"Edit your taste\" below.",
+    "analyzing": "Analysing your taste…",
+    "headingGroup": "Your group's taste",
+    "headingSolo": "Your taste profile",
+    "networkError": "Network error.",
+    "notEnoughData": "Swipe, rate and fill in favourites below — then we'll build a profile for you.",
+    "premiumBody": "See which themes, directors and actors your swipes really point to — and get suggestions for genres you've missed.",
+    "premiumCta": "Get Premium – SEK 19/month",
+    "premiumTitle": "Taste profile is part of Premium",
+    "rowBasedOn": "Based on",
+    "rowCast": "Actors",
+    "rowDirectors": "Directors / creators",
+    "rowGenres": "Genres you gravitate to",
+    "rowKeywords": "Themes",
+    "statAvgRating": "Avg. rating",
+    "statAvgRatingCount": "Avg. rating ({count})",
+    "statLiked": "Liked",
+    "statSwipes": "Swipes",
+    "subtitleGroup": "What the algorithm read out of your group's behaviour — not what you ticked.",
+    "subtitleSolo": "What the algorithm read out of your behaviour — not what you ticked.",
+    "swipeMoreHint": "<link>Swipe more</link> to fine-tune the profile."
+  },
+  "tips": {
+    "aFriend": "A friend",
+    "latest": "Latest: {title}",
+    "newTips": "{count, plural, one {# new tip} other {# new tips}} from {name}"
+  },
+  "tours": {
+    "friendsTour": {
+      "s0": {
+        "body": "Search by username here and send a friend request.",
+        "title": "Add friends"
+      },
+      "s1": {
+        "body": "Incoming friend requests show up here — accept or decline them.",
+        "title": "Requests"
+      },
+      "s2": {
+        "body": "Invite friends to a group to swipe together, or share films and series with them.",
+        "title": "What friends unlock"
+      }
+    },
+    "groupGuide": {
+      "s0": {
+        "body": "Switch between group swiping and finding friends.",
+        "title": "Group or friends"
+      },
+      "s1": {
+        "body": "Create a new group or join with a code a friend gave you.",
+        "title": "Create or join"
+      },
+      "s2": {
+        "body": "Once you're in a group — start the group swipe here. You vote together until you match.",
+        "title": "Group swipe"
+      },
+      "s3": {
+        "body": "Search by username and send a friend request.",
+        "title": "Add friends"
+      }
+    },
+    "groupsTour": {
+      "s0": {
+        "body": "Create a new group and share the code, or join with a friend's group code.",
+        "title": "Create or join"
+      },
+      "s1": {
+        "body": "Add friends to the group so you can swipe together.",
+        "title": "Invite friends"
+      },
+      "s2": {
+        "body": "Set which genres you swipe on and how many people need to like a title for a match.",
+        "title": "Settings"
+      },
+      "s3": {
+        "body": "Start the group swipe — you vote together until enough of you like the same title.",
+        "title": "Swipe together"
+      }
+    },
+    "navGuide": {
+      "s0": {
+        "body": "Your personal swipe feed of films and series.",
+        "title": "Recommendations"
+      },
+      "s1": {
+        "body": "Create or join a group and add friends.",
+        "title": "Group & friends"
+      },
+      "s2": {
+        "body": "Browse and filter titles by genre and type.",
+        "title": "Discover"
+      },
+      "s3": {
+        "body": "Everything you've liked and all your ratings in one place.",
+        "title": "Watchlist"
+      },
+      "s4": {
+        "body": "Settings, services and your account.",
+        "title": "Profile"
+      }
+    },
+    "swipeGuide": {
+      "s0": {
+        "body": "Here you get recommendations tuned to your taste. Swipe to find your next thing to watch.",
+        "title": "Welcome to NextWatch"
+      },
+      "s1": {
+        "body": "Drag the card right to like it — the title is saved to your watchlist.",
+        "title": "Like"
+      },
+      "s2": {
+        "body": "Drag left if the title doesn't feel right. It's hidden for a while so you don't see it again.",
+        "title": "Nope"
+      },
+      "s3": {
+        "body": "Drag up if you've already seen it. You can rate it afterwards.",
+        "title": "Seen"
+      },
+      "s4": {
+        "body": "Tap the card to flip it and read more about the film or series.",
+        "title": "More info"
+      },
+      "s5": {
+        "body": "Or use the buttons: No, Info, Undo and Like.",
+        "title": "The buttons"
+      }
+    },
+    "watchlistTour": {
+      "s0": {
+        "body": "Titles you like while swiping collect under Watchlist. The Ratings tab shows everything you've already seen and rated.",
+        "title": "Your watchlist"
+      },
+      "s1": {
+        "body": "Swipe right on a title you want to watch and it's saved to this list automatically.",
+        "title": "How titles get here"
+      },
+      "s2": {
+        "body": "Tap a title and choose Rate — it moves to the Ratings tab with your score.",
+        "title": "Rate what you've seen"
+      },
+      "s3": {
+        "body": "Open a title and tap Watch now to go straight to the streaming service you have it on.",
+        "title": "Watch now"
+      }
+    }
+  },
+  "upsell": {
+    "body": "Get Premium for SEK 19/month — completely ad-free and unlimited swipes.",
+    "close": "Close",
+    "cta": "Get Premium – SEK 19/month",
+    "dismiss": "No thanks, keep swiping",
+    "heading": "Tired of ads?",
+    "loadingVideo": "Loading video…",
+    "opening": "Opening…",
+    "watchAd": "Watch a video – skip ads for 24h"
+  },
+  "watch": {
+    "closeTrailer": "Close trailer",
+    "group": {
+      "paid": "Rent or buy",
+      "stream": "Stream"
+    },
+    "paidOnly": "Rent or buy only",
+    "unavailable": "Unavailable",
+    "watchNow": "Watch now"
+  },
+  "watchlist": {
+    "cancel": "Cancel",
+    "editRatingHeading": "Change your rating",
+    "emptyMoviesHasTv": "No films in the list — but you have series. Switch to Series above.",
+    "emptyTvHasMovies": "No series in the list — but you have films. Switch to Films above.",
+    "emptyWatchlist": "Your watchlist is empty. Swipe right on titles you want to watch and they'll show up here.",
+    "importImdb": "Import from IMDb",
+    "loadingInfo": "Loading info…",
+    "loadingRatings": "Loading your ratings…",
+    "noDescription": "No description available.",
+    "noMatches": "No matches.",
+    "noRating": "No rating",
+    "noRatingsYet": "No ratings yet. Swipe up on titles you've seen to rate them.",
+    "noStreamingData": "No streaming data available for your region right now.",
+    "openProvider": "Open {provider}",
+    "rate": "Rate",
+    "ratePromptHeading": "What did you think?",
+    "removeFromWatchlist": "Remove from watchlist",
+    "searchPlaceholder": "Search titles…",
+    "tabRatings": "Ratings",
+    "tabWatchlist": "Watchlist",
+    "tipFriend": "Share with a friend",
+    "tmdbRating": "Rating: {value}",
+    "yourRating": "Your rating: {value}/10"
+  }
+}

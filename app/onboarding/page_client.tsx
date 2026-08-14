@@ -13,16 +13,12 @@ import { replayAnonLikes } from "@/lib/anonLikes";
 import GenrePicker from "@/app/components/discover/GenrePicker";
 import { GROUP_GENRES } from "@/lib/groupSettings";
 import { toggleKeywordGroup } from "@/lib/subgenres";
+import { useLocale, useTranslations } from "next-intl";
+import { LOCALES, tmdbLanguage, type AppLocale } from "@/lib/i18nConfig";
+import { writeUiLanguageCookie } from "@/lib/uiLanguage";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
-
-// Liten hjälpare för att läsa cookie-värden client-side
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : null;
-}
 
 function SearchBox({
   label,
@@ -30,15 +26,17 @@ function SearchBox({
   type, // "movie" | "tv"
   value,
   onSelect,
-  locale = "sv-SE",
+  locale,
 }: {
   label: string;
   placeholder: string;
   type: "movie" | "tv";
   value: Fav | null;
   onSelect: (v: Fav | null) => void;
-  locale?: string;
+  /** TMDB-språk, härlett ur användarens språkval. */
+  locale: string;
 }) {
+  const t = useTranslations("onboarding");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Fav[]>([]);
@@ -75,10 +73,10 @@ function SearchBox({
         // tyst
       }
     };
-    const t = setTimeout(run, 180);
+    const timer = setTimeout(run, 180);
     return () => {
       active = false;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [q, type, locale, value]);
 
@@ -103,7 +101,7 @@ function SearchBox({
             type="button"
             onClick={() => onSelect(null)}
             className="rounded-xl border border-white/10 px-3 hover:bg-white/10"
-            title="Rensa"
+            title={t("clear")}
           >
             ✕
           </button>
@@ -150,8 +148,6 @@ function SearchBox({
 }
 
 // ---------- constants ----------
-const LANGS = ["sv", "en"] as const;
-
 const PROVIDERS = [
   "Netflix",
   "Disney+",
@@ -164,11 +160,13 @@ const PROVIDERS = [
   "TV4 Play",
 ] as const;
 
+// Bara stegordningen bor här; rubrik och underrubrik hämtas ur
+// messages/*.json (onboarding.steps.<key>.title / .subtitle).
 const STEPS = [
-  { id: 0, title: "Om dig", subtitle: "Namn, användarnamn och ålder" },
-  { id: 1, title: "Tjänster", subtitle: "Språk och streaming" },
-  { id: 2, title: "Smak", subtitle: "Favoriter och genrer" },
-  { id: 3, title: "Konto", subtitle: "Gäst eller registrera dig" },
+  { id: 0, key: "about" },
+  { id: 1, key: "services" },
+  { id: 2, key: "taste" },
+  { id: 3, key: "account" },
 ] as const;
 
 export default function Client({
@@ -181,6 +179,8 @@ export default function Client({
   hasAccount?: boolean;
 } = {}) {
   const router = useRouter();
+  const t = useTranslations("onboarding");
+  const activeLocale = useLocale() as AppLocale;
 
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState(initialName);
@@ -199,7 +199,9 @@ export default function Client({
     if (age < 7 || age > 99) return null;
     return age;
   }
-  const [language, setLanguage] = useState<(typeof LANGS)[number]>("sv");
+  // Startar på det språk appen faktiskt renderas i (cookien), inte på ett
+  // hårdkodat "sv" — annars visar väljaren Svenska för en engelsk användare.
+  const [language, setLanguage] = useState<AppLocale>(activeLocale);
   const [providers, setProviders] = useState<string[]>([]);
   const [favoriteMovie, setFavoriteMovie] = useState<Fav | null>(null);
   const [favoriteShow, setFavoriteShow] = useState<Fav | null>(null);
@@ -208,13 +210,20 @@ export default function Client({
   const [favoriteKeywordIds, setFavoriteKeywordIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [searchLocale, setSearchLocale] = useState<string>("sv-SE");
 
-  // Läs nw_locale från cookie (sätts av middleware) så TMDB-sök använder samma locale.
-  useEffect(() => {
-    const l = getCookie("nw_locale");
-    if (l && /^[a-z]{2}(-[A-Z]{2})?$/.test(l)) setSearchLocale(l);
-  }, []);
+  // TMDB-sökningen följer det språk användaren just valt i steg 2 — väljer man
+  // English ska titelsöket också ge engelska titlar, direkt.
+  const searchLocale = tmdbLanguage(language);
+
+  // Språkvalet slår igenom direkt i onboardingen: cookien skrivs och
+  // server-komponenterna ritas om. Profilen persisteras ändå i
+  // save-onboarding-anropet, så inget dubbelsparande behövs här.
+  async function changeLanguage(next: AppLocale) {
+    if (next === language) return;
+    setLanguage(next);
+    writeUiLanguageCookie(next);
+    router.refresh();
+  }
 
   function toggleProvider(p: string) {
     setProviders((prev) =>
@@ -280,17 +289,17 @@ export default function Client({
     setErr(null);
     if (step === 0 && !step0Valid()) {
       if (!usernameValidRequired(username)) {
-        setErr("Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).");
+        setErr(t("errUsernameFormat"));
       } else if (usernameStatus === "taken") {
-        setErr("Användarnamnet är upptaget. Välj ett annat.");
+        setErr(t("errUsernameTaken"));
       } else if (usernameStatus === "checking") {
-        setErr("Vänta medan vi kollar användarnamnet…");
+        setErr(t("errUsernameChecking"));
       } else if (ageInput.trim() && parsedAge() === null) {
-        setErr("Ange en giltig ålder (7–99 år).");
+        setErr(t("errAge"));
       } else if (!termsAccepted) {
-        setErr("Du behöver godkänna villkoren för att fortsätta.");
+        setErr(t("errTerms"));
       } else {
-        setErr("Fyll i alla obligatoriska fält.");
+        setErr(t("errRequired"));
       }
       return;
     }
@@ -314,7 +323,7 @@ export default function Client({
   async function saveAndContinue(redirect: string) {
     setErr(null);
     if (!step0Valid()) {
-      setErr("Kontrollera användarnamn och ålder.");
+      setErr(t("errCheckUsernameAge"));
       setStep(0);
       return;
     }
@@ -342,10 +351,10 @@ export default function Client({
       });
       if (!res.ok) {
         const errBody = (await res.json()) as { message?: string };
-        throw new Error(errBody.message ?? "Ett fel uppstod.");
+        throw new Error(errBody.message ?? t("errGeneric"));
       }
       const data = (await res.json()) as { ok?: boolean; message?: string };
-      if (!data.ok) throw new Error(data.message ?? "Ett fel uppstod.");
+      if (!data.ok) throw new Error(data.message ?? t("errGeneric"));
 
       // Startsidan är spelbar innan man har konto, och gaten lovar att swipesen
       // "följer med". Här infrias löftet: likesen har legat i localStorage och
@@ -355,7 +364,7 @@ export default function Client({
 
       router.replace(redirect);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
+      setErr(e instanceof Error ? e.message : t("errGeneric"));
     } finally {
       setLoading(false);
     }
@@ -376,18 +385,18 @@ export default function Client({
   // Redan inloggad (t.ex. via Apple) → sista steget är inte "skapa konto" utan
   // bara en bekräftelse. Att visa registreringsval här skulle be om e-post som
   // vi redan har.
-  const stepMeta = STEPS.map((s) =>
-    hasAccount && s.id === 3
-      ? { ...s, title: "Klart", subtitle: "Spara profilen och börja swipa" }
-      : s
-  );
+  const stepMeta = STEPS.map((s) => ({
+    id: s.id,
+    title: hasAccount && s.id === 3 ? t("steps.done.title") : t(`steps.${s.key}.title`),
+    subtitle: hasAccount && s.id === 3 ? t("steps.done.subtitle") : t(`steps.${s.key}.subtitle`),
+  }));
 
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col justify-center px-4 py-10">
       {/* Header */}
       <div className="mb-7 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-400/80">
-          Välkommen till NextWatch
+          {t("welcome")}
         </p>
         <h1 className="mt-2.5 text-3xl font-bold tracking-tight">{stepMeta[step].title}</h1>
         <p className="mt-1.5 text-sm text-neutral-400">{stepMeta[step].subtitle}</p>
@@ -445,11 +454,13 @@ export default function Client({
             <div className="space-y-4">
               <div>
                 <label className="mb-1 block text-sm text-neutral-300">
-                  Visningsnamn <span className="text-neutral-500">(valfritt)</span>
+                  {t.rich("displayNameLabel", {
+                    optional: (chunks) => <span className="text-neutral-500">{chunks}</span>,
+                  })}
                 </label>
                 <input
                   className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
-                  placeholder="Ditt namn…"
+                  placeholder={t("displayNamePlaceholder")}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   autoComplete="name"
@@ -457,14 +468,14 @@ export default function Client({
                 />
                 {initialName ? (
                   <p className="mt-1 text-xs text-neutral-500">
-                    Hämtat från ditt Apple-ID. Ändra om du vill.
+                    {t("displayNameFromApple")}
                   </p>
                 ) : null}
               </div>
 
               <div>
                 <label className="mb-1 block text-sm text-neutral-300">
-                  Användarnamn <span className="text-cyan-400">*</span>
+                  {t("usernameLabel")} <span className="text-cyan-400">*</span>
                 </label>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
@@ -483,31 +494,31 @@ export default function Client({
                   />
                 </div>
                 <p className="mt-1 text-xs text-neutral-500">
-                  3–20 tecken: a–z, 0–9, _ och . Vänner söker dig med detta namn.
+                  {t("usernameHint")}
                 </p>
                 {usernameBlockedChars ? (
-                  <p className="mt-1 text-xs text-rose-400">Otillåtna tecken tas bort automatiskt.</p>
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameBlockedChars")}</p>
                 ) : null}
                 {usernameStatus === "checking" && (
-                  <p className="mt-1 text-xs text-neutral-400">Kollar tillgänglighet…</p>
+                  <p className="mt-1 text-xs text-neutral-400">{t("usernameChecking")}</p>
                 )}
                 {usernameStatus === "available" && (
-                  <p className="mt-1 text-xs text-emerald-400">✓ Tillgängligt</p>
+                  <p className="mt-1 text-xs text-emerald-400">{t("usernameAvailable")}</p>
                 )}
                 {usernameStatus === "taken" && (
-                  <p className="mt-1 text-xs text-rose-400">Upptaget – välj ett annat</p>
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameTaken")}</p>
                 )}
                 {usernameStatus === "invalid" && username.length > 0 && (
-                  <p className="mt-1 text-xs text-rose-400">Ogiltigt format</p>
+                  <p className="mt-1 text-xs text-rose-400">{t("usernameInvalid")}</p>
                 )}
               </div>
 
               <div>
                 <label className="mb-1 block text-sm text-neutral-300">
-                  Hur gammal är du? <span className="text-cyan-400">*</span>
+                  {t("ageLabel")} <span className="text-cyan-400">*</span>
                 </label>
                 <p className="mb-2 text-xs text-neutral-500">
-                  Vi använder åldern för att filtrera innehåll efter åldersgräns.
+                  {t("ageHint")}
                 </p>
                 <div className="relative">
                   <input
@@ -516,13 +527,13 @@ export default function Client({
                     min={7}
                     max={99}
                     className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-500/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    placeholder="t.ex. 18"
+                    placeholder={t("agePlaceholder")}
                     value={ageInput}
                     onChange={(e) => setAgeInput(e.target.value.replace(/[^\d]/g, ""))}
                     required
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-500">
-                    år
+                    {t("ageUnit")}
                   </span>
                 </div>
               </div>
@@ -537,16 +548,22 @@ export default function Client({
                   className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
                   required
                 />
+                {/* Guideline 1.2: länkarna till villkor och integritetspolicy
+                    måste vara klickbara här — de bor i översättningen som
+                    <terms>/<privacy> och byggs till <a> nedan. */}
                 <span>
-                  Jag godkänner{" "}
-                  <a href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
-                    användarvillkoren
-                  </a>{" "}
-                  och{" "}
-                  <a href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
-                    integritetspolicyn
-                  </a>
-                  , och accepterar att stötande innehåll eller kränkande beteende inte tolereras.
+                  {t.rich("termsAccept", {
+                    terms: (chunks) => (
+                      <a href="/legal/terms" className="text-cyan-300 underline underline-offset-2">
+                        {chunks}
+                      </a>
+                    ),
+                    privacy: (chunks) => (
+                      <a href="/legal/privacy" className="text-cyan-300 underline underline-offset-2">
+                        {chunks}
+                      </a>
+                    ),
+                  })}
                 </span>
               </label>
             </div>
@@ -556,13 +573,13 @@ export default function Client({
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <label className="mb-1 block text-sm text-neutral-300">Språk</label>
+                <label className="mb-1 block text-sm text-neutral-300">{t("languageLabel")}</label>
                 <select
                   className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-cyan-500/40"
                   value={language}
-                  onChange={(e) => setLanguage(e.target.value as (typeof LANGS)[number])}
+                  onChange={(e) => void changeLanguage(e.target.value as AppLocale)}
                 >
-                  {LANGS.map((l) => (
+                  {LOCALES.map((l) => (
                     <option key={l} value={l}>
                       {l === "sv" ? "Svenska" : "English"}
                     </option>
@@ -571,9 +588,9 @@ export default function Client({
               </div>
 
               <div>
-                <div className="mb-2 text-sm text-neutral-300">Dina streamingtjänster</div>
+                <div className="mb-2 text-sm text-neutral-300">{t("providersLabel")}</div>
                 <p className="mb-3 text-xs text-neutral-500">
-                  Välj de tjänster du har – vi visar bara titlar du kan streama.
+                  {t("providersHint")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {PROVIDERS.map((p) => (
@@ -594,16 +611,16 @@ export default function Client({
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-4">
                 <SearchBox
-                  label="Favoritfilm (valfritt)"
-                  placeholder="Sök titel…"
+                  label={t("favoriteMovie")}
+                  placeholder={t("searchTitle")}
                   type="movie"
                   value={favoriteMovie}
                   onSelect={setFavoriteMovie}
                   locale={searchLocale}
                 />
                 <SearchBox
-                  label="Favoritserie (valfritt)"
-                  placeholder="Sök titel…"
+                  label={t("favoriteShow")}
+                  placeholder={t("searchTitle")}
                   type="tv"
                   value={favoriteShow}
                   onSelect={setFavoriteShow}
@@ -612,7 +629,7 @@ export default function Client({
               </div>
 
               <div>
-                <div className="mb-2 text-sm text-neutral-300">Genrer</div>
+                <div className="mb-2 text-sm text-neutral-300">{t("genres")}</div>
                 <GenrePicker
                   genres={GROUP_GENRES.map((g) => ({ id: g, label: g }))}
                   selectedGenreIds={likeGenres}
@@ -623,7 +640,7 @@ export default function Client({
                   onToggleKeywordIds={toggleFavoriteKeywordIds}
                   wrap
                   subLayout="card"
-                  emptyStateHint="Tomma val = automatik utifrån din smakprofil."
+                  emptyStateHint={t("genresEmptyHint")}
                 />
               </div>
             </div>
@@ -633,7 +650,7 @@ export default function Client({
           {step === 3 && hasAccount && (
             <div className="space-y-4">
               <p className="text-sm text-neutral-400">
-                Profilen är klar och kopplad till ditt konto.
+                {t("doneLinked")}
               </p>
               <button
                 type="button"
@@ -641,9 +658,9 @@ export default function Client({
                 onClick={() => void saveAndContinue("/swipe")}
                 className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
               >
-                <p className="font-semibold text-cyan-300">Börja swipa</p>
+                <p className="font-semibold text-cyan-300">{t("startSwiping")}</p>
                 <p className="mt-1 text-sm text-neutral-400">
-                  Vi sparar profilen och tar dig vidare.
+                  {t("startSwipingHint")}
                 </p>
               </button>
             </div>
@@ -652,7 +669,7 @@ export default function Client({
           {step === 3 && !hasAccount && (
             <div className="space-y-4">
               <p className="text-sm text-neutral-400">
-                Profilen är klar! Välj hur du vill fortsätta.
+                {t("donePickPath")}
               </p>
               <button
                 type="button"
@@ -660,9 +677,9 @@ export default function Client({
                 onClick={() => void saveAndContinue("/swipe")}
                 className="w-full rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-left transition hover:bg-cyan-500/15 disabled:opacity-50"
               >
-                <p className="font-semibold text-cyan-300">Fortsätt som gäst</p>
+                <p className="font-semibold text-cyan-300">{t("continueAsGuest")}</p>
                 <p className="mt-1 text-sm text-neutral-400">
-                  Börja swipa direkt. Du kan skapa konto senare under Profil.
+                  {t("continueAsGuestHint")}
                 </p>
               </button>
               <button
@@ -671,9 +688,9 @@ export default function Client({
                 onClick={() => void saveAndContinue("/auth/register")}
                 className="w-full rounded-2xl border border-white/15 bg-white/5 p-5 text-left transition hover:bg-white/10 disabled:opacity-50"
               >
-                <p className="font-semibold text-white">Skapa konto</p>
+                <p className="font-semibold text-white">{t("createAccount")}</p>
                 <p className="mt-1 text-sm text-neutral-400">
-                  Spara med e-post eller Apple så du kan logga in igen på andra enheter.
+                  {t("createAccountHint")}
                 </p>
               </button>
             </div>
@@ -686,7 +703,7 @@ export default function Client({
             <div className="flex items-center justify-between pt-2">
               {step === 0 ? (
                 <Link href="/" className="text-sm text-neutral-400 underline hover:text-neutral-200">
-                  Tillbaka
+                  {t("back")}
                 </Link>
               ) : (
                 <button
@@ -694,7 +711,7 @@ export default function Client({
                   onClick={goBack}
                   className="rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
                 >
-                  ← Föregående
+                  {t("previous")}
                 </button>
               )}
 
@@ -703,7 +720,7 @@ export default function Client({
                 onClick={goNext}
                 className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
               >
-                Nästa →
+                {t("next")}
               </button>
             </div>
           )}
@@ -712,7 +729,7 @@ export default function Client({
           {step === 0 && (
             <div className="pt-1 text-center">
               <GuestEntryButton
-                label="Hoppa in som gäst istället"
+                label={t("guestSkip")}
                 className="text-sm text-neutral-400 underline underline-offset-2 transition hover:text-neutral-200 disabled:opacity-50"
               />
             </div>
@@ -726,10 +743,10 @@ export default function Client({
                 disabled={loading}
                 className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-50"
               >
-                ← Föregående
+                {t("previous")}
               </button>
               {loading && (
-                <span className="text-sm text-neutral-400">Sparar profil…</span>
+                <span className="text-sm text-neutral-400">{t("savingProfile")}</span>
               )}
             </div>
           )}

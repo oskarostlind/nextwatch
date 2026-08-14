@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Card, Note, PageHeader } from "@/app/components/ui/kit";
+import { useTranslations } from "next-intl";
 import {
   isNativeIos,
   restorePremiumPurchases,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/premiumPurchase";
 
 export default function PremiumPage() {
+  const t = useTranslations("premium");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [err, setErr] = useState<string>("");
@@ -48,7 +50,7 @@ export default function PremiumPage() {
         window.location.href = "/premium/success";
         return;
       }
-      if (!result.cancelled) setErr(result.message || "Kunde inte återställa köp.");
+      if (!result.cancelled) setErr(result.message || t("restoreFailed"));
     } finally {
       setRestoring(false);
     }
@@ -57,13 +59,13 @@ export default function PremiumPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
       <PageHeader
-        eyebrow="Uppgradera"
+        eyebrow={t("eyebrow")}
         title="Premium"
-        subtitle="19 kr/mån – avsluta när du vill."
+        subtitle={t("subtitle")}
       />
       <Card className="space-y-4">
         <p className="text-sm text-neutral-300">
-          Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.
+          {t("intro")}
         </p>
         {/* Varje punkt måste motsvara en gate som FAKTISKT finns i koden — annars
             säljer vi något användaren redan har. Siffrorna speglar defaultvärdena
@@ -71,27 +73,24 @@ export default function PremiumPage() {
             ändras de env-variablerna måste texten här ändras med. */}
         <ul className="space-y-2 text-sm text-neutral-200">
           <li className="flex items-start gap-2">
-            <span className="text-emerald-400">✓</span> Helt annonsfritt
+            <span className="text-emerald-400">✓</span> {t("bulletAdFree")}
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-emerald-400">✓</span> Obegränsat med swipes — gratis ingår 100 per
-            dygn
+            <span className="text-emerald-400">✓</span> {t("bulletSwipes")}
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-emerald-400">✓</span> Grupper upp till 20 personer — gratis rymmer
-            3
+            <span className="text-emerald-400">✓</span> {t("bulletGroups")}
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-emerald-400">✓</span> Din smakprofil: se vilka teman, regissörer
-            och skådespelare dina swipes pekar mot
+            <span className="text-emerald-400">✓</span> {t("bulletTaste")}
           </li>
         </ul>
         <Button onClick={buy} disabled={loading} className="w-full">
           {loading
             ? onIos
-              ? "Öppnar App Store…"
-              : "Startar Stripe…"
-            : "Bli Premium – 19 kr/mån"}
+              ? t("openingAppStore")
+              : t("startingStripe")
+            : t("buyCta")}
         </Button>
         {onIos && (
           <>
@@ -101,7 +100,7 @@ export default function PremiumPage() {
               disabled={loading || restoring}
               className="w-full text-center text-xs text-neutral-400 underline underline-offset-2 transition hover:text-neutral-200 disabled:opacity-50"
             >
-              {restoring ? "Återställer…" : "Återställ tidigare köp"}
+              {restoring ? t("restoring") : t("restore")}
             </button>
           </>
         )}
@@ -112,17 +111,14 @@ export default function PremiumPage() {
             vid köptillfället. */}
         <div className="space-y-2 border-t border-white/10 pt-4 text-xs leading-relaxed text-neutral-500">
           <p>
-            <span className="font-medium text-neutral-300">NextWatch Premium</span> — 19 kr per
-            månad. Prenumerationen förnyas automatiskt varje månad tills du säger upp den.
+            {t.rich("legalName", {
+              name: (chunks) => <span className="font-medium text-neutral-300">{chunks}</span>,
+            })}
           </p>
           {onIos ? (
-            <p>
-              Betalningen dras från ditt Apple-konto när du bekräftar köpet. Förnyelsen sker
-              inom 24 timmar före periodens slut om du inte säger upp innan dess. Du hanterar
-              och avslutar prenumerationen i Inställningar på din enhet.
-            </p>
+            <p>{t("legalApple")}</p>
           ) : (
-            <p>Betalningen hanteras av Stripe. Du kan avsluta prenumerationen när som helst.</p>
+            <p>{t("legalStripe")}</p>
           )}
           <p className="flex flex-wrap gap-x-3 gap-y-1">
             <a
@@ -131,13 +127,13 @@ export default function PremiumPage() {
               rel="noreferrer"
               className="underline underline-offset-2 transition hover:text-neutral-300"
             >
-              Användarvillkor (EULA)
+              {t("eula")}
             </a>
             <a href="/legal/terms" className="underline underline-offset-2 transition hover:text-neutral-300">
-              Våra villkor
+              {t("ourTerms")}
             </a>
             <a href="/legal/privacy" className="underline underline-offset-2 transition hover:text-neutral-300">
-              Integritetspolicy
+              {t("privacy")}
             </a>
           </p>
         </div>

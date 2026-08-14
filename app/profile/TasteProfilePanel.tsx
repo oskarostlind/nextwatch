@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TasteProfileOk } from "@/lib/tasteProfile";
+import { useTranslations } from "next-intl";
 
 type Props = {
   groupCode?: string | null;
@@ -63,6 +64,7 @@ function WeightedRow({
 }
 
 export default function TasteProfilePanel({ groupCode = null }: Props) {
+  const t = useTranslations("taste");
   const [data, setData] = useState<TasteProfileOk | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
         setData(json);
       })
       .catch(() => {
-        if (!ignore) setError("Nätverksfel.");
+        if (!ignore) setError(t("networkError"));
       })
       .finally(() => {
         if (!ignore) setLoading(false);
@@ -104,12 +106,15 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
     return () => {
       ignore = true;
     };
+    // t() är stabil per språk/namnrymd (next-intl memoiserar den). Att lägga
+    // den i deps skulle bara riskera en extra hämtning vid språkbyte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupCode]);
 
   if (loading) {
     return (
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <p className="text-sm text-white/50">Analyserar din smak…</p>
+        <p className="text-sm text-white/50">{t("analyzing")}</p>
       </div>
     );
   }
@@ -117,16 +122,15 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
   if (needsPremium) {
     return (
       <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] p-4">
-        <p className="text-sm font-medium text-amber-100">Smakprofil ingår i Premium</p>
+        <p className="text-sm font-medium text-amber-100">{t("premiumTitle")}</p>
         <p className="mt-1 text-xs leading-relaxed text-white/50">
-          Se vilka teman, regissörer och skådespelare dina swipes egentligen pekar mot — och få
-          förslag på genrer du missat.
+          {t("premiumBody")}
         </p>
         <Link
           href="/premium"
           className="mt-3 inline-flex items-center rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-neutral-950 transition hover:bg-amber-300"
         >
-          Bli Premium – 19 kr/mån
+          {t("premiumCta")}
         </Link>
       </div>
     );
@@ -155,10 +159,10 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
     return (
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <h3 className="mb-1 text-sm font-semibold text-white/90">
-          {mode === "group" ? "Er gruppsmak" : "Din smakprofil"}
+          {mode === "group" ? t("headingGroup") : t("headingSolo")}
         </h3>
         <p className="text-sm text-white/55">
-          Swipa, betygsätt och fyll i favoriter nedan — då bygger vi en profil åt dig.
+          {t("notEnoughData")}
         </p>
       </div>
     );
@@ -171,42 +175,48 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
           {mode === "group" ? "Er gruppsmak" : "Din smakprofil"}
         </h3>
         <p className="mt-0.5 text-xs text-white/45">
-          Vad algoritmen har läst ut ur {mode === "group" ? "ert" : "ditt"} beteende — inte vad
-          {mode === "group" ? " ni" : " du"} kryssat i.
+          {mode === "group" ? t("subtitleGroup") : t("subtitleSolo")}
         </p>
       </div>
 
       {hasBehavior ? (
         <div className="grid grid-cols-3 gap-2">
-          <Stat value={String(behavior.totalSwipes)} label="Swipes" />
+          <Stat value={String(behavior.totalSwipes)} label={t("statSwipes")} />
           <Stat
             value={behavior.likeRatio !== null ? `${Math.round(behavior.likeRatio * 100)} %` : "–"}
-            label="Gillade"
+            label={t("statLiked")}
           />
           <Stat
             value={behavior.avgRating !== null ? behavior.avgRating.toFixed(1) : "–"}
-            label={behavior.ratedCount > 0 ? `Snittbetyg (${behavior.ratedCount})` : "Snittbetyg"}
+            label={
+              behavior.ratedCount > 0
+                ? t("statAvgRatingCount", { count: behavior.ratedCount })
+                : t("statAvgRating")
+            }
           />
         </div>
       ) : null}
 
       <div className="grid gap-3">
-        <WeightedRow label="Genrer du dras till" items={inferred.genres} />
-        <WeightedRow label="Regissörer / skapare" items={inferred.directors} />
-        <WeightedRow label="Skådespelare" items={inferred.cast} />
-        <WeightedRow label="Teman" items={inferred.keywords} />
-        <TagRow label="Baserat på" items={seedTitles} />
+        <WeightedRow label={t("rowGenres")} items={inferred.genres} />
+        <WeightedRow label={t("rowDirectors")} items={inferred.directors} />
+        <WeightedRow label={t("rowCast")} items={inferred.cast} />
+        <WeightedRow label={t("rowKeywords")} items={inferred.keywords} />
+        <TagRow label={t("rowBasedOn")} items={seedTitles} />
       </div>
 
       <p className="text-xs text-white/40">
-        Stämmer något inte? Justera under &quot;Redigera smak&quot; nedan.
+        {t("adjustHint")}
         {mode === "individual" ? (
           <>
             {" "}
-            <Link href="/swipe" className="text-cyan-300/80 underline-offset-2 hover:underline">
-              Swipa mer
-            </Link>{" "}
-            för att finslipa profilen.
+            {t.rich("swipeMoreHint", {
+              link: (chunks) => (
+                <Link href="/swipe" className="text-cyan-300/80 underline-offset-2 hover:underline">
+                  {chunks}
+                </Link>
+              ),
+            })}
           </>
         ) : null}
       </p>

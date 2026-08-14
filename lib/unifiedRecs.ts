@@ -29,6 +29,13 @@ import {
   type MediaType,
 } from "@/lib/tasteModel";
 import { normalizeSwipeMediaFilter, type SwipeMediaFilter } from "@/lib/swipeMediaFilter";
+import {
+  behaviorBlend,
+  behavioralGenreScore,
+  loadGenreStats,
+  loadGenreStatsForUsers,
+  type GenreStats,
+} from "@/lib/genreStats";
 
 export type { MatchEvidence, MediaType, SwipeMediaFilter };
 
@@ -164,10 +171,55 @@ function yearFrom(item: TMDBListItem): string | undefined {
   return /^\d{4}$/.test(y) ? y : undefined;
 }
 
+/**
+ * Bayesianskt utjämnat kvalitetsmått. Rå vote_average premierade titlar med
+ * små men hängivna röstarkårer (nischade serier på 8.5+ med några hundra
+ * röster gick före brett hyllade titlar) — snittet dras därför mot en global
+ * prior tills röstunderlaget bär. (Benchmark 2026-08-14, fynd 4.)
+ */
+const QUALITY_PRIOR_MEAN = 6.5;
+const QUALITY_PRIOR_WEIGHT = 250;
+
 function qualityScore(voteAvg?: number, voteCount?: number): number {
   if (!voteAvg || !voteCount) return 0;
-  const s = Math.log10(voteCount + 1);
-  return voteAvg * s;
+  const smoothed =
+    (voteAvg * voteCount + QUALITY_PRIOR_MEAN * QUALITY_PRIOR_WEIGHT) /
+    (voteCount + QUALITY_PRIOR_WEIGHT);
+  return smoothed * Math.log10(voteCount + 1);
+}
+
+/**
+ * Kvalitetsgolv: titlar publiken sågat ska inte in i leken alls, oavsett
+ * genrematchning — Velma (3.5) tog sig till leken via Animerat+Komedi+Mysterium.
+ * Golvet kräver ett rimligt röstunderlag så små/nya titlar inte drabbas.
+ */
+const QUALITY_FLOOR_AVG = 5.8;
+const QUALITY_FLOOR_MIN_VOTES = 50;
+
+function belowQualityFloor(item: TMDBListItem): boolean {
+  const votes = item.vote_count ?? 0;
+  const avg = item.vote_average ?? 0;
+  return votes >= QUALITY_FLOOR_MIN_VOTES && avg > 0 && avg < QUALITY_FLOOR_AVG;
+}
+
+/**
+ * Barn-heuristik på kandidatnivå (benchmark 2026-08-14, fynd 5): discover-
+ * filtret `without_genres` missar barnserier som inte är taggade med TMDB:s
+ * Kids-genre (10762) — Scooby-Doo m.fl. är bara Animation+Family. När
+ * showKidsContent är av stoppas därför även Animation∧Family-kombon och allt
+ * Family-taggat på film (samma linje som discover-filtret för film).
+ */
+const TV_KIDS_GENRE_ID = 10762;
+const FAMILY_GENRE_ID = 10751;
+
+function isKidsLikely(genreIds: number[] | undefined, type: MediaType): boolean {
+  if (!genreIds?.length) return false;
+  if (type === "tv" && genreIds.includes(TV_KIDS_GENRE_ID)) return true;
+  if (genreIds.includes(FAMILY_GENRE_ID)) {
+    if (type === "movie") return true;
+    if (genreIds.includes(ANIMATION_GENRE_ID)) return true;
+  }
+  return false;
 }
 
 function recencyBonus(year?: string): number {
@@ -229,6 +281,30 @@ function isExcludedByRecycle(at: Date, recycleDays: number): boolean {
   if (!Number.isFinite(recycleDays) || recycleDays <= 0) return true;
   const ms = recycleDays * 24 * 60 * 60 * 1000;
   return Date.now() - at.getTime() < ms;
+}
+
+/* ---------------- Recycle-straff ----------------
+ *
+ * Benchmark 2026-08-14, fynd 1 — HUVUDORSAKEN till "beiga" lekar: dislikes
+ * utanför recycle-fönstret släpptes tillbaka HELT opåverkade och la sig
+ * överst (55 av 100 kort var redan bortsvepta titlar). Återvinning är en
+ * medveten funktion (recycleAfterDays är en användarinställning), men ett
+ * gammalt nej är fortfarande en signal. Därför:
+ *
+ *   1. Scorestraff som klingar av långsamt: −RECYCLE_PENALTY_BASE vid
+ *      fönstrets slut, halverat efter RECYCLE_PENALTY_HALF_LIFE_DAYS. En
+ *      titel man nobbade för två år sedan är nästan "ny" igen; en som
+ *      nobbades för en månad sedan är det inte.
+ *   2. Andelstak i leken (RECYCLED_SHARE_MAX i MMR-urvalet): även om
+ *      återvunna titlar scorar bra får de aldrig dominera — merparten av
+ *      leken ska alltid vara genuint osett.
+ */
+const RECYCLE_PENALTY_BASE = 2.5;
+const RECYCLE_PENALTY_HALF_LIFE_DAYS = 365;
+const RECYCLED_SHARE_MAX = 0.2;
+
+function recyclePenalty(ageDays: number): number {
+  return RECYCLE_PENALTY_BASE * Math.pow(0.5, ageDays / RECYCLE_PENALTY_HALF_LIFE_DAYS);
 }
 
 /* -------- Watchlist-kandidater i gruppläge -------- */
@@ -462,6 +538,14 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const tastePromise = buildTasteMaps(seeds, locale);
     tastePromise.catch(() => {}); // vakt mot obehandlad rejection före await
 
+    // Beteendebaserade genrevikter (lib/genreStats.ts) — startas här så
+    // läsningen löper parallellt med discover-skanningen. Grupp: summan av
+    // alla medlemmars statistik.
+    const genreStatsPromise: Promise<GenreStats> = isGroup
+      ? loadGenreStatsForUsers(groupMemberIds)
+      : loadGenreStats(uid);
+    genreStatsPromise.catch(() => {});
+
     const providerStringList = resolveProviderStrings(tasteInput);
     const usedProviderIds = getProviderIds(providerStringList);
     const tmdbProviderString = usedProviderIds.length > 0 ? usedProviderIds.join("|") : undefined;
@@ -506,6 +590,13 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const tasteWeight = 1 + 1.5 * tasteConfidence;
 
     const watchKeys = new Set<string>();
+    /**
+     * Titlar som passerat recycle-fönstret och därmed är TILLÅTNA igen — men
+     * med straff (se recyclePenalty ovan). Nyckel → svepets ålder i dagar.
+     * Bara negativa/neutrala beslut (dislike/seen) hamnar här; likes utanför
+     * fönstret är ofarliga att visa igen och ska inte straffas.
+     */
+    const recycledAgeDays = new Map<string, number>();
     for (const r of exclusionRatings) {
       const key = `${r.mediaType}_${r.tmdbId}`;
       // Explicit betyg (1–10) = titeln är sedd OCH bedömd → aldrig tillbaka i
@@ -519,6 +610,12 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       const recycle = recycleByUser.get(r.userId) ?? 14;
       if (isExcludedByRecycle(r.decidedAt, recycle)) {
         watchKeys.add(key);
+      } else if (r.decision === "dislike" || r.decision === "seen") {
+        const ageDays = (Date.now() - r.decidedAt.getTime()) / (24 * 60 * 60 * 1000);
+        // Flera medlemmar kan ha nobbat samma titel (grupp) — behåll det
+        // FÄRSKASTE nejet, det ger störst straff.
+        const prev = recycledAgeDays.get(key);
+        if (prev === undefined || ageDays < prev) recycledAgeDays.set(key, ageDays);
       }
     }
     // Watchlist-exkludering.
@@ -702,8 +799,13 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
               region,
               watch_region: region,
               with_watch_providers: tmdbProviderString,
-              // Barn-tv (My Little Pony m.fl.) exkluderas om barnfiltret är av.
-              without_genres: showKidsContent ? undefined : "10762",
+              // Barn-tv exkluderas om barnfiltret är av. 10762 (Kids) räcker
+              // inte ensamt — många barnserier (Scooby-Doo, Dexters
+              // laboratorium m.fl.) är bara taggade Animation+Family, så
+              // Family (10751) filtreras också. Vuxenserier är i praktiken
+              // aldrig Family-taggade hos TMDB, och isKidsLikely() nedan
+              // fångar det som ändå slinker förbi via andra kandidatvägar.
+              without_genres: showKidsContent ? undefined : "10762,10751",
               with_genres: filters.withGenresTv,
               with_keywords: filters.withKeywords,
               sort_by: "popularity.desc",
@@ -824,6 +926,118 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       broadened.genres = true;
     }
 
+    /* -------- Smakriktad retrieval (pass B/C) --------
+     *
+     * Popularitetsskanningen ovan räcker för nya användare, men en storswipare
+     * som redan betat av populär-toppen på sina tjänster får en pool som
+     * nästan bara består av återvunna dislikes — simuleringen i benchmarken
+     * gav 17 osedda av 121 kandidater efter 40 sidor. Recycle-straffet och
+     * andelstaket kan inte trolla fram osett innehåll som retrieval aldrig
+     * hämtat. När poolen är svulten på osett kör vi därför riktade
+     * discover-pass som gräver där användarens smak bor i stället för i
+     * popularitetstoppen:
+     *
+     *   Pass B: användarens bästa BETEENDE-genrer (genre_stats, samma data
+     *           som viktningen), sorterade på betyg i stället för popularitet.
+     *   Pass C: användarens starkaste smak-keywords (taste-modellen),
+     *           sorterade på röstantal.
+     *
+     * Båda passen behåller provider-/cert-/barnfiltren så kandidaterna är
+     * lika giltiga som huvudskanningens. Allt går sedan genom exakt samma
+     * scoring/straff/MMR — passen ändrar bara VAD som hittas, inte vad som
+     * väljs.
+     */
+    const TASTE_RETRIEVAL_UNSEEN_MIN = 40;
+    const TASTE_RETRIEVAL_PAGES = 2;
+    const unseenAfterScan = baseRaw.reduce(
+      (n, c) => n + (recycledAgeDays.has(`${c.tmdbType}_${c.id}`) ? 0 : 1),
+      0,
+    );
+    if (unseenAfterScan < TASTE_RETRIEVAL_UNSEEN_MIN) {
+      const [genreStatsEarly, tasteEarly] = await Promise.all([
+        genreStatsPromise.catch(() => ({}) as GenreStats),
+        tastePromise.catch(() => null),
+      ]);
+
+      // Pass B: topp-3 beteendegenrer. Rankas på utjämnad kvot × log(underlag)
+      // så en genre med +14 netto på 280 svep (stark, bred signal) inte slås
+      // av en med +5 netto på 25 svep — ren kvotsortering gynnade småprover.
+      const topBehaviorGenres = Object.entries(genreStatsEarly)
+        .map(([gid, s]) => {
+          const total = s.p + s.n;
+          return { gid: Number(gid), total, score: ((s.p - s.n) / (total + 4)) * Math.log10(total + 1) };
+        })
+        .filter((g) => g.total >= 20 && g.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+        .map((g) => g.gid);
+
+      // Pass C: topp-8 positiva smak-keywords. Respektera ett explicit
+      // sub-genre-val (withKeywords) — då styr det, inte de härledda.
+      const topTasteKeywords = withKeywords
+        ? []
+        : Array.from(tasteEarly?.keywordW.entries() ?? [])
+            .filter(([, w]) => w > 0)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([id]) => id);
+
+      const directedQueries: { path: string; params: Record<string, string | number | undefined> }[] = [];
+      const commonMovie = {
+        language: locale,
+        region,
+        watch_region: region,
+        with_watch_providers: tmdbProviderString,
+        without_genres: showKidsContent ? undefined : "10751",
+        certification_country: "SE",
+        "certification.lte": certMax,
+        "vote_count.gte": 300,
+        with_keywords: withKeywords,
+      };
+      const commonTv = {
+        language: locale,
+        region,
+        watch_region: region,
+        with_watch_providers: tmdbProviderString,
+        without_genres: showKidsContent ? undefined : "10762,10751",
+        "vote_count.gte": 150,
+        with_keywords: withKeywords,
+      };
+      for (let p = 1; p <= TASTE_RETRIEVAL_PAGES; p++) {
+        for (const gid of topBehaviorGenres) {
+          if (wantMovie)
+            directedQueries.push({ path: "/discover/movie", params: { ...commonMovie, with_genres: String(gid), sort_by: "vote_average.desc", page: p } });
+          if (wantTv)
+            directedQueries.push({ path: "/discover/tv", params: { ...commonTv, with_genres: String(gid), sort_by: "vote_average.desc", page: p } });
+        }
+        if (topTasteKeywords.length > 0) {
+          const kw = topTasteKeywords.join("|");
+          if (wantMovie)
+            directedQueries.push({ path: "/discover/movie", params: { ...commonMovie, with_keywords: kw, sort_by: "vote_count.desc", page: p } });
+          if (wantTv)
+            directedQueries.push({ path: "/discover/tv", params: { ...commonTv, with_keywords: kw, sort_by: "vote_count.desc", page: p } });
+        }
+      }
+
+      const directedResults = await Promise.all(
+        directedQueries.map((q) =>
+          tmdbGet<TMDBPaged<TMDBListItem>>(q.path, q.params, "force-cache").catch(() => ({
+            page: 1,
+            results: [] as TMDBListItem[],
+          })),
+        ),
+      );
+      for (let i = 0; i < directedResults.length; i++) {
+        const type: MediaType = directedQueries[i].path === "/discover/movie" ? "movie" : "tv";
+        for (const r of directedResults[i].results) {
+          const key = `${type}_${r.id}`;
+          if (watchKeys.has(key) || seenCandidate.has(key)) continue;
+          seenCandidate.add(key);
+          baseRaw.push({ id: r.id, tmdbType: type, item: r });
+        }
+      }
+    }
+
     // Väv in de titlar exakt en medlem sparat. De läggs till baseRaw och går
     // därmed genom samma V1/V2-scoring och MMR som discover-kandidaterna —
     // ingen gräddfil, de ska förtjäna sin plats. Taket hindrar att en medlem
@@ -843,19 +1057,55 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     // Dedupe + index
     const uniq = dedupe(baseRaw);
 
+    // Beteendebaserade genrevikter — startade parallellt med discover ovan.
+    // Blandningen: ju mer swipe-data, desto mer väger vad användaren GÖR och
+    // desto mindre vad hen kryssade i under onboardingen. Benchmarken
+    // 2026-08-14 (fynd 3) visade deklarerade genrer med 76–88 % negativ
+    // swipe-andel — de får aldrig mer ensamma styra. Deklarationen behåller
+    // dock alltid en andel (golv 55 %): den är ett aktivt val och skyddar
+    // mot feedback-loopar där statistiken bara ser det den själv valt ut.
+    const genreStats = await genreStatsPromise.catch(() => ({}) as GenreStats);
+    const statsBlend = behaviorBlend(genreStats);
+    const DECLARED_GENRE_WEIGHT = 1.6 * (1 - 0.45 * statsBlend);
+    const BEHAVIOR_GENRE_WEIGHT = 2.0 * statsBlend;
+
     // V1-score
-    type Scored = { key: string; id: number; type: MediaType; scoreV1: number; base: TMDBListItem };
+    type Scored = {
+      key: string;
+      id: number;
+      type: MediaType;
+      scoreV1: number;
+      base: TMDBListItem;
+      /** Titeln var bortsvept och har passerat recycle-fönstret (straffad + andelstak i MMR). */
+      recycled: boolean;
+    };
     const scoredV1: Scored[] = [];
     for (const u of uniq) {
+      // Kvalitetsgolv: publikt sågade titlar (Velma-fallet) åker ut direkt.
+      if (belowQualityFloor(u.item)) continue;
+      // Barn-heuristik: fångar det discover-filtret missar (otaggade
+      // barnserier, watchlist-injicerade kandidater i grupp).
+      if (!showKidsContent && isKidsLikely(u.item.genre_ids, u.tmdbType)) continue;
+
+      const key = `${u.tmdbType}_${u.id}`;
       const gScore = genreScore(u.item.genre_ids, movieIdToName, tvIdToName, u.tmdbType, likedGenres, dislikedGenres);
+      const bScore = behavioralGenreScore(u.item.genre_ids, genreStats);
       const qScore = qualityScore(u.item.vote_average, u.item.vote_count);
       const rBonus = recencyBonus(yearFrom(u.item));
+      const recycledAge = recycledAgeDays.get(key);
+      const rPenalty = recycledAge !== undefined ? recyclePenalty(recycledAge) : 0;
       scoredV1.push({
-        key: `${u.tmdbType}_${u.id}`,
+        key,
         id: u.id,
         type: u.tmdbType,
-        scoreV1: 1.6 * gScore + qualityWeight * qScore + 0.2 * rBonus,
-        base: u.item
+        scoreV1:
+          DECLARED_GENRE_WEIGHT * gScore +
+          BEHAVIOR_GENRE_WEIGHT * bScore +
+          qualityWeight * qScore +
+          0.2 * rBonus -
+          rPenalty,
+        base: u.item,
+        recycled: recycledAge !== undefined,
       });
     }
     scoredV1.sort((a, b) => b.scoreV1 - a.scoreV1);
@@ -896,6 +1146,46 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       return s;
     }
 
+    /* -------- Franchise-straff (benchmark 2026-08-14, fynd 1/åtgärd 5) --------
+     *
+     * Har användaren nobbat eller betygsatt ≤6 en del av en filmserie ska inte
+     * fler delar ur samma serie rekommenderas — leken hade 5× Apornas planet
+     * och 3× Fantastiska vidunder till en användare som svept bort franchiserna.
+     * Collection-medlemskapet slås upp per kandidat-collection (force-cache, en
+     * gång per franchise totalt) och jämförs mot användarens negativa filmer.
+     * Gäller bara film — TMDB har inga collections för TV.
+     */
+    const FRANCHISE_PENALTY = 1.8;
+    const negativeMovieIds = new Set<number>();
+    for (const r of exclusionRatings) {
+      if (r.mediaType !== "movie") continue;
+      if (r.decision === "dislike" || (r.rating != null && r.rating <= 6)) {
+        negativeMovieIds.add(r.tmdbId);
+      }
+    }
+
+    type TMDBCollection = { parts?: { id: number }[] };
+    const collectionIds = new Set<number>();
+    for (const t of topItems) {
+      if (t.type !== "movie") continue;
+      const f = featureCache.get(`${t.type}:${t.id}:${locale}`);
+      if (f?.collectionId) collectionIds.add(f.collectionId);
+    }
+    /** Collections där minst en del är nobbad/lågt betygsatt. */
+    const taintedCollections = new Set<number>();
+    if (negativeMovieIds.size > 0 && collectionIds.size > 0) {
+      await Promise.all(
+        Array.from(collectionIds).map(async (cid) => {
+          const col = await tmdbGet<TMDBCollection>(`/collection/${cid}`, {}, "force-cache").catch(
+            () => null,
+          );
+          if (col?.parts?.some((p) => negativeMovieIds.has(p.id))) {
+            taintedCollections.add(cid);
+          }
+        }),
+      );
+    }
+
     // Slutscore V3 (Förenklad! Providers är redan garanterade via TMDB)
     type ScoredFinal = {
       id: number;
@@ -907,6 +1197,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       kwSet: Set<number>;
       genSet: Set<number>;
       features: CachedFeatures;
+      /** Se Scored.recycled — styr andelstaket i MMR-urvalet nedan. */
+      recycled: boolean;
     };
 
     // Animationsstil: genren "Animation" är EN bucket hos TMDB men två världar i
@@ -941,6 +1233,10 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         genres: [],
       };
       const tasteOnly = scoreTaste(f);
+      const franchisePenalty =
+        s.type === "movie" && f.collectionId && taintedCollections.has(f.collectionId)
+          ? FRANCHISE_PENALTY
+          : 0;
 
       scoredFinal.push({
         id: s.id,
@@ -955,25 +1251,35 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
           // Skalas med smak-konfidensen så det växer i takt med att data samlas.
           DERIVED_GENRE_WEIGHT *
             tasteConfidence *
-            ((s.base.genre_ids ?? []).reduce((sum, gid) => sum + (taste.genreW.get(gid) ?? 0), 0)),
+            ((s.base.genre_ids ?? []).reduce((sum, gid) => sum + (taste.genreW.get(gid) ?? 0), 0)) -
+          franchisePenalty,
         scoreTasteOnly: tasteOnly,
         kwSet: new Set(f.keywords.map((kw) => kw.id)),
         genSet: new Set((s.base.genre_ids ?? []) as number[]),
         features: f,
+        recycled: s.recycled,
       });
     }
 
-    // Diversifiering (MMR)
+    // Diversifiering (MMR) + andelstak för återvunna titlar: högst
+    // RECYCLED_SHARE_MAX av leken får vara tidigare bortsvept, oavsett score.
+    // När taket är nått hoppar urvalet över återvunna kandidater — finns inget
+    // osett kvar i poolen tillåts de ändå (hellre en full lek än en tom).
     const lambda = 0.3;
     const K = Math.min(100, scoredFinal.length);
+    const recycledMax = Math.ceil(K * RECYCLED_SHARE_MAX);
+    let recycledSelected = 0;
     const selected: ScoredFinal[] = [];
     const pool = [...scoredFinal].sort((a, b) => b.scoreFinal - a.scoreFinal);
 
     while (selected.length < K && pool.length > 0) {
-      let bestIdx = 0;
+      const recycledCapped =
+        recycledSelected >= recycledMax && pool.some((c) => !c.recycled);
+      let bestIdx = -1;
       let bestScore = -Infinity;
       for (let i = 0; i < pool.length; i++) {
         const cand = pool[i];
+        if (recycledCapped && cand.recycled) continue;
         let sim = 0;
         for (const s of selected) {
           const a = cand.kwSet.size ? cand.kwSet : cand.genSet;
@@ -986,6 +1292,8 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
           bestIdx = i;
         }
       }
+      if (bestIdx === -1) break; // bara överkvoterade återvunna kvar
+      if (pool[bestIdx].recycled) recycledSelected++;
       selected.push(pool[bestIdx]);
       pool.splice(bestIdx, 1);
     }

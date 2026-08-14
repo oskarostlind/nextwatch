@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
+import { recordSwipeGenres } from "../../../../lib/genreStats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,12 @@ export async function POST(req: Request) {
     // Betyg = du har sett den → bort ur att-se-listan (Oskars beslut: alltid).
     // Titeln syns i stället under Betyg-fliken.
     await prisma.watchlist.deleteMany({ where: { userId: uid, tmdbId, mediaType } });
+
+    // Beteendebaserad genrestatistik (lib/genreStats.ts) — fire-and-forget.
+    // OBS: ett betyg efter ett tidigare svep ger en andra observation för
+    // titeln (svep + betyg). Acceptabelt: betyget är en starkare, färskare
+    // signal och statistiken är en viktnings-approximation, inte bokföring.
+    void recordSwipeGenres({ userId: uid, tmdbId, mediaType, decision: "RATED", rating });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

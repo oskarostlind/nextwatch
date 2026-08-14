@@ -24,9 +24,24 @@ type TMDBDetailsWithAppends = {
   keywords?: TMDBKeywords | TMDBKeywordsTV;
   credits?: TMDBCredits;
   genres?: { id: number; name: string }[];
+  /** Bara film — TMDB:s franchise-gruppering. Följer med gratis i detaljsvaret. */
+  belongs_to_collection?: { id: number } | null;
 };
 
-export type Seed = { id: number; type: MediaType; weight: number; title?: string };
+export type Seed = {
+  id: number;
+  type: MediaType;
+  weight: number;
+  title?: string;
+  /**
+   * När signalen uppstod (betygets decidedAt / watchlistens addedAt), epoch-ms.
+   * Används som tiebreak i buildSeeds: vid lika |vikt| vinner färskast signal.
+   * Utan detta avgjorde Map-insättningsordningen — i praktiken de ÄLDSTA
+   * watchlist-raderna, så smakmodellen fastnade på användarens första
+   * onboarding-sparningar för alltid (benchmark 2026-08-14, fynd 2).
+   */
+  at?: number;
+};
 
 export type WeightedLabel = { id: number; name: string; weight: number };
 
@@ -60,6 +75,8 @@ export type RatingSeedRow = {
   mediaType: string;
   rating: number | null;
   decision: string;
+  /** Valfri: krävs inte av äldre anropare, men ger recency-tiebreak i buildSeeds. */
+  decidedAt?: Date | null;
 };
 
 export type TasteInput = {
@@ -94,9 +111,9 @@ export type TasteInput = {
     maxCert: string | null;
   } | null;
   ratings: RatingSeedRow[];
-  watchlist: Array<{ tmdbId: number; mediaType: string }>;
+  watchlist: Array<{ tmdbId: number; mediaType: string; addedAt?: Date | null }>;
   groupRatings: RatingSeedRow[];
-  groupWatchlist: Array<{ tmdbId: number; mediaType: string }>;
+  groupWatchlist: Array<{ tmdbId: number; mediaType: string; addedAt?: Date | null }>;
 };
 
 type FeatureBundle = {
@@ -109,6 +126,12 @@ type FeatureBundle = {
    * från Profile.favoriteGenres, som användaren kryssat i själv.
    */
   genres: { id: number; name: string }[];
+  /**
+   * TMDB-collection (franchise) för FILMER, null/undefined annars. Används av
+   * franchise-straffet i lib/unifiedRecs.ts: fler delar ur en serie användaren
+   * redan tröttnat på ska inte rekommenderas.
+   */
+  collectionId?: number | null;
 };
 
 /* ---------------- TMDB ---------------- */
@@ -203,7 +226,13 @@ export async function fetchFeatures(type: MediaType, id: number, locale: string)
     const keywords = extractKeywords(primary);
     const { directors, cast } = extractPeople(primary, type);
     if (keywords.length || directors.length || cast.length) {
-      return { keywords, directors, cast, genres: primary.genres ?? [] };
+      return {
+        keywords,
+        directors,
+        cast,
+        genres: primary.genres ?? [],
+        collectionId: primary.belongs_to_collection?.id ?? null,
+      };
     }
   }
 
@@ -216,6 +245,7 @@ export async function fetchFeatures(type: MediaType, id: number, locale: string)
     keywords: extractKeywords(fallback),
     ...extractPeople(fallback, type),
     genres: fallback.genres ?? [],
+    collectionId: fallback.belongs_to_collection?.id ?? null,
   };
 }
 
@@ -351,20 +381,33 @@ export async function buildTasteLabels(seeds: Seed[], locale: string): Promise<T
 
 /* ---------------- Seeds ---------------- */
 
+// Viktfilosofi (omgjord efter benchmark 2026-08-14, fynd 2): ett explicit
+// SIFFERBETYG är den starkaste smaksignal som finns och ska alltid slå både
+// watchlist-sparningar (0.6) och rena likes (0.7). Tidigare vägde watchlist
+// 1.0 = samma som en tia, och eftersom seed-listan kapades på |vikt| med
+// insättningsordning som tiebreak drunknade betygen i watchlist-rader.
 export function numericSeedWeight(rating: number): number | null {
-  if (rating >= 7) return (rating - 6) / 4;
-  if (rating <= 4) return -(5 - rating) / 4;
-  if (rating === 5) return -0.12;
+  if (rating >= 10) return 1.5;
+  if (rating === 9) return 1.2;
+  if (rating === 8) return 0.9;
+  if (rating === 7) return 0.45;
   if (rating === 6) return -0.06;
-  return null;
+  if (rating === 5) return -0.12;
+  // 1–4: uttryckligt underkänt — stark negativ seed (4 → −0.75 … 1 → −1.5).
+  return -0.5 - (5 - rating) * 0.25;
 }
 
 export function decisionSeedWeight(decision: string): number | null {
-  if (decision === "dislike") return -0.5;
-  if (decision === "like") return 0.85;
-  if (decision === "seen") return -0.15;
+  if (decision === "dislike") return -0.35;
+  if (decision === "like") return 0.7;
+  if (decision === "seen") return -0.1;
   return null;
 }
+
+/** Watchlist = avsiktlig sparning men obekräftad smak — under like (0.7). */
+export const WATCHLIST_SEED_WEIGHT = 0.6;
+/** Deklarerad favoritfilm/-serie — starkaste explicita valet i profilen. */
+export const FAVORITE_SEED_WEIGHT = 1.6;
 
 export function seedFromRatingRow(r: RatingSeedRow): number | null {
   if (typeof r.rating === "number") {
@@ -393,46 +436,74 @@ function asFavoriteItem(x: unknown): FavoriteItem | null {
   };
 }
 
+// Seed-tak. Höjda från 14/20 (benchmark 2026-08-14, fynd 2): 14 seeds av
+// ~900 signaler gav en smakmodell byggd på en bråkdel av datat, och negativa
+// seeds (|0.35| < allt positivt) överlevde ALDRIG kapningen — modellen var
+// blind för vad användaren ogillar. Positiva och negativa kapas därför var
+// för sig. Kostnaden är fler fetchFeatures-uppslag per lek; de går genom
+// force-cache + concurrency-grinden i lib/tmdbClient och löper parallellt
+// med discover-skanningen, så väggklockan påverkas marginellt.
+const SEED_CAP_POS_SOLO = 24;
+const SEED_CAP_NEG_SOLO = 12;
+const SEED_CAP_POS_GROUP = 30;
+const SEED_CAP_NEG_GROUP = 10;
+
 export function buildSeeds(input: TasteInput): Seed[] {
   const seedWeights = new Map<string, Seed>();
+  const now = Date.now();
 
-  function addSeed(id: number, type: MediaType, weight: number, title?: string) {
+  function addSeed(id: number, type: MediaType, weight: number, title?: string, at?: number) {
     const k = `${type}_${id}`;
     const prev = seedWeights.get(k);
     const merged = mergeSeedWeight(prev?.weight, weight);
-    seedWeights.set(k, { id, type, weight: merged, title: title ?? prev?.title });
+    seedWeights.set(k, {
+      id,
+      type,
+      weight: merged,
+      title: title ?? prev?.title,
+      at: Math.max(prev?.at ?? 0, at ?? 0),
+    });
   }
 
   if (input.isGroup) {
     for (const p of input.memberProfiles) {
       const fm = asFavoriteItem(p.favoriteMovie);
       const fs = asFavoriteItem(p.favoriteShow);
-      if (fm?.id) addSeed(fm.id, "movie", 1.0, fm.title);
-      if (fs?.id) addSeed(fs.id, "tv", 1.0, fs.title);
+      // Favoriter saknar tidsstämpel — räknas som "nu" så de aldrig förlorar
+      // en recency-tiebreak: de är profilens mest explicita val.
+      if (fm?.id) addSeed(fm.id, "movie", FAVORITE_SEED_WEIGHT, fm.title, now);
+      if (fs?.id) addSeed(fs.id, "tv", FAVORITE_SEED_WEIGHT, fs.title, now);
     }
     for (const w of input.groupWatchlist) {
-      addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
+      addSeed(w.tmdbId, w.mediaType as MediaType, WATCHLIST_SEED_WEIGHT, undefined, w.addedAt?.getTime());
     }
   } else {
     const favMovie = asFavoriteItem(input.profile.favoriteMovie);
     const favShow = asFavoriteItem(input.profile.favoriteShow);
-    if (favMovie?.id) addSeed(favMovie.id, "movie", 1.0, favMovie.title);
-    if (favShow?.id) addSeed(favShow.id, "tv", 1.0, favShow.title);
+    if (favMovie?.id) addSeed(favMovie.id, "movie", FAVORITE_SEED_WEIGHT, favMovie.title, now);
+    if (favShow?.id) addSeed(favShow.id, "tv", FAVORITE_SEED_WEIGHT, favShow.title, now);
     for (const w of input.watchlist) {
-      addSeed(w.tmdbId, w.mediaType as MediaType, 1.0);
+      addSeed(w.tmdbId, w.mediaType as MediaType, WATCHLIST_SEED_WEIGHT, undefined, w.addedAt?.getTime());
     }
   }
 
   const seedRatings = input.isGroup ? input.groupRatings : input.ratings;
   for (const r of seedRatings) {
     const w = seedFromRatingRow(r);
-    if (w !== null) addSeed(r.tmdbId, r.mediaType as MediaType, w);
+    if (w !== null) addSeed(r.tmdbId, r.mediaType as MediaType, w, undefined, r.decidedAt?.getTime());
   }
 
-  const seedCap = input.isGroup ? 20 : 14;
-  return Array.from(seedWeights.values())
-    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-    .slice(0, seedCap);
+  const byStrengthThenRecency = (a: Seed, b: Seed) =>
+    Math.abs(b.weight) - Math.abs(a.weight) || (b.at ?? 0) - (a.at ?? 0);
+
+  const all = Array.from(seedWeights.values());
+  const positives = all.filter((s) => s.weight > 0).sort(byStrengthThenRecency);
+  const negatives = all.filter((s) => s.weight < 0).sort(byStrengthThenRecency);
+
+  const posCap = input.isGroup ? SEED_CAP_POS_GROUP : SEED_CAP_POS_SOLO;
+  const negCap = input.isGroup ? SEED_CAP_NEG_GROUP : SEED_CAP_NEG_SOLO;
+
+  return [...positives.slice(0, posCap), ...negatives.slice(0, negCap)];
 }
 
 export function resolveGenreSets(input: TasteInput): { liked: Set<string>; disliked: Set<string> } {
@@ -513,11 +584,13 @@ export async function loadTasteInput(uid: string, groupCode: string | null): Pro
     prisma.profile.findUnique({ where: { userId: uid } }),
     prisma.rating.findMany({
       where: { userId: uid },
-      select: { tmdbId: true, mediaType: true, rating: true, decision: true },
+      // decidedAt/addedAt: recency-tiebreak i buildSeeds — utan dem faller
+      // kapningen tillbaka på insättningsordning igen.
+      select: { tmdbId: true, mediaType: true, rating: true, decision: true, decidedAt: true },
     }),
     prisma.watchlist.findMany({
       where: { userId: uid },
-      select: { tmdbId: true, mediaType: true },
+      select: { tmdbId: true, mediaType: true, addedAt: true },
     }),
     groupCode
       ? prisma.groupMember.findMany({
@@ -552,11 +625,11 @@ export async function loadTasteInput(uid: string, groupCode: string | null): Pro
     ? await Promise.all([
         prisma.watchlist.findMany({
           where: { userId: { in: groupMemberIds } },
-          select: { tmdbId: true, mediaType: true },
+          select: { tmdbId: true, mediaType: true, addedAt: true },
         }),
         prisma.rating.findMany({
           where: { userId: { in: groupMemberIds } },
-          select: { tmdbId: true, mediaType: true, rating: true, decision: true },
+          select: { tmdbId: true, mediaType: true, rating: true, decision: true, decidedAt: true },
         }),
       ])
     : [[], []];

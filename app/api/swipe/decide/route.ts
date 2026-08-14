@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
 import { getSwipeAllowance, swipeLimitPayload } from "../../../../lib/swipeLimit";
+import { recordSwipeGenres } from "../../../../lib/genreStats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
       decision,
     },
   });
+
+  // Beteendebaserad genrestatistik (lib/genreStats.ts) — fire-and-forget,
+  // får aldrig blockera svepet.
+  void recordSwipeGenres({ userId: uid, tmdbId, mediaType, decision });
 
   // Lägg till i watchlist vid "like"
   if (decision === "like") {

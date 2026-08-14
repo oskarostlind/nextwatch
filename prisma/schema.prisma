@@ -127,6 +127,15 @@ model Profile {
   /// filter (with_keywords) i lib/unifiedRecs.ts för solo-läget, precis som
   /// Group.favoriteKeywordIds gör för grupper.
   favoriteKeywordIds Int[]    @default([]) @map("favorite_keyword_ids")
+  /// Beteendebaserad genrestatistik, uppdateras vid varje swipe/betyg
+  /// (lib/genreStats.ts): { "<tmdb-genre-id>": { "p": antal positiva, "n": antal
+  /// negativa } }. Recs-pipelinen viktar genrer efter detta i stället för att
+  /// blint lita på favoriteGenres — benchmarken 2026-08-14
+  /// (docs/recs-benchmark-2026-08-14.md) visade att deklarerade genrer kan ha
+  /// 76–88 % negativ swipe-andel. Null = ingen data än (ny användare).
+  /// OBS: läses/skrivs med rå SQL tills klienten är omgenererad — se
+  /// lib/genreStats.ts för varför.
+  genreStats         Json?    @map("genre_stats")
 
   // Swipe-inställningar (styrs från profilen).
   /// Visa hyr-/köpalternativ på titelkort. Av som standard: annars tror användaren

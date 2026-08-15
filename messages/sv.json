@@ -974,7 +974,11 @@
     "cta": "Bli Premium – 19 kr/mån",
     "heading": "Du har nått dagens gräns",
     "opening": "Öppnar…",
-    "resetHint": "Gränsen nollställs löpande under dygnet."
+    "resetHint": "Gränsen nollställs löpande under dygnet.",
+    "watchAd": "Se en video – få {bonus} swipes till",
+    "watchAdBusy": "Visar video…",
+    "watchAdFailed": "Videon kunde inte visas just nu. Försök igen om en stund.",
+    "watchAdLeft": "{count, plural, one {1 video kvar idag} other {# videor kvar idag}}"
   },
   "taste": {
     "adjustHint": "Stämmer något inte? Justera under \"Redigera smak\" nedan.",

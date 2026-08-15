@@ -84,8 +84,25 @@ model User {
   verifications   Verification[]
   pushTokens      PushToken[]
   onboardingTours OnboardingTour[]
+  swipeBonuses    SwipeBonus[]
 
   @@map("users")
+}
+
+/// Extra swipes intjänade via rewarded video (AdMob, iOS). En rad per tittad
+/// video; lib/swipeLimit.ts summerar rader inom det rullande 24h-fönstret och
+/// adderar till dagsgränsen. Beviljas server-side av /api/swipe/bonus (max 3
+/// per rullande dygn) — klienten kan inte skriva hit direkt.
+model SwipeBonus {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  amount    Int
+  grantedAt DateTime @default(now()) @map("granted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, grantedAt], map: "idx_swipe_bonuses_user_granted")
+  @@map("swipe_bonuses")
 }
 
 model PushToken {

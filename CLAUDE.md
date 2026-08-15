@@ -87,7 +87,7 @@ Until 2026-08-13 every one of these was inert and premium bought nothing — the
 | Gate | Free | Premium | Where |
 |---|---|---|---|
 | Ads | interstitial every 15 swipes (iOS, solo **and** group), ad card every 10th (web, solo only) | none | `lib/ads.ts`, `lib/admobAds.ts` |
-| Daily swipes | 100 / rolling 24 h | unlimited | `lib/swipeLimit.ts` |
+| Daily swipes | 100 / rolling 24 h (+100 per rewarded video, max 3/day, iOS only — `/api/swipe/bonus` writes `SwipeBonus` rows) | unlimited | `lib/swipeLimit.ts` |
 | Group size | 3 members | 20 members | `lib/groupLimits.ts` |
 | Taste profile | upsell | full panel | `lib/tasteFeature.ts` |
 
@@ -95,7 +95,8 @@ Until 2026-08-13 every one of these was inert and premium bought nothing — the
 - **The group deck carries no ad cards** — only interstitials. `withAdsMaybe` is applied to the solo fetch only; `_legacy.tsx` has no `kind === "ad"` branch, so an injected ad card would render as a broken title and post a group vote for `tmdbId: -1`. Add that branch to every one of `handleLike`/`handleDislike`/`handleSeen`/`sendVote`/undo before ever enabling ad cards in group mode.
 - **Group caps follow the group's creator, not the joiner** — a paying host lifts the whole party. Enforced on all three entry points: `group/join`, `group/invite` (fails early, at send time) and `group/invite/respond`. Existing over-cap groups are never pruned; only new joins are blocked.
 - The swipe limit is enforced server-side on `/api/rate`, `/api/swipe/decide` and `/api/group/vote` (429 + `error:"swipe_limit"`), so it can't be bypassed from the client.
-- Tuning without a deploy: `FREE_DAILY_SWIPE_LIMIT`, `NW_FREE_GROUP_MAX_MEMBERS`, `NW_PREMIUM_GROUP_MAX_MEMBERS`. `FREE_DAILY_SWIPE_LIMIT=0` explicitly means unlimited (kill switch); *unset* means the 100 default.
+- Tuning without a deploy: `FREE_DAILY_SWIPE_LIMIT`, `NW_FREE_GROUP_MAX_MEMBERS`, `NW_PREMIUM_GROUP_MAX_MEMBERS`, `NW_REWARDED_MAX_PER_DAY` (0 disables the swipe reward), `NW_REWARDED_SWIPE_BONUS`. `FREE_DAILY_SWIPE_LIMIT=0` explicitly means unlimited (kill switch); *unset* means the 100 default.
+- The rewarded swipe bonus trusts the client's Rewarded event (no AdMob SSV callback) — the 3/day server-side cap bounds what spoofing could gain.
 
 ### App Store compliance (don't regress these)
 Three behaviours exist because App Review demanded them — see `.cursor/skills/` and the git history before changing them:

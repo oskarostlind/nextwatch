@@ -974,7 +974,11 @@
     "cta": "Get Premium – SEK 19/month",
     "heading": "You've hit today's limit",
     "opening": "Opening…",
-    "resetHint": "The limit resets on a rolling basis through the day."
+    "resetHint": "The limit resets on a rolling basis through the day.",
+    "watchAd": "Watch a video – get {bonus} more swipes",
+    "watchAdBusy": "Showing video…",
+    "watchAdFailed": "The video couldn't be shown right now. Try again in a bit.",
+    "watchAdLeft": "{count, plural, one {1 video left today} other {# videos left today}}"
   },
   "taste": {
     "adjustHint": "Something off? Adjust it under \"Edit your taste\" below.",

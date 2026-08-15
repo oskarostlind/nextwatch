@@ -266,18 +266,14 @@ export function registerSwipeForAds(): void {
   })();
 }
 
-/* ---------- Rewarded: 24h annonsfritt ---------- */
-
-/** Kan erbjudandet visas alls? (native, ej premium, inte redan aktivt) */
-export function canOfferAdFreeReward(): boolean {
-  return initialized && eligible && !adFreeActive();
-}
+/* ---------- Rewarded ---------- */
 
 /**
- * Visar belöningsvideon. Resolvar true om användaren tittade klart och fick
- * sina 24h — bannern tas ner direkt.
+ * Visar en belöningsvideo och resolvar true om användaren tittade klart
+ * (Rewarded-eventet fyrade). Delas av båda belöningarna: 24h annonsfritt
+ * och +swipes vid nådd dagsgräns.
  */
-export async function watchRewardedForAdFree(): Promise<boolean> {
+async function showRewardedVideo(): Promise<boolean> {
   if (!(await initAdMobIfEligible())) return false;
   try {
     const { AdMob, RewardAdPluginEvents } = await plugin();
@@ -298,9 +294,56 @@ export async function watchRewardedForAdFree(): Promise<boolean> {
     await AdMob.prepareRewardVideoAd({ adId: adId("rewarded"), npa });
     await AdMob.showRewardVideoAd();
 
-    const ok = await rewarded;
-    if (ok) grantAdFree24h();
-    return ok;
+    return await rewarded;
+  } catch {
+    return false;
+  }
+}
+
+/* ---------- Rewarded: 24h annonsfritt ---------- */
+
+/** Kan erbjudandet visas alls? (native, ej premium, inte redan aktivt) */
+export function canOfferAdFreeReward(): boolean {
+  return initialized && eligible && !adFreeActive();
+}
+
+/**
+ * Visar belöningsvideon. Resolvar true om användaren tittade klart och fick
+ * sina 24h — bannern tas ner direkt.
+ */
+export async function watchRewardedForAdFree(): Promise<boolean> {
+  const ok = await showRewardedVideo();
+  if (ok) grantAdFree24h();
+  return ok;
+}
+
+/* ---------- Rewarded: +swipes vid nådd dagsgräns ---------- */
+
+/**
+ * Kan "+swipes"-erbjudandet visas? Till skillnad från annonsfritt kräver det
+ * inget aktivt fönster — bara native + ej premium. Servern (via
+ * /api/swipe/limit rewardedRemaining) avgör om det finns grants kvar idag.
+ */
+export function canOfferSwipeReward(): boolean {
+  return initialized && eligible;
+}
+
+/**
+ * Visar belöningsvideon och löser in +swipes server-side. Resolvar true när
+ * både videon tittats klart OCH /api/swipe/bonus beviljat bonusen — först då
+ * släpper 429-spärren i /api/rate m.fl. och väggen kan tas ner.
+ */
+export async function watchRewardedForSwipes(): Promise<boolean> {
+  const ok = await showRewardedVideo();
+  if (!ok) return false;
+  try {
+    const res = await fetch("/api/swipe/bonus", { method: "POST", cache: "no-store" });
+    if (!res.ok) {
+      adDebug(`Swipe-bonus nekades av servern (${res.status})`);
+      return false;
+    }
+    const j = (await res.json()) as { ok?: boolean };
+    return Boolean(j?.ok);
   } catch {
     return false;
   }

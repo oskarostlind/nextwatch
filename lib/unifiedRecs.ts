@@ -36,6 +36,7 @@ import {
   loadGenreStatsForUsers,
   type GenreStats,
 } from "@/lib/genreStats";
+import { fillMissingRatings } from "@/lib/omdbRating";
 
 export type { MatchEvidence, MediaType, SwipeMediaFilter };
 
@@ -1333,6 +1334,27 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         ...(isTopMatch ? { topMatch: { evidence: derivedEvidence.slice(0, 3) } } : {}),
       };
     });
+
+    // Osynlig IMDb-fallback (lib/omdbRating.ts): fyller i vote_average för de
+    // kort där TMDB:s eget saknas/är opålitligt (för få röster). Körs EFTER
+    // MMR-urvalet — bara på de ~K titlar som faktiskt hamnar i leken, inte
+    // hela kandidatpoolen — och är alltid en no-op utan OMDB_API_KEY. Kommande
+    // titlar (lib/upcomingTitles.ts) vävs in senare i app/api/recs/unified/
+    // route.ts, EFTER det här steget, så de träffas aldrig här — precis rätt,
+    // de saknar rating av en legitim anledning (ännu ej släppta).
+    // "items" och "selected" har samma ordning (samma .map ovan), så
+    // vote_count kan paras ihop index-för-index.
+    const ratingFillCards = items.map((it, i) => ({
+      tmdbId: it.id,
+      mediaType: it.tmdbType,
+      rating: it.vote_average ?? null,
+      voteCount: selected[i]?.base.vote_count ?? null,
+    }));
+    await fillMissingRatings(ratingFillCards);
+    for (let i = 0; i < items.length; i++) {
+      const filled = ratingFillCards[i].rating;
+      if (filled != null) items[i].vote_average = filled;
+    }
 
     return {
       ok: true,

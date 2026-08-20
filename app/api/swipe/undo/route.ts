@@ -45,6 +45,13 @@ export async function POST(req: Request) {
       await prisma.watchlist.deleteMany({
         where: { userId: uid, tmdbId, mediaType },
       });
+      // Bevakningen av en osläppt titel ("Kommer snart"-kort) följer liken: ångrar
+      // man liken ska man inte få ett pling om ett halvår. deleteMany är no-op när
+      // titeln inte var bevakad, så ingen extra gren behövs — och swipar man om
+      // återskapas raden av upserten i /api/watchlist/like.
+      await prisma.releaseFollow.deleteMany({
+        where: { userId: uid, tmdbId, mediaType },
+      });
     }
 
     if (groupCode) {

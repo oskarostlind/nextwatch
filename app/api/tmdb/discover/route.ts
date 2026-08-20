@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { fillMissingRatings } from "@/lib/omdbRating";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,6 +141,22 @@ export async function GET(req: Request) {
       year: type === "movie" ? yearFrom(it.release_date) : yearFrom(it.first_air_date),
       voteAverage: it.vote_average ?? null,
     }));
+
+    // Osynlig IMDb-fallback (lib/omdbRating.ts): fyller i voteAverage för kort
+    // där TMDB:s eget saknas/är opålitligt (för få röster). No-op utan
+    // OMDB_API_KEY, kastar aldrig. "items" och "results" har samma ordning
+    // (samma .map ovan), så vote_count kan paras ihop index-för-index.
+    const ratingFillCards = items.map((it, i) => ({
+      tmdbId: it.id,
+      mediaType: type,
+      rating: it.voteAverage,
+      voteCount: results[i]?.vote_count ?? null,
+    }));
+    await fillMissingRatings(ratingFillCards);
+    for (let i = 0; i < items.length; i++) {
+      const filled = ratingFillCards[i].rating;
+      if (filled != null) items[i].voteAverage = filled;
+    }
 
     return NextResponse.json({
       ok: true,

@@ -42,6 +42,19 @@ model User {
   lastDailyRecTmdbId    Int?    @map("last_daily_rec_tmdb_id")
   lastDailyRecMediaType String? @map("last_daily_rec_media_type")
 
+  /// När en recs-push FAKTISKT skickades. Skild från lastDailyRecAt med flit:
+  /// den stämplas vid varje försök och styr bara köordningen, den här styr
+  /// takten. Cron-schemat ligger kvar på dagligen (i Vercel-dashboarden, inte
+  /// i repot) men cronen hoppar över den som fick en push för mindre än
+  /// NW_REC_PUSH_MIN_HOURS sedan — 60 h landar på 2–3 pushar i veckan.
+  lastRecPushSentAt DateTime? @map("last_rec_push_sent_at")
+
+  /// Senaste "vi saknar dig"-pushen (Duolingo-stil) och vilken textvariant som
+  /// användes. Varianten sparas enbart för att slippa samma skämt två gånger i
+  /// rad — det är ingen statistikkolumn.
+  lastReEngagementPushAt  DateTime? @map("last_re_engagement_push_at")
+  lastReEngagementVariant String?   @map("last_re_engagement_variant")
+
   // Username för kompis-sök
   username String? @unique
 
@@ -85,6 +98,7 @@ model User {
   pushTokens      PushToken[]
   onboardingTours OnboardingTour[]
   swipeBonuses    SwipeBonus[]
+  releaseFollows  ReleaseFollow[]
 
   @@map("users")
 }
@@ -224,6 +238,62 @@ model watchlist {
 
   @@unique([userId, tmdbId, mediaType])
   @@map("watchlist")
+}
+
+/// Cache för IMDb-betyg hämtade via OMDb (lib/omdbRating.ts) — fyller i
+/// betyget OSYNLIGT när TMDB:s eget saknas eller är opålitligt (för få
+/// röster). Global per titel (ingen userId): samma tmdbId+mediaType delas av
+/// alla användare, så en enda OMDb-träff räcker för hela appen.
+///
+/// Cachade NOLLTRÄFFAR (titeln saknar IMDb-koppling, eller IMDb har inget
+/// betyg alls) sparas OCKSÅ — annars skulle samma ratinglösa titel slå mot
+/// OMDb:s 1000/dygn-gräns om och om igen. fetchedAt + TTL (30 dagar, se
+/// EXTERNAL_RATING_TTL_MS i lib/omdbRating.ts) avgör när raden anses gammal
+/// och slås upp igen.
+model ExternalRating {
+  tmdbId     Int      @map("tmdb_id")
+  mediaType  String   @map("media_type")
+  imdbId     String?  @map("imdb_id")
+  imdbRating Float?   @map("imdb_rating")
+  imdbVotes  Int?     @map("imdb_votes")
+  fetchedAt  DateTime @default(now()) @map("fetched_at")
+
+  @@unique([tmdbId, mediaType])
+  @@map("external_ratings")
+}
+
+/// Bevakning av en ännu OSLÄPPT titel. Skapas när användaren gillar ett
+/// "Kommer snart"-kort i solo-swipen (se lib/upcomingTitles.ts): liken sparar
+/// titeln i watchlist som vanligt OCH lägger en rad här. Cronen
+/// (app/api/cron/daily-recs) sveper raderna och pushar när premiären passerat.
+///
+/// releaseDate är nullable med flit: TMDB har gott om titlar utan datum (TBA),
+/// och de ska gå att följa ändå — cronens andra svep fyller på datumet i
+/// efterhand när TMDB fått det. checkedAt håller det svepet rättvist (samma
+/// mönster som User.lastDailyRecAt: den som kollades längst sedan går först),
+/// annars hade samma 100 rader hämtats om varje körning.
+model ReleaseFollow {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  tmdbId      Int       @map("tmdb_id")
+  mediaType   String    @map("media_type")
+  title       String
+  releaseDate DateTime? @map("release_date")
+  /// Stämplas när släpp-notisen faktiskt gått iväg. null = bevakningen är aktiv.
+  notifiedAt  DateTime? @map("notified_at")
+  /// Senaste gången releaseDate slogs upp mot TMDB igen.
+  checkedAt   DateTime? @map("checked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // En bevakning per titel och användare — gör om-liken (och ångra + swipa om)
+  // idempotent via upsert.
+  @@unique([userId, tmdbId, mediaType])
+  // Cronens svep: "aktiva bevakningar vars premiär passerat". notifiedAt först
+  // eftersom den filtrerar bort merparten av raderna (allt redan notifierat).
+  @@index([notifiedAt, releaseDate], map: "idx_release_follows_notified_release")
+  @@map("release_follows")
 }
 
 /// Filmtips mellan vänner ("chatten", omscopad): ett delat titelkort, ingen

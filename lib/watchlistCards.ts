@@ -12,6 +12,7 @@
 import prisma from "@/lib/prisma";
 import { tmdbFetch } from "@/lib/tmdbClient";
 import { extractKeywordIds } from "@/lib/subgenres";
+import { fillMissingRatings } from "@/lib/omdbRating";
 
 export type WatchlistCard = {
   id: string;
@@ -153,5 +154,25 @@ export async function buildWatchlistCards(
     })
   );
 
-  return results.filter((it): it is WatchlistCard => it !== null);
+  const cards = results.filter((it): it is WatchlistCard => it !== null);
+
+  // Osynlig IMDb-fallback (lib/omdbRating.ts): fyller i betyget för kort utan
+  // TMDB-rating. WatchlistCard bär inte vote_count vidare (se TmdbTitle ovan),
+  // så bara "helt saknar rating" triggar fallback här — inte "få röster", som
+  // för recs-pipelinen. No-op utan OMDB_API_KEY; kastar aldrig.
+  const ratingFillCards = cards.map((c) => ({
+    tmdbId: c.tmdbId,
+    mediaType: c.mediaType,
+    rating: c.voteAverage,
+  }));
+  await fillMissingRatings(ratingFillCards);
+  for (let i = 0; i < cards.length; i++) {
+    const filled = ratingFillCards[i].rating;
+    if (filled != null) {
+      cards[i].rating = filled;
+      cards[i].voteAverage = filled;
+    }
+  }
+
+  return cards;
 }

@@ -10,6 +10,7 @@ import {
   type TmdbVideo,
   type Trailer,
 } from "../../../../lib/tmdbVideos";
+import { fillMissingRatings } from "@/lib/omdbRating";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -166,6 +167,12 @@ export async function GET(req: Request) {
         blurDataURL: await blurPromise,
         trailer: pickTrailer(d.videos?.results),
       };
+      // Osynlig IMDb-fallback (lib/omdbRating.ts): fyller i voteAverage när
+      // TMDB:s eget saknas/är opålitligt (för få röster). No-op utan
+      // OMDB_API_KEY, kastar aldrig — försenar aldrig svaret mer än nödvändigt.
+      const ratingCard = { tmdbId: res.id, mediaType: "movie" as const, rating: res.voteAverage, voteCount: res.voteCount };
+      await fillMissingRatings([ratingCard]);
+      res.voteAverage = ratingCard.rating;
       return NextResponse.json(res, { headers: CACHE_HEADERS });
     } else {
       const d = (await r.json()) as TvDetails;
@@ -188,6 +195,10 @@ export async function GET(req: Request) {
         blurDataURL: await blurPromise,
         trailer: pickTrailer(d.videos?.results),
       };
+      // Se motsvarande kommentar i movie-grenen ovan.
+      const ratingCard = { tmdbId: res.id, mediaType: "tv" as const, rating: res.voteAverage, voteCount: res.voteCount };
+      await fillMissingRatings([ratingCard]);
+      res.voteAverage = ratingCard.rating;
       return NextResponse.json(res, { headers: CACHE_HEADERS });
     }
   } catch (e) {

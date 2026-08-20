@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
+import { CalendarClock, ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
 import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
@@ -36,7 +36,7 @@ import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
 import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -95,6 +95,20 @@ function deckErrorText(code: string | null, t: (k: string) => string): string {
 
 function pushUndo(stack: UndoEntry[], entry: UndoEntry): UndoEntry[] {
   return [entry, ...stack].slice(0, UNDO_MAX);
+}
+
+/**
+ * Premiärdatum på användarens språk. Faller tillbaka på ISO-strängen om datumet
+ * är skräp — ett kort ska aldrig rendera "Invalid Date".
+ */
+function formatPremiereDate(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
 }
 
 function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
@@ -555,6 +569,12 @@ export default function SwipePageClient() {
         title: c.title,
         year: c.year,
         poster: c.poster,
+        // "Kommer snart"-kort: liken är både en sparning OCH en bevakning.
+        // Servern lägger en ReleaseFollow och cronen pushar när titeln släppts
+        // (se lib/upcomingTitles.ts och app/api/cron/daily-recs).
+        ...(c.kind === "upcoming"
+          ? { followRelease: true, releaseDate: c.releaseDate ?? null }
+          : {}),
       }),
     }).catch(() => {
       /* best-effort */
@@ -573,7 +593,9 @@ export default function SwipePageClient() {
     saveRating(c, "seen");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
-    setRatePrompt(c);
+    // Betygsfrågan hoppas över för osläppta titlar — "Vad tyckte du?" om en film
+    // som inte finns än är bara förvirrande.
+    if (c.kind !== "upcoming") setRatePrompt(c);
   }
 
   function submitSeenRating(rating: number): void {
@@ -1052,7 +1074,29 @@ function AdCard({ adId }: { adId: string }) {
   );
 }
 
+/**
+ * "Kommer snart"-märket. Egen komponent eftersom både fram- och baksidan visar
+ * det, i samma visuella språk som kortets övriga märken (rundad ruta, blur,
+ * versal mikrotext) fast i bärnsten i stället för cyan/smaragd.
+ */
+function UpcomingBadge({ className = "" }: { className?: string }) {
+  const t = useTranslations("swipe");
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-black/55 px-2 py-1 backdrop-blur-sm ${className}`}
+    >
+      <CalendarClock className="h-3.5 w-3.5 text-amber-300" />
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+        {t("upcoming.badge")}
+      </span>
+    </div>
+  );
+}
+
 function Front({ card, flipped }: { card: Card; flipped: boolean }) {
+  const t = useTranslations("swipe");
+  const locale = useLocale();
+  const isUpcoming = card.kind === "upcoming";
   return (
     <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
       {card.poster ? (
@@ -1076,6 +1120,14 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
           kompositeringslager som WebKit (iOS-appens WKWebView) ibland fortsätter
           rita trots det, spegelvänt. Döljs explicit i stället för att lita på
           backface-visibility för det här elementet. */}
+      {/* Samma dölj-vid-flip-regel som matchremsan nedan: backdrop-blur får
+          WKWebView att ibland rita elementet spegelvänt trots backface-visibility. */}
+      {!flipped && isUpcoming ? (
+        <div className="pointer-events-none absolute left-3 top-3 z-10">
+          <UpcomingBadge />
+        </div>
+      ) : null}
+
       {!flipped && card.reasons && card.reasons.length > 0 ? (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-10">
           <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/55 px-2 py-1 backdrop-blur-sm">
@@ -1101,10 +1153,18 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
             {card.title}
             {card.year ? <span className="ml-2 opacity-80">({card.year})</span> : null}
           </div>
+          {isUpcoming && card.releaseDate ? (
+            <div className="mt-0.5 text-xs font-medium text-amber-300/90 drop-shadow">
+              {t("upcoming.premiere", { date: formatPremiereDate(card.releaseDate, locale) })}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {typeof card.rating === "number" ? (
+      {/* Betyget döljs på osläppta titlar: TMDB rapporterar 0 (eller ett snitt
+          byggt på en handfull förhandsröster) innan premiären, och "★ 0.0" ser
+          ut som ett underkännande. Premiärdatumet är kortets siffra i stället. */}
+      {!isUpcoming && typeof card.rating === "number" ? (
         <div className="absolute bottom-2 right-2 rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40 backdrop-blur">
           ★ {card.rating.toFixed(1)}
         </div>
@@ -1116,10 +1176,16 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
 function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void }) {
   const t = useTranslations("swipe");
   const tw = useTranslations("watch");
+  const locale = useLocale();
   const heroSrc = card.backdrop ?? card.poster;
   const { showPaidOptions } = useSwipeSettings();
-  const providerGroups = providerGroupsFor(card.providers, showPaidOptions);
-  const paidOnly = isPaidOnly(card.providers, showPaidOptions);
+  // Osläppt titel: allt som handlar om ATT SE den nu (providerchips, "Kolla nu",
+  // hyr/köp-raden) är meningslöst — TMDB har inga watch-providers före premiär,
+  // och knappen hade renderats som en grå "Inte tillgänglig". Trailern behålls,
+  // den är ofta hela poängen med kortet.
+  const isUpcoming = card.kind === "upcoming";
+  const providerGroups = isUpcoming ? [] : providerGroupsFor(card.providers, showPaidOptions);
+  const paidOnly = !isUpcoming && isPaidOnly(card.providers, showPaidOptions);
   const watchUrl = bestWatchUrl(card.providers, card.title, showPaidOptions);
 
   return (
@@ -1143,7 +1209,16 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
             {card.title}
             {card.year ? <span className="ml-1.5 font-normal opacity-70">({card.year})</span> : null}
           </div>
-          {typeof card.rating === "number" ? (
+          {isUpcoming ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <UpcomingBadge />
+              {card.releaseDate ? (
+                <span className="text-xs font-medium text-amber-300/90">
+                  {t("upcoming.premiere", { date: formatPremiereDate(card.releaseDate, locale) })}
+                </span>
+              ) : null}
+            </div>
+          ) : typeof card.rating === "number" ? (
             <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40">
               ★ {card.rating.toFixed(1)} / 10
             </div>
@@ -1236,11 +1311,19 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
         <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{tw("paidOnly")}</div>
       ) : null}
 
+      {isUpcoming ? (
+        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] leading-relaxed text-amber-300/70">
+          {t("upcoming.followHint")}
+        </div>
+      ) : null}
+
       <div
         className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
-        {card.providers !== undefined && !paidOnly ? <WatchNowButton url={watchUrl} /> : null}
+        {!isUpcoming && card.providers !== undefined && !paidOnly ? (
+          <WatchNowButton url={watchUrl} />
+        ) : null}
         <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
         {onShare ? (
           <button

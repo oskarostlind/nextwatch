@@ -22,8 +22,13 @@ export type SwipeProviders = {
 
 export type SwipeCard = {
   id: string;
-  /** "title" (default) = riktig film/serie, "ad" = annonskort (gratisanvändare). */
-  kind?: "title" | "ad";
+  /**
+   * "title" (default) = riktig film/serie, "ad" = annonskort (gratisanvändare),
+   * "upcoming" = ännu osläppt titel med "Kommer snart"-märke (se
+   * lib/upcomingTitles.ts). "upcoming" har en riktig tmdbId och beter sig som en
+   * titel överallt utom i UI:t — bara "ad" saknar innehåll.
+   */
+  kind?: "title" | "ad" | "upcoming";
   tmdbId: number;
   mediaType: SwipeMediaType;
   title: string;
@@ -42,6 +47,11 @@ export type SwipeCard = {
    * ändra medan kortleken redan ligger i minnet.
    */
   providers?: SwipeProviders | null;
+  /**
+   * Premiärdatum som ISO-sträng (YYYY-MM-DD). Satt enbart på kind === "upcoming"
+   * och skickas med till /api/watchlist/like, som gör liken till en bevakning.
+   */
+  releaseDate?: string | null;
   /** Varför titeln matchar din smak (visas ibland på kortet). */
   reasons?: string[];
   /** Satt när titeln är en toppmatch — solo-swipen firar liken med matchrutan. */
@@ -191,6 +201,9 @@ type UnifiedItem = {
   vote_average?: number;
   reasons?: string[];
   topMatch?: { evidence: MatchEvidence[] };
+  /** Satt av "Kommer snart"-inflätningen i /api/recs/unified (bara solo). */
+  kind?: "title" | "upcoming";
+  releaseDate?: string | null;
 };
 
 export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
@@ -211,6 +224,9 @@ export function mapUnifiedItems(items: UnifiedItem[]): SwipeCard[] {
           poster,
           overview: null,
           rating: typeof it.vote_average === "number" ? it.vote_average : null,
+          ...(it.kind === "upcoming"
+            ? { kind: "upcoming" as const, releaseDate: it.releaseDate ?? null }
+            : {}),
           ...(it.reasons && it.reasons.length > 0 ? { reasons: it.reasons } : {}),
           ...(it.topMatch ? { topMatch: it.topMatch } : {}),
         };

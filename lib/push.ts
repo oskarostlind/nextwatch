@@ -40,6 +40,13 @@ const TYPE_TO_PREF_COLUMN: Record<string, keyof PrefRow> = {
   group_invite_accepted: "notifyGroupInvites",
   share_received: "notifyShares",
   marketing: "notifyMarketing",
+  // "Vi saknar dig"-pushen från cron/daily-recs är tjat, inte innehåll: den
+  // följer marknadsföringsflaggan och inte notifyDailyRecs. Obs att
+  // notifyMarketing är default FALSE i schemat — den som inte aktivt tackat ja
+  // får alltså aldrig de här. Cronen kollar samma flagga en gång till innan den
+  // ens väljer variant, så att en opt-outad användare i stället får sitt
+  // vanliga filmtips.
+  re_engagement: "notifyMarketing",
 };
 
 type PrefRow = {

@@ -16,7 +16,7 @@ import { AVATARS } from "@/lib/avatars";
 import Avatar from "@/app/components/ui/Avatar";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { getBillingStatus } from "@/lib/billingStore";
-import { clearClientCache, getCached, setCached } from "@/lib/clientCache";
+import { clearClientCache, getCached, removeCached, setCached } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import { retrySoloDeck } from "@/lib/swipeDeckStore";
@@ -61,8 +61,15 @@ const FIELD_CLASS = fieldClass;
 
 // Klientcache för /api/profile-svaret — återbesök målar direkt ur cachen
 // medan hämtningen revaliderar i bakgrunden (samma mönster som WL_CACHE_KEY).
+// TTL:en är medvetet lång (30 dagar): mounten hämtar ALLTID färskt i bakgrunden
+// oavsett cacheålder (se hydreringseffekten nedan), så TTL:en styr inte
+// aktualitet — den är bara en yttre skyddsgräns mot en post som aldrig
+// skrivs om (t.ex. kontot slutar besöka profilsidan). En kort TTL (tidigare
+// 10 min) gjorde att nästan varje återbesök missade cachen helt — de allra
+// flesta besök ligger längre isär än så — och profilen föll tillbaka till
+// samma tomma-fält-väntan som utan cache.
 const PROFILE_CACHE_KEY = "profile_v1";
-const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
+const PROFILE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type Props = { initial: ProfileDTO | null };
 type Fav = FavoriteItem | null;
@@ -434,10 +441,31 @@ export default function ProfileClient({ initial }: Props) {
     (async () => {
       try {
         const res = await fetch("/api/profile", { cache: "no-store" });
+        if (res.status === 401) {
+          // Sessionen är ogiltig (utloggad/utgången) trots att sidan renderades —
+          // om utloggningen inte hann tömma klientcachen (t.ex. serversidan
+          // logout utan att LogoutButton kördes) ska den cachade profilen aldrig
+          // visas för nästa person på samma enhet.
+          if (!ignore) removeCached(PROFILE_CACHE_KEY);
+          return;
+        }
         if (!res.ok) return;
         const data = (await res.json()) as { ok: boolean; profile?: Record<string, unknown> | null };
         if (!data.ok || !data.profile || ignore) return;
         const p = data.profile as Record<string, unknown>;
+        // Delad enhet-säkerhetsnät: om den cachade posten tillhörde en ANNAN
+        // användare (userId skiljer sig från serverns svar) har vi redan hunnit
+        // måla den för en bildruta — den kan vi inte ta tillbaka, men den ska
+        // aldrig visas igen. applyProfile(p) nedan skriver ändå över allt synligt
+        // med rätt kontos data.
+        if (
+          cached &&
+          typeof cached.userId === "string" &&
+          typeof p.userId === "string" &&
+          cached.userId !== p.userId
+        ) {
+          removeCached(PROFILE_CACHE_KEY);
+        }
         applyProfile(p);
         setCached(PROFILE_CACHE_KEY, p, PROFILE_CACHE_TTL_MS);
       } catch { /* noop */ }
@@ -487,7 +515,11 @@ export default function ProfileClient({ initial }: Props) {
           favoriteShow,
         }),
       });
-      const payload = (await res.json()) as { ok?: boolean; error?: string };
+      const payload = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        profile?: Record<string, unknown>;
+      };
       if (!res.ok || payload.ok === false) {
         setMsg(payload.error ?? t("saveProfileFailed"));
         return;
@@ -513,6 +545,21 @@ export default function ProfileClient({ initial }: Props) {
       if (!ures.ok || udata.ok === false) {
         setMsg(`${message} ${udata.message ?? t("saveUsernameFailed")}`.trim());
         return;
+      }
+
+      // Skriv det färska svaret in i klientcachen nu när BÅDA sparningarna
+      // (profil + username) har bekräftats av servern — annars visar nästa
+      // besök (inom cache-TTL:en) de GAMLA värdena tills bakgrundshämtningen
+      // i mount-effekten hunnit köra. /api/profile PUT svarar inte med
+      // username (den bor på User och sparas separat ovan), så den läggs på
+      // manuellt i stället för att falla bort ur cachen.
+      if (payload.profile) {
+        const existingCached = getCached<Record<string, unknown>>(PROFILE_CACHE_KEY) ?? {};
+        setCached(
+          PROFILE_CACHE_KEY,
+          { ...existingCached, ...payload.profile, username: unamePayload },
+          PROFILE_CACHE_TTL_MS
+        );
       }
 
       setMsg(message);

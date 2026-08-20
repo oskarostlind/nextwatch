@@ -788,6 +788,62 @@
       "body": "{name} gick med i din grupp {code} – dags att swipa!",
       "title": "Inbjudan accepterad"
     },
+    "reEngagement": {
+      "variants": {
+        "t1v1": {
+          "body": "Det har gått en vecka. Din watchlist samlar damm.",
+          "title": "Kollar du aldrig på film? 🍿"
+        },
+        "t1v2": {
+          "body": "Den har väntat i en vecka. Den är inte arg, bara besviken.",
+          "title": "Din watchlist undrar var du är…"
+        },
+        "t1v3": {
+          "body": "Vi säger ingenting. Vi bara noterar det.",
+          "title": "Sju dagar utan en enda swipe 👀"
+        },
+        "t1v4": {
+          "body": "En hel vecka utan film. Vi har en titel som fixar det.",
+          "title": "Popcornen har kallnat 🍿"
+        },
+        "t2v1": {
+          "body": "Din soffa saknar dig. Vi också, lite.",
+          "title": "Det har gått två veckor 🥺"
+        },
+        "t2v2": {
+          "body": "(14 stycken. Vi ljög, vi räknar fortfarande.)",
+          "title": "Vi har slutat räkna dagarna"
+        },
+        "t2v3": {
+          "body": "Du hade hunnit se hela Sagan om ringen. Två gånger.",
+          "title": "Två veckor. TVÅ."
+        },
+        "t2v4": {
+          "body": "Men inte vi. Det ligger ett tips och väntar på dig.",
+          "title": "Fjärrkontrollen har gett upp 📺"
+        },
+        "t3v1": {
+          "body": "En hel månad. Säg bara att du mår bra.",
+          "title": "Okej, nu börjar vi bli oroliga på riktigt 😢"
+        },
+        "t3v2": {
+          "body": "En månad utan dig. Din watchlist har flyttat hemifrån.",
+          "title": "Filmerna har gått vidare. Har du?"
+        },
+        "t3v3": {
+          "body": "Allt är förberett. Det saknas bara en person i soffan.",
+          "title": "30 dagar. Vi har städat klart nu 🧹"
+        },
+        "t3v4": {
+          "body": "En månad har gått. Vi håller platsen varm åt dig ändå.",
+          "title": "Sista notisen? Nja… 👻"
+        }
+      }
+    },
+    "release": {
+      "body": "{title} finns nu att se – du gillade den innan den släpptes.",
+      "title": "Nu har den släppts! 🎬"
+    },
     "shareReceived": {
       "body": "{name} tipsade dig om {title}",
       "title": "Nytt filmtips 🍿"
@@ -966,6 +1022,11 @@
     "settingsAria": "Inställningar för förslag",
     "shareTip": "Tipsa",
     "undoFailed": "Kunde inte ångra på servern",
+    "upcoming": {
+      "badge": "Kommer snart",
+      "followHint": "Gilla kortet så säger vi till när den släppts.",
+      "premiere": "Premiär {date}"
+    },
     "upgradeCta": "Uppgradera till Premium",
     "whyThis": "Varför det här?"
   },

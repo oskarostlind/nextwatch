@@ -198,6 +198,32 @@ export async function initAdMobIfEligible(): Promise<boolean> {
 
 /* ---------- Interstitial (var 15:e swipe) ---------- */
 
+let dismissListenerBound = false;
+
+/**
+ * Premium-CTA:n ska komma när annonsen är SLUT, inte när den öppnas.
+ * showInterstitial() resolvar så fort annonsen visats — så vi hänger på
+ * Dismissed-eventet i stället och signalerar därifrån. PremiumUpsellModal
+ * lyssnar på "nw:admob-ad-shown" (event i stället för direkt import: modalen
+ * importerar den här modulen, så en import åt andra hållet blir cirkulär).
+ */
+async function ensureDismissListener(): Promise<void> {
+  if (dismissListenerBound) return;
+  dismissListenerBound = true;
+  try {
+    const { AdMob, InterstitialAdPluginEvents } = await plugin();
+    await AdMob.addListener(InterstitialAdPluginEvents.Dismissed, () => {
+      try {
+        window.dispatchEvent(new Event("nw:admob-ad-shown"));
+      } catch {
+        /* SSR/edge — irrelevant här */
+      }
+    });
+  } catch {
+    dismissListenerBound = false;
+  }
+}
+
 async function prepareInterstitial(): Promise<void> {
   if (!eligible || interstitialReady) return;
   try {
@@ -243,18 +269,12 @@ export function registerSwipeForAds(): void {
         }
       }
       const { AdMob } = await plugin();
+      await ensureDismissListener();
       await AdMob.showInterstitial();
       swipesSinceAd = 0;
       lastInterstitialAt = Date.now();
       interstitialReady = false;
       void prepareInterstitial();
-      // Upsell-popupen lyssnar ("titta på video → 24h annonsfritt" / premium).
-      // Event i stället för direkt import — PremiumUpsellModal importerar oss.
-      try {
-        window.dispatchEvent(new Event("nw:admob-ad-shown"));
-      } catch {
-        /* SSR/edge — irrelevant här */
-      }
     } catch (err) {
       interstitialReady = false;
       console.warn("[admob] showInterstitial misslyckades", err);

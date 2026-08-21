@@ -1199,6 +1199,17 @@ function SettingsTab() {
         </div>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
           <div className="min-w-0">
+            <div className="text-sm text-white/85">{t("tourNav")}</div>
+            <div className="text-xs text-white/45">
+              {t("tourNavHint")}
+            </div>
+          </div>
+          <Button variant="secondary" onClick={() => { window.location.href = "/swipe?tour=nav-tour"; }}>
+            {t("showAgain")}
+          </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+          <div className="min-w-0">
             <div className="text-sm text-white/85">{t("tourFriends")}</div>
             <div className="text-xs text-white/45">
               {t("tourFriendsHint")}

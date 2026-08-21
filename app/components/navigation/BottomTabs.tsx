@@ -42,7 +42,12 @@ export default function BottomTabs() {
       {/* Justera grid och padding för att få plats med den växande pill-fliken.
         Flexbox är ofta lättare än grid här eftersom barnen ändrar storlek.
       */}
-      <div className="mx-auto flex max-w-3xl items-center justify-around gap-1 px-2 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+      <div
+        // Målet för nav-hinten (lib/tours/coachSteps.ts NAV_TOUR_STEPS) — hela
+        // raden pekas ut i EN ruta i stället för fem modaler i rad.
+        data-tour="nav-tabs"
+        className="mx-auto flex max-w-3xl items-center justify-around gap-1 px-2 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)]"
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
           // Om din pathname är exakt item.href ELLER (om activeStartsWith är satt) börjar på item.activeStartsWith.
@@ -68,7 +73,6 @@ export default function BottomTabs() {
               }}
               aria-label={t(item.labelKey)}
               aria-current={active ? "page" : undefined}
-              data-guide={item.guideTarget}
               className="group relative flex h-12 w-12 items-center justify-center rounded-full transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
             >
               {/* Animering för den aktiva bakgrunden ("pillen") – ikon-only, ingen text.

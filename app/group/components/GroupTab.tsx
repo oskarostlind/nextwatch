@@ -11,7 +11,7 @@ import ReportUserModal from "@/app/components/client/ReportUserModal";
 import { hydrateSocialInitial, refreshSocial } from "@/lib/socialStore";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
-import { GROUPS_TOUR_STEPS } from "@/lib/tours/coachSteps";
+import { GROUP_ACTIVE_STEPS, GROUPS_START_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
 import { useTranslations } from "next-intl";
 
@@ -321,7 +321,6 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
 
         <button
           type="button"
-          data-guide="group-start-swipe"
           data-tour="group-start-swipe"
           onClick={startGroupSwipe}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-base font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-500"
@@ -463,13 +462,16 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           <GroupSettingsModal code={code} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         )}
 
-        <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
+        {/* Bjud in / inställningar / starta swipe förklaras först när man
+            FAKTISKT är med i en grupp — tidigare pekade de på knappar som inte
+            fanns, och varje saknat mål gav 3,5 sekunder tom ruta. */}
+        <CoachMarkTour tourId="group-active-tour" steps={GROUP_ACTIVE_STEPS} forceAliases={["groups-tour"]} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4" data-guide="group-create-join" data-tour="group-join-create">
+    <div className="space-y-4" data-tour="group-join-create">
       {error && <div className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-400">{error}</div>}
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -512,7 +514,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         </button>
       </div>
 
-      <CoachMarkTour tourId="groups-tour" steps={GROUPS_TOUR_STEPS} suppressGuideId="group" />
+      <CoachMarkTour tourId="groups-tour" steps={GROUPS_START_STEPS} />
     </div>
   );
 }

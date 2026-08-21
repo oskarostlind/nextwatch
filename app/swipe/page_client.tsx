@@ -34,8 +34,6 @@ import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
 import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
-import { SWIPE_GUIDE_STEPS } from "@/lib/guideSteps";
-import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { useLocale, useTranslations } from "next-intl";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
@@ -48,7 +46,6 @@ const PremiumUpsellModal = dynamic(() => import("@/app/components/client/Premium
   ssr: false,
 });
 const RatingModal = dynamic(() => import("@/app/components/client/RatingModal"), { ssr: false });
-const GuideOverlay = dynamic(() => import("@/app/components/client/GuideOverlay"), { ssr: false });
 const ShareTitleModal = dynamic(() => import("@/app/components/client/ShareTitleModal"), {
   ssr: false,
 });
@@ -372,7 +369,6 @@ export default function SwipePageClient() {
   // — popupen är valfri och lägger bara till ett 1–10-betyg ovanpå.
   const [ratePrompt, setRatePrompt] = useState<Card | null>(null);
   const [ratingSaving, setRatingSaving] = useState(false);
-  const [swipeGuideOpen, setSwipeGuideOpen] = useState(false);
 
   // Kortet som utlöste en toppmatch. Behålls efter popTop() så rutan kan visa
   // titeln även när den lämnat kortleken.
@@ -441,23 +437,9 @@ export default function SwipePageClient() {
     });
   }, [cards, updateSoloCards]);
 
-  useEffect(() => {
-    if (feedLoading || ratePrompt) return;
-    const top = cards[0];
-    if (!top || top.kind === "ad") return;
-    if (hasSeenGuide("swipe")) return;
-    const t = window.setTimeout(() => {
-      // Omkolla: den nya forcerade swipe-genomgången (SwipeGestureTour, mountad
-      // i app/swipe/page.tsx) kan ha markerat den här som sedd medan vi väntade.
-      if (hasSeenGuide("swipe")) return;
-      if (tryAcquireGuide("swipe")) setSwipeGuideOpen(true);
-    }, 700);
-    return () => window.clearTimeout(t);
-  }, [feedLoading, cards, ratePrompt]);
-
-  // Släpp låset om sidan lämnas medan guiden är öppen (egen unmount-effekt, inte
-  // kopplad till öppna-villkorets täta deps).
-  useEffect(() => () => releaseGuide("swipe"), []);
+  // Den passiva swipe-guiden som låg här togs bort 2026-08-21: den förklarade
+  // samma sak som SwipeGestureTour (app/swipe/page.tsx), fast utan att man fick
+  // göra något — två genomgångar av samma gester som kunde tända efter varandra.
 
   // AdMob måste initieras innan registerSwipeForAds() gör något — utan det här
   // anropet returnerade den direkt (initialized=false) och iOS-appen visade
@@ -476,15 +458,19 @@ export default function SwipePageClient() {
     }
   }, [mode, group?.code, router]);
 
-  // Upsell-popup: räkna annonsvisningar (när ett annonskort blir överst) och
-  // trigga popupen var 3:e annons — en gång per session (se PremiumUpsellModal).
+  // Premium-CTA:n efter annonsen triggas när annonskortet LÄMNAR däcket
+  // (dismissAdCard nedan), inte när det blir överst. Poängen är att erbjudandet
+  // ska komma när användaren precis suttit av en annons — inte mitt i den.
   const countedAds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const top = cards[0];
-    if (!top || top.kind !== "ad" || countedAds.current.has(top.id)) return;
-    countedAds.current.add(top.id);
-    maybeTriggerAdUpsell();
-  }, [cards]);
+
+  /** Annonskortet är avklarat: räkna visningen och låt frekvensspärren avgöra. */
+  function dismissAdCard(c: Card): void {
+    if (!countedAds.current.has(c.id)) {
+      countedAds.current.add(c.id);
+      maybeTriggerAdUpsell();
+    }
+    popTop();
+  }
 
   function popTop() {
     setFlippedId(null);
@@ -544,7 +530,7 @@ export default function SwipePageClient() {
   }
 
   function handleDislike(c: Card): void {
-    if (c.kind === "ad") { popTop(); return; }
+    if (c.kind === "ad") { dismissAdCard(c); return; }
     recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -554,7 +540,7 @@ export default function SwipePageClient() {
   }
 
   function handleLike(c: Card): void {
-    if (c.kind === "ad") { popTop(); return; }
+    if (c.kind === "ad") { dismissAdCard(c); return; }
     recordUndo(c, "like");
     markSeen(c.id);
     saveRating(c, "like");
@@ -586,7 +572,7 @@ export default function SwipePageClient() {
   }
 
   function handleSeen(c: Card): void {
-    if (c.kind === "ad") { popTop(); return; }
+    if (c.kind === "ad") { dismissAdCard(c); return; }
     recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -802,7 +788,6 @@ export default function SwipePageClient() {
               return (
                 <motion.div
                   key={card.id}
-                  data-guide="swipe-card"
                   className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                   style={{ x, y, rotate }}
                   animate={controls}
@@ -893,7 +878,7 @@ export default function SwipePageClient() {
       )}
       </div>
 
-      <div data-guide="action-dock">
+      <div>
         <ActionDock
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
@@ -910,15 +895,6 @@ export default function SwipePageClient() {
 
       <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
 
-      <GuideOverlay
-        guideId="swipe"
-        steps={SWIPE_GUIDE_STEPS}
-        open={swipeGuideOpen}
-        onClose={() => {
-          setSwipeGuideOpen(false);
-          releaseGuide("swipe");
-        }}
-      />
     </div>
   );
 }

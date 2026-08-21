@@ -780,7 +780,14 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
         }}
       />
 
-      <CoachMarkTour tourId="watchlist-tour" steps={WATCHLIST_TOUR_STEPS} suppressGuideId="watchlist" />
+      {/* Just-in-time: hinten tänds först när listan är hämtad OCH det finns
+          något i den. Att förklara "så här betygsätter du" ovanpå en tom
+          watchlist är precis den sortens front-loading vi tog bort. */}
+      <CoachMarkTour
+        tourId="watchlist-tour"
+        steps={WATCHLIST_TOUR_STEPS}
+        enabled={!wlLoading && items.length > 0}
+      />
     </>
   );
 }

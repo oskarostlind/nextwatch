@@ -49,6 +49,13 @@ function readForceParam(tourId: string, aliases: string[]): boolean {
   }
 }
 
+/**
+ * Tourer vars legacy-migrering redan skrivits den här sidladdningen. Spärren
+ * ligger på modulnivå (inte i en ref) eftersom samma tour kan vara monterad på
+ * flera ställen samtidigt — /group har tre gates uppe på en gång.
+ */
+const migrated = new Set<TourId>();
+
 /** Gammal localStorage-flagga från de borttagna GuideOverlay-guiderna. */
 function legacySeen(tourId: TourId): boolean {
   const key = LEGACY_GUIDE_KEYS[tourId];
@@ -74,11 +81,22 @@ export function useTourGate(tourId: TourId, options: TourGateOptions = {}) {
   // är ju fortfarande sann i URL:en.
   const finishedRef = useRef(false);
 
+  // Lyssna BARA om den här genomgången väntar på en annan (requires). En gate
+  // utan förutsättningar har ingenting att vinna på signalen — och att ändå
+  // prenumerera var halva orsaken till loopen: gaten väckte sig själv med sin
+  // egen kvittens. Nu ignoreras dessutom events för det egna tourId:t.
   useEffect(() => {
-    const onProgress = () => setRevision((r) => r + 1);
+    if (!requiresKey) return;
+    const deps = requiresKey.split(",");
+    const onProgress = (e: Event) => {
+      const changed = (e as CustomEvent<{ tourId?: string }>).detail?.tourId;
+      if (changed && changed !== tourId && !deps.includes(changed)) return;
+      if (changed === tourId) return;
+      setRevision((r) => r + 1);
+    };
     window.addEventListener(TOUR_PROGRESS_EVENT, onProgress);
     return () => window.removeEventListener(TOUR_PROGRESS_EVENT, onProgress);
-  }, []);
+  }, [requiresKey, tourId]);
 
   useEffect(() => {
     if (finishedRef.current) return;
@@ -98,8 +116,15 @@ export function useTourGate(tourId: TourId, options: TourGateOptions = {}) {
     if (legacySeen(tourId)) {
       // Redan onboardad på den gamla guiden — visa aldrig den nya, och skriv
       // en rad så migreringen inte behöver göras om på nästa enhet/session.
+      // finishedRef + `migrated` gör att kvitteringen sker EN gång: den här
+      // grenen körde tidigare om vid varje effektkörning, och eftersom ackTour
+      // signalerade tillbaka in i samma effekt blev det en oändlig loop.
+      finishedRef.current = true;
       setState("hidden");
-      void ackTour(tourId, version, "completed");
+      if (!migrated.has(tourId)) {
+        migrated.add(tourId);
+        void ackTour(tourId, version, "completed");
+      }
       return;
     }
 

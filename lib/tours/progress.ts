@@ -38,11 +38,19 @@ export async function fetchTourProgress(): Promise<TourProgressMap> {
 export const TOUR_PROGRESS_EVENT = "nw:tour-progress";
 
 export async function ackTour(tourId: TourId, version: number, status: TourStatus): Promise<void> {
+  // IDEMPOTENT. Utan den här spärren blev kvitteringen en oändlig loop:
+  // ackTour -> TOUR_PROGRESS_EVENT -> gaten som lyssnar renderar om -> dess
+  // effekt kör igen -> ackTour ... Tusentals renderingar och POST:ar i sekunden
+  // på varje sida (se lib/tours/useTourGate.ts). Är raden redan skriven med
+  // samma version och status finns det inget att signalera och inget att spara.
+  if (cached?.[tourId]?.version === version && cached[tourId].status === status) return;
+
   // Uppdatera den delade cachen direkt: en annan gate som monteras i samma
   // session ska aldrig visa en genomgång som just markerats klar.
   if (cached) cached[tourId] = { version, status };
   try {
-    window.dispatchEvent(new Event(TOUR_PROGRESS_EVENT));
+    // tourId i detaljen så en lyssnare kan ignorera sin EGEN kvittens.
+    window.dispatchEvent(new CustomEvent(TOUR_PROGRESS_EVENT, { detail: { tourId } }));
   } catch {
     /* SSR — irrelevant */
   }

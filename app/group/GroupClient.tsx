@@ -6,6 +6,9 @@ import FriendsTab from "./components/FriendsTab";
 import MatchesTab, { type GroupMatchItem } from "./components/MatchesTab";
 import IncomingInvites from "./components/IncomingInvites";
 import { PageHeader, SegmentedTabs } from "@/app/components/ui/kit";
+import GuideOverlay from "@/app/components/client/GuideOverlay";
+import { GROUP_GUIDE_STEPS } from "@/lib/guideSteps";
+import { hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { useSocial } from "@/app/components/client/SocialProvider";
 import type { GroupInitial } from "./page";
 import { useTranslations } from "next-intl";
@@ -20,6 +23,7 @@ const MATCHES_SEEN_PREFIX = "nw_matches_seen:";
 export default function GroupClient({ initial }: { initial: GroupInitial }) {
   const t = useTranslations("group");
   const [tab, setTab] = useState<Tab>("group");
+  const [groupGuideOpen, setGroupGuideOpen] = useState(false);
 
   // Samma live-gruppkod som GroupTab/FriendsTab redan synkar mot via
   // social-store:n — annars ligger badgen och matchlistan kvar på den gamla
@@ -103,9 +107,19 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
     }
   }, []);
 
-  // Ingen sid-bred genomgång här längre: grupp- och vänhintarna bor i
-  // GroupTab/FriendsTab och tänds först när ytan de beskriver finns på
-  // skärmen (lib/tours/coachSteps.ts).
+  useEffect(() => {
+    if (hasSeenGuide("group")) return;
+    // Öppna bara om ingen annan guide är aktiv (t.ex. nav-guiden mitt i sitt flöde).
+    const t = window.setTimeout(() => {
+      if (tryAcquireGuide("group")) setGroupGuideOpen(true);
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Släpp låset om sidan lämnas medan guiden är öppen — annars blockeras andra
+  // guider resten av sessionen. (Egen unmount-effekt, inte kopplad till öppna-
+  // villkoret ovan.)
+  useEffect(() => () => releaseGuide("group"), []);
 
   return (
     <div className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4">
@@ -113,7 +127,7 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
 
       <IncomingInvites />
 
-      <div className="mb-5 mt-1">
+      <div className="mb-5 mt-1" data-guide="group-tabs">
         <SegmentedTabs tabs={tabs} value={tab} onChange={openTab} layoutId="group-tabs" />
       </div>
 
@@ -130,6 +144,21 @@ export default function GroupClient({ initial }: { initial: GroupInitial }) {
         <FriendsTab initial={initial.friends} />
       )}
 
+      <GuideOverlay
+        guideId="group"
+        steps={GROUP_GUIDE_STEPS}
+        open={groupGuideOpen}
+        onClose={() => {
+          setGroupGuideOpen(false);
+          releaseGuide("group");
+        }}
+        onStepChange={(_, step) => {
+          if (step.target === "friends-search") setTab("friends");
+          if (step.target === "group-create-join" || step.target === "group-start-swipe") {
+            setTab("group");
+          }
+        }}
+      />
     </div>
   );
 }

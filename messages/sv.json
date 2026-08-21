@@ -237,45 +237,23 @@
   },
   "gestureTour": {
     "dislike": {
-      "algo": "Titeln göms och liknande titlar rankas ner. Dyker den upp igen långt senare gör den det längst bak.",
-      "effect": "− Mindre sånt här",
-      "hint": "Dra åt vänster om titeln inte är din grej – då försvinner den ur flödet.",
-      "label": "Nope"
+      "hint": "Dra kortet åt vänster om det inte är din grej.",
+      "label": "Ogilla"
     },
     "info": {
-      "algo": "Att läsa på påverkar ingenting – kolla så länge du vill innan du bestämmer dig.",
-      "effect": "Ingen påverkan",
-      "hint": "Tryck på kortet för att vända det och läsa handling, betyg och var det går att streama.",
+      "hint": "Tryck på kortet för att vända på det.",
       "label": "Mer info"
     },
-    "intro": {
-      "body": "Vi läser av genrer, teman, regissörer och skådespelare i det du gillar – och tonar ner det du väljer bort. Testa de fyra gesterna, så märks skillnaden redan efter en handfull svep.",
-      "cta": "Visa mig hur",
-      "title": "Ditt flöde lär sig av varje svep"
-    },
     "like": {
-      "algo": "Genrer, teman och namnen bakom titeln viktas upp, så liknande förslag kommer oftare.",
-      "effect": "+ Mer sånt här",
-      "hint": "Dra kortet åt höger för att gilla – titeln sparas i din watchlist.",
+      "hint": "Dra kortet åt höger för att gilla.",
       "label": "Gilla"
-    },
-    "meter": {
-      "label": "Smakprofil"
     },
     "progress": "Så funkar swipen — {step}/{total}",
     "seen": {
-      "algo": "Betyget är den starkaste signalen: högt betyg drar in mer av samma, lågt styr bort flödet.",
-      "effect": "Betyget väger tyngst",
-      "hint": "Dra uppåt om du redan sett titeln – sen får du sätta betyg 1–10.",
-      "label": "Sett"
+      "hint": "Dra kortet uppåt om du redan sett den — sen får du betygsätta den.",
+      "label": "Sett + betygsätt"
     },
-    "skip": "Hoppa över",
-    "summary": {
-      "body": "Ju fler svep, desto träffsäkrare förslag. Genrer och streamingtjänster finjusterar du när du vill i Profil.",
-      "buttons": "Knapparna under kortet gör samma sak som gesterna, och Ångra tar tillbaka ditt senaste svep.",
-      "cta": "Börja swipa",
-      "title": "Klart – flödet är ditt nu"
-    }
+    "skip": "Hoppa över"
   },
   "group": {
     "accept": "Acceptera",
@@ -770,11 +748,9 @@
     "terms": "Användarvillkor",
     "tmdbAttribution": "Film- och seriedata från <tmdb>TMDB</tmdb>. Denna produkt använder TMDB:s API men är inte godkänd eller certifierad av TMDB.",
     "tourFriends": "Vän-genomgången",
-    "tourFriendsHint": "Lägg till vänner och vad vänskapen låser upp.",
+    "tourFriendsHint": "Lägg till vänner, förfrågningar och vad vänner låser upp.",
     "tourGroups": "Grupp-genomgången",
     "tourGroupsHint": "Skapa eller gå med, bjud in, inställningar och gruppswipe.",
-    "tourNav": "Så hittar du runt",
-    "tourNavHint": "Vad de fem flikarna längst ner gör.",
     "tours": "Genomgång",
     "tourSwipe": "Swipe-genomgången",
     "tourSwipeHint": "Gilla, ogilla, mer info och sett + betygsätt — så funkar korten.",
@@ -1096,66 +1072,127 @@
   "tours": {
     "friendsTour": {
       "s0": {
-        "body": "Sök på användarnamn här och skicka en vänförfrågan. De dyker upp i listan så fort de tackat ja.",
+        "body": "Sök på användarnamn här och skicka en vänförfrågan.",
         "title": "Lägg till vänner"
       },
+      "s1": {
+        "body": "Inkommande vänförfrågningar dyker upp här — acceptera eller avvisa dem.",
+        "title": "Förfrågningar"
+      },
       "s2": {
-        "body": "Bjud in dem till en grupp och swipa tillsammans tills ni matchar – eller tipsa dem om en enskild titel.",
+        "body": "Bjud in vänner till en grupp för att swipa tillsammans, eller tipsa dem om filmer och serier.",
         "title": "Det här låser vänner upp"
+      }
+    },
+    "groupGuide": {
+      "s0": {
+        "body": "Växla mellan gruppswiping och att hitta vänner.",
+        "title": "Grupp eller vänner"
+      },
+      "s1": {
+        "body": "Skapa en ny grupp eller gå med med en kod du fått av en vän.",
+        "title": "Skapa eller gå med"
+      },
+      "s2": {
+        "body": "När ni är i en grupp — starta gruppswipe här. Ni röstar tillsammans tills ni matchar.",
+        "title": "Gruppswipe"
+      },
+      "s3": {
+        "body": "Sök på användarnamn och skicka en vänförfrågan.",
+        "title": "Lägg till vänner"
       }
     },
     "groupsTour": {
       "s0": {
-        "body": "Skapa en grupp och dela koden, eller skriv in koden du fått av en vän.",
+        "body": "Skapa en ny grupp och dela koden, eller gå med i en vän grupps kod.",
         "title": "Skapa eller gå med"
       },
       "s1": {
-        "body": "Lägg till vänner i gruppen så swipar ni på samma flöde.",
+        "body": "Lägg till vänner i gruppen så kan ni swipa tillsammans.",
         "title": "Bjud in vänner"
       },
       "s2": {
-        "body": "Bestäm vilka genrer ni swipar på och hur många som måste gilla en titel för att det ska bli match.",
-        "title": "Gruppens inställningar"
+        "body": "Ställ in vilka genrer ni swipar på och hur många som behöver gilla en titel för match.",
+        "title": "Inställningar"
       },
       "s3": {
-        "body": "Starta gruppswipen – ni röstar var för sig och får en match när tillräckligt många gillat samma titel.",
+        "body": "Starta gruppswipen — ni röstar tillsammans tills tillräckligt många gillar samma titel.",
         "title": "Swipa tillsammans"
       }
     },
-    "navTour": {
+    "navGuide": {
       "s0": {
-        "body": "Fem flikar längst ner – det är hela appen.",
-        "discover": "Utforska – bläddra fritt bland genrer",
-        "group": "Grupp – swipa med vänner och matcha",
-        "profile": "Profil – tjänster, språk och ditt konto",
-        "swipe": "Swipe – ditt personliga flöde",
-        "title": "Så hittar du runt",
-        "watchlist": "Watchlist – allt du gillat och betygsatt"
+        "body": "Din personliga swipe-feed med filmer och serier.",
+        "title": "Rekommendationer"
+      },
+      "s1": {
+        "body": "Skapa eller gå med i en grupp och lägg till vänner.",
+        "title": "Grupp & vänner"
+      },
+      "s2": {
+        "body": "Bläddra och filtrera titlar efter genre och typ.",
+        "title": "Discover"
+      },
+      "s3": {
+        "body": "Allt du gillat och dina betyg samlade på ett ställe.",
+        "title": "Watchlist"
+      },
+      "s4": {
+        "body": "Inställningar, tjänster och ditt konto.",
+        "title": "Profil"
+      }
+    },
+    "swipeGuide": {
+      "s0": {
+        "body": "Här får du rekommendationer anpassade efter din smak. Swipa för att hitta nästa titel att titta på.",
+        "title": "Välkommen till NextWatch"
+      },
+      "s1": {
+        "body": "Dra kortet åt höger för att gilla — titeln sparas i din watchlist.",
+        "title": "Gilla"
+      },
+      "s2": {
+        "body": "Dra åt vänster om titeln inte känns rätt. Den döljs en tid så du slipper se den igen.",
+        "title": "Nope"
+      },
+      "s3": {
+        "body": "Dra uppåt om du redan sett titeln. Du kan betygsätta den efteråt.",
+        "title": "Sett"
+      },
+      "s4": {
+        "body": "Tryck på kortet för att vända det och läsa mer om filmen eller serien.",
+        "title": "Mer info"
+      },
+      "s5": {
+        "body": "Eller använd knapparna: Nej, Info, Ångra och Gilla.",
+        "title": "Knapparna"
       }
     },
     "watchlistTour": {
       "s0": {
-        "body": "Allt du sveper höger på hamnar här. Betyg-fliken samlar det du redan sett och satt betyg på.",
+        "body": "Titlar du gillar i swipen samlas under Watchlist. Betyg-fliken visar allt du redan sett och betygsatt.",
         "title": "Din watchlist"
       },
       "s1": {
-        "body": "Tryck på en titel för att se handling, betyg och var den går att streama.",
-        "title": "Öppna en titel"
+        "body": "Swipa höger på en titel du vill se, så sparas den automatiskt i den här listan.",
+        "title": "Så hamnar titlar här"
       },
       "s2": {
-        "body": "Välj Betygsätt så flyttas titeln till Betyg-fliken – och Kolla nu tar dig direkt till streamingtjänsten.",
-        "title": "Betygsätt och kolla"
+        "body": "Tryck på en titel och välj Betygsätt — då flyttas den till Betyg-fliken med ditt betyg.",
+        "title": "Betygsätt det du sett"
+      },
+      "s3": {
+        "body": "Öppna en titel och tryck Kolla nu för att gå direkt till streamingtjänsten du har den på.",
+        "title": "Kolla nu"
       }
     }
   },
   "upsell": {
-    "body": "Annonsen är slut – men den behöver inte komma tillbaka.",
-    "bulletsLabel": "Det här ingår",
+    "body": "Bli Premium för 19 kr/mån — helt annonsfritt och obegränsat med swipes.",
     "close": "Stäng",
     "cta": "Bli Premium – 19 kr/mån",
-    "dismiss": "Inte nu",
-    "heading": "Slipp annonser med Premium",
-    "legal": "19 kr/mån, förnyas automatiskt tills du säger upp. Avsluta när du vill.",
+    "dismiss": "Nej tack, fortsätt swipa",
+    "heading": "Trött på annonser?",
     "loadingVideo": "Laddar video…",
     "opening": "Öppnar…",
     "watchAd": "Titta på en video – slipp annonser i 24h"

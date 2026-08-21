@@ -457,6 +457,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                 return (
                   <motion.div
                     key={card.id}
+                    data-guide="swipe-card"
                     className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
                     style={{ x, y, rotate }}
                     animate={controls}
@@ -566,7 +567,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
         )}
       </div>
 
-      <div>
+      <div data-guide="action-dock">
         <ActionDock
           disabled={!cards[0] || showLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff

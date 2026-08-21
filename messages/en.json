@@ -237,45 +237,23 @@
   },
   "gestureTour": {
     "dislike": {
-      "algo": "The title is hidden and similar ones are ranked down. If it ever returns, it returns at the very back.",
-      "effect": "− Less like this",
-      "hint": "Drag left if the title isn't your thing — it disappears from your feed.",
-      "label": "Nope"
+      "hint": "Drag the card left if it's not your thing.",
+      "label": "Dislike"
     },
     "info": {
-      "algo": "Reading up changes nothing — look as long as you like before deciding.",
-      "effect": "No effect",
-      "hint": "Tap the card to flip it and read the plot, ratings and where you can stream it.",
+      "hint": "Tap the card to flip it over.",
       "label": "More info"
     },
-    "intro": {
-      "body": "We pick up the genres, themes, directors and actors in what you like — and turn down what you pass on. Try the four gestures and you'll feel the difference after a handful of swipes.",
-      "cta": "Show me how",
-      "title": "Your feed learns from every swipe"
-    },
     "like": {
-      "algo": "The genres, themes and names behind the title are weighted up, so similar suggestions show up more often.",
-      "effect": "+ More like this",
-      "hint": "Drag the card right to like it — the title is saved to your watchlist.",
+      "hint": "Drag the card right to like it.",
       "label": "Like"
-    },
-    "meter": {
-      "label": "Taste profile"
     },
     "progress": "How swiping works — {step}/{total}",
     "seen": {
-      "algo": "Your rating is the strongest signal: a high score pulls in more of the same, a low one steers the feed away.",
-      "effect": "Ratings count most",
-      "hint": "Drag up if you've already seen it — then you rate it 1–10.",
-      "label": "Seen"
+      "hint": "Drag the card up if you've already seen it — then you can rate it.",
+      "label": "Seen + rate"
     },
-    "skip": "Skip",
-    "summary": {
-      "body": "The more you swipe, the sharper the suggestions. You can fine-tune genres and streaming services any time in Profile.",
-      "buttons": "The buttons under the card do the same as the gestures, and Undo takes back your last swipe.",
-      "cta": "Start swiping",
-      "title": "Done — the feed is yours now"
-    }
+    "skip": "Skip"
   },
   "group": {
     "accept": "Accept",
@@ -770,11 +748,9 @@
     "terms": "Terms of use",
     "tmdbAttribution": "Film and TV data from <tmdb>TMDB</tmdb>. This product uses the TMDB API but is not endorsed or certified by TMDB.",
     "tourFriends": "The friends walkthrough",
-    "tourFriendsHint": "Adding friends and what friendship unlocks.",
+    "tourFriendsHint": "Adding friends, requests, and what friends unlock.",
     "tourGroups": "The group walkthrough",
     "tourGroupsHint": "Create or join, invite, settings and group swiping.",
-    "tourNav": "Finding your way around",
-    "tourNavHint": "What the five tabs along the bottom do.",
     "tours": "Walkthroughs",
     "tourSwipe": "The swipe walkthrough",
     "tourSwipeHint": "Like, dislike, more info and seen + rate — how the cards work.",
@@ -1096,69 +1072,130 @@
   "tours": {
     "friendsTour": {
       "s0": {
-        "body": "Search by username here and send a friend request. They show up in the list as soon as they accept.",
+        "body": "Search by username here and send a friend request.",
         "title": "Add friends"
       },
+      "s1": {
+        "body": "Incoming friend requests show up here — accept or decline them.",
+        "title": "Requests"
+      },
       "s2": {
-        "body": "Invite them to a group and swipe together until you match — or share a single title with them.",
+        "body": "Invite friends to a group to swipe together, or share films and series with them.",
         "title": "What friends unlock"
+      }
+    },
+    "groupGuide": {
+      "s0": {
+        "body": "Switch between group swiping and finding friends.",
+        "title": "Group or friends"
+      },
+      "s1": {
+        "body": "Create a new group or join with a code a friend gave you.",
+        "title": "Create or join"
+      },
+      "s2": {
+        "body": "Once you're in a group — start the group swipe here. You vote together until you match.",
+        "title": "Group swipe"
+      },
+      "s3": {
+        "body": "Search by username and send a friend request.",
+        "title": "Add friends"
       }
     },
     "groupsTour": {
       "s0": {
-        "body": "Create a group and share the code, or type in the code a friend gave you.",
+        "body": "Create a new group and share the code, or join with a friend's group code.",
         "title": "Create or join"
       },
       "s1": {
-        "body": "Add friends to the group so you all swipe the same feed.",
+        "body": "Add friends to the group so you can swipe together.",
         "title": "Invite friends"
       },
       "s2": {
-        "body": "Decide which genres you swipe on and how many people have to like a title for it to be a match.",
-        "title": "Group settings"
+        "body": "Set which genres you swipe on and how many people need to like a title for a match.",
+        "title": "Settings"
       },
       "s3": {
-        "body": "Start the group swipe — you each vote on your own, and you get a match once enough of you like the same title.",
+        "body": "Start the group swipe — you vote together until enough of you like the same title.",
         "title": "Swipe together"
       }
     },
-    "navTour": {
+    "navGuide": {
       "s0": {
-        "body": "Five tabs along the bottom — that's the whole app.",
-        "discover": "Discover — browse freely by genre",
-        "group": "Group — swipe with friends and match",
-        "profile": "Profile — services, language and your account",
-        "swipe": "Swipe — your personal feed",
-        "title": "Finding your way around",
-        "watchlist": "Watchlist — everything you liked and rated"
+        "body": "Your personal swipe feed of films and series.",
+        "title": "Recommendations"
+      },
+      "s1": {
+        "body": "Create or join a group and add friends.",
+        "title": "Group & friends"
+      },
+      "s2": {
+        "body": "Browse and filter titles by genre and type.",
+        "title": "Discover"
+      },
+      "s3": {
+        "body": "Everything you've liked and all your ratings in one place.",
+        "title": "Watchlist"
+      },
+      "s4": {
+        "body": "Settings, services and your account.",
+        "title": "Profile"
+      }
+    },
+    "swipeGuide": {
+      "s0": {
+        "body": "Here you get recommendations tuned to your taste. Swipe to find your next thing to watch.",
+        "title": "Welcome to NextWatch"
+      },
+      "s1": {
+        "body": "Drag the card right to like it — the title is saved to your watchlist.",
+        "title": "Like"
+      },
+      "s2": {
+        "body": "Drag left if the title doesn't feel right. It's hidden for a while so you don't see it again.",
+        "title": "Nope"
+      },
+      "s3": {
+        "body": "Drag up if you've already seen it. You can rate it afterwards.",
+        "title": "Seen"
+      },
+      "s4": {
+        "body": "Tap the card to flip it and read more about the film or series.",
+        "title": "More info"
+      },
+      "s5": {
+        "body": "Or use the buttons: No, Info, Undo and Like.",
+        "title": "The buttons"
       }
     },
     "watchlistTour": {
       "s0": {
-        "body": "Everything you swipe right on lands here. The Ratings tab collects what you've already seen and rated.",
+        "body": "Titles you like while swiping collect under Watchlist. The Ratings tab shows everything you've already seen and rated.",
         "title": "Your watchlist"
       },
       "s1": {
-        "body": "Tap a title to see the plot, ratings and where you can stream it.",
-        "title": "Open a title"
+        "body": "Swipe right on a title you want to watch and it's saved to this list automatically.",
+        "title": "How titles get here"
       },
       "s2": {
-        "body": "Choose Rate and the title moves to the Ratings tab — and Watch now takes you straight to the streaming service.",
-        "title": "Rate it and watch it"
+        "body": "Tap a title and choose Rate — it moves to the Ratings tab with your score.",
+        "title": "Rate what you've seen"
+      },
+      "s3": {
+        "body": "Open a title and tap Watch now to go straight to the streaming service you have it on.",
+        "title": "Watch now"
       }
     }
   },
   "upsell": {
-    "body": "That ad is over — it doesn't have to come back.",
-    "bulletsLabel": "What you get",
+    "body": "Get Premium for SEK 19/month — completely ad-free and unlimited swipes.",
     "close": "Close",
     "cta": "Get Premium – SEK 19/month",
-    "dismiss": "Not now",
-    "heading": "Skip the ads with Premium",
-    "legal": "SEK 19/month, renews automatically until you cancel. Cancel any time.",
+    "dismiss": "No thanks, keep swiping",
+    "heading": "Tired of ads?",
     "loadingVideo": "Loading video…",
     "opening": "Opening…",
-    "watchAd": "Watch a video – no ads for 24h"
+    "watchAd": "Watch a video – skip ads for 24h"
   },
   "watch": {
     "closeTrailer": "Close trailer",

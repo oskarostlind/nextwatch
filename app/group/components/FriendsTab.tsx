@@ -180,7 +180,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={cardClass} data-tour="friends-add">
+      <div className={cardClass} data-guide="friends-search" data-tour="friends-add">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-white/40" />
           <input
@@ -421,7 +421,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
         </div>
       )}
 
-      <CoachMarkTour tourId="friends-tour" steps={FRIENDS_TOUR_STEPS} />
+      <CoachMarkTour tourId="friends-tour" steps={FRIENDS_TOUR_STEPS} suppressGuideId="group" />
     </div>
   );
 }

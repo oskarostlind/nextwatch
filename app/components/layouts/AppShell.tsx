@@ -11,9 +11,9 @@ import Toast from "../ui/Toast";
 import PushRegistration from "../client/PushRegistration";
 import SessionPersistence from "../client/SessionPersistence";
 import SplashScreenHide from "../client/SplashScreenHide";
-import CoachMarkTour from "../client/tours/CoachMarkTour";
-import { NAV_TOUR_STEPS } from "@/lib/tours/coachSteps";
-import { hasAuthCookie } from "@/lib/userGuide";
+import GuideOverlay from "../client/GuideOverlay";
+import { NAV_GUIDE_STEPS } from "@/lib/guideSteps";
+import { hasAuthCookie, hasSeenGuide, releaseGuide, tryAcquireGuide } from "@/lib/userGuide";
 import { AuthGateProvider } from "@/lib/authGateContext";
 import { SwipeDeckPreloader } from "@/app/recs/SwipeDeckProvider";
 import { SocialPreloader } from "../client/SocialProvider";
@@ -46,13 +46,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Enda sidan där SSR:s inloggningsstatus kan vara fel (kallstarts-race, se
   // AuthGate.tsx) — alla andra ska bete sig exakt som innan: redo direkt.
   const isLandingRoute = pathname === "/";
-  // Nav-hinten är inloggat-läge-bara och får aldrig visas på landnings-/auth-
-  // sidor. hasAuthCookie() läses i en effect eftersom document.cookie inte
-  // finns under SSR — annars blir första renderingen fel för inloggade.
-  const [signedIn, setSignedIn] = useState(false);
+  const [navGuideOpen, setNavGuideOpen] = useState(false);
+
   useEffect(() => {
-    setSignedIn(hasAuthCookie());
-  }, [pathname]);
+    if (hideChrome) return;
+    if (!hasAuthCookie()) return;
+    if (!hasSeenGuide("swipe")) return;
+    if (hasSeenGuide("nav")) return;
+    // Öppna bara om ingen annan guide är aktiv (t.ex. grupp-guiden på /group).
+    const t = window.setTimeout(() => {
+      if (tryAcquireGuide("nav")) setNavGuideOpen(true);
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [hideChrome, pathname]);
 
   if (hideChrome) {
     return (
@@ -89,12 +95,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {children}
           </main>
 
-          {/* data-app-tabs: HintSheet mäter raden för att lägga bottenarken
-              precis ovanför den (och innanför safe-area). */}
-          <div
-            data-app-tabs
-            className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 backdrop-blur supports-[backdrop-filter]:bg-neutral-950/60"
-          >
+          <div className="fixed bottom-0 left-1/2 z-50 w-full max-w-md -translate-x-1/2 backdrop-blur supports-[backdrop-filter]:bg-neutral-950/60">
             <BottomTabs />
           </div>
 
@@ -102,11 +103,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Toast />
         </div>
 
-        {/* Nav-hinten: EN ruta som listar alla fem flikar, och först efter att
-            swipe-genomgången är avklarad — inte fem modaler direkt vid start. */}
-        {signedIn ? (
-          <CoachMarkTour tourId="nav-tour" steps={NAV_TOUR_STEPS} requires={["swipe-gestures"]} delayMs={1400} />
-        ) : null}
+        <GuideOverlay
+          guideId="nav"
+          steps={NAV_GUIDE_STEPS}
+          open={navGuideOpen}
+          onClose={() => {
+            setNavGuideOpen(false);
+            releaseGuide("nav");
+          }}
+        />
       </div>
     </AuthGateProvider>
     </MotionConfig>

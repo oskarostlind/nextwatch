@@ -1,125 +1,103 @@
 "use client";
 
-// Körare för coach-genomgångar (nav, vänner, grupper, watchlist). Bygger på
-// lib/tours/useTourGate + CoachMarkStep/HintSheet.
-//
-// Just-in-time i stället för front-loading: när genomgången startar plockas
-// stegen vars mål FAKTISKT finns på skärmen ut, resten hoppas över. Finns
-// inget steg alls (t.ex. gruppfliken innan man gått med i en grupp) läggs
-// genomgången undan UTAN att markeras sedd — den dyker upp när ytan den
-// beskriver existerar.
-//
-// Tidigare väntade den 3,5 sekunder per saknat mål innan den gick vidare, vilket
-// gav flera sekunders svart skärm med en tom ruta i mitten på gruppfliken.
-import { useCallback, useEffect, useState } from "react";
+// Generisk körare för coach-mark-genomgångar (fas 2: vänner, grupper,
+// watchlist) — bygger på lib/tours/useTourGate + CoachMarkStep utan att
+// bygga en till tour-motor. Ett steg utan mål (target) visas alltid
+// (center-placerat); ett steg VARS mål inte hunnit monteras (t.ex.
+// inställningskugghjulet som bara finns för gruppskaparen, eller
+// "Bjud in"-knappen innan man gått med i en grupp) väntas in en kort stund
+// och hoppas sedan över tyst — motsvarande hur GuideOverlay redan hoppar
+// över steg med saknat mål.
+import { useEffect, useRef, useState } from "react";
 import CoachMarkStep from "./CoachMarkStep";
 import { useTourGate } from "@/lib/tours/useTourGate";
 import type { TourId } from "@/lib/tours/registry";
 import type { CoachTourStep } from "@/lib/tours/types";
+import { markGuideSeen, releaseGuide, tryAcquireGuide, type GuideId } from "@/lib/userGuide";
 
-/** Hur länge vi väntar in målen innan vi ger upp och lägger undan touren. */
-const READY_WAIT_MS = 1200;
-const READY_POLL_MS = 150;
+const TARGET_WAIT_MS = 3500;
+const TARGET_POLL_MS = 200;
 
-function targetOnScreen(selector: string | undefined): boolean {
+function hasTarget(selector: string | undefined): boolean {
   if (!selector) return true;
   if (typeof document === "undefined") return false;
   return Boolean(document.querySelector(`[data-tour="${selector}"]`));
 }
 
-function visibleSteps(steps: CoachTourStep[]): CoachTourStep[] {
-  return steps.filter((s) => !s.requiresTarget || targetOnScreen(s.target));
-}
-
 export default function CoachMarkTour({
   tourId,
   steps,
-  /** Genomgången startar först när ytan är redo (data laddad, flik vald, …). */
-  enabled = true,
-  /** Genomgångar som måste vara avklarade först. */
-  requires,
-  /** Extra ?tour=-värden som också tvingar fram den här genomgången. */
-  forceAliases,
-  /** Paus innan hinten tänds — låter sidan lägga sig till ro först. */
-  delayMs,
+  /** Äldre passiv guide (lib/userGuide.ts) som täcker samma yta — tas i
+   *  besittning + markeras sedd så den inte dyker upp ovanpå den här. */
+  suppressGuideId,
 }: {
   tourId: TourId;
   steps: CoachTourStep[];
-  enabled?: boolean;
-  requires?: TourId[];
-  forceAliases?: string[];
-  delayMs?: number;
+  suppressGuideId?: GuideId;
 }) {
-  const { state, complete, skip, defer } = useTourGate(tourId, { enabled, requires, forceAliases, delayMs });
-  const [runSteps, setRunSteps] = useState<CoachTourStep[] | null>(null);
+  const { state, complete, skip } = useTourGate(tourId);
   const [stepIndex, setStepIndex] = useState(0);
+  const [ready, setReady] = useState(false);
+  const waitStart = useRef<number | null>(null);
 
   const shouldRun = state === "show";
 
-  // Vänta in målen en kort stund, plocka sedan ut de steg som går att visa.
+  useEffect(() => {
+    if (!shouldRun || !suppressGuideId) return;
+    tryAcquireGuide(suppressGuideId);
+    markGuideSeen(suppressGuideId);
+    return () => releaseGuide(suppressGuideId);
+  }, [shouldRun, suppressGuideId]);
+
   useEffect(() => {
     if (!shouldRun) {
-      setRunSteps(null);
       setStepIndex(0);
+      setReady(false);
       return;
     }
-    let cancelled = false;
-    const started = Date.now();
-
-    const settle = () => {
-      if (cancelled) return true;
-      const found = visibleSteps(steps);
-      if (found.length > 0) {
-        setRunSteps(found);
-        setStepIndex(0);
-        return true;
-      }
-      if (Date.now() - started >= READY_WAIT_MS) {
-        // Inget att visa här och nu — kom tillbaka senare, markera inte sedd.
-        defer();
-        return true;
-      }
-      return false;
-    };
-
-    if (settle()) return;
-    const timer = window.setInterval(() => {
-      if (settle()) window.clearInterval(timer);
-    }, READY_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [shouldRun, steps, defer]);
-
-  const goNext = useCallback(() => {
-    setStepIndex((i) => i + 1);
-  }, []);
-
-  // Målet kan ha försvunnit mellan stegen (flikbyte, listan tömd) — hoppa
-  // vidare direkt i stället för att visa en ring runt ingenting.
-  useEffect(() => {
-    if (!runSteps) return;
-    if (stepIndex >= runSteps.length) {
+    const step = steps[stepIndex];
+    if (!step) {
       complete();
       return;
     }
-    const step = runSteps[stepIndex];
-    if (step.requiresTarget && !targetOnScreen(step.target)) setStepIndex((i) => i + 1);
-  }, [runSteps, stepIndex, complete]);
+    if (hasTarget(step.target)) {
+      setReady(true);
+      return;
+    }
+    setReady(false);
+    waitStart.current = Date.now();
+    const t = window.setInterval(() => {
+      if (hasTarget(step.target)) {
+        window.clearInterval(t);
+        setReady(true);
+        return;
+      }
+      const elapsed = Date.now() - (waitStart.current ?? Date.now());
+      if (elapsed >= TARGET_WAIT_MS) {
+        window.clearInterval(t);
+        setStepIndex((i) => i + 1);
+      }
+    }, TARGET_POLL_MS);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRun, stepIndex, steps]);
 
-  if (!shouldRun || !runSteps) return null;
-  const step = runSteps[stepIndex];
+  if (!shouldRun || !ready) return null;
+  const step = steps[stepIndex];
   if (!step) return null;
+
+  function goNext() {
+    if (stepIndex >= steps.length - 1) complete();
+    else setStepIndex((i) => i + 1);
+  }
 
   return (
     <CoachMarkStep
-      key={step.id}
       step={step}
       index={stepIndex}
-      total={runSteps.length}
-      onNext={stepIndex >= runSteps.length - 1 ? complete : goNext}
-      onSkip={runSteps.length > 1 && stepIndex < runSteps.length - 1 ? skip : undefined}
+      total={steps.length}
+      onNext={goNext}
+      onSkip={stepIndex > 0 ? skip : undefined}
     />
   );
 }

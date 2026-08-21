@@ -8,14 +8,15 @@ export type NavItem = {
   labelKey: "swipe" | "group" | "discover" | "watchlist" | "profile";
   icon: NavIcon;
   activeStartsWith: string;
+  guideTarget: string;
 };
 
 export const navItems: NavItem[] = [
-  { href: "/swipe",     labelKey: "swipe",     icon: Home,     activeStartsWith: "/swipe" },
-  { href: "/group",     labelKey: "group",     icon: Users,    activeStartsWith: "/group" },
-  { href: "/discover",  labelKey: "discover",  icon: Compass,  activeStartsWith: "/discover" },
-  { href: "/watchlist", labelKey: "watchlist", icon: Bookmark, activeStartsWith: "/watchlist" },
-  { href: "/profile",   labelKey: "profile",   icon: User,     activeStartsWith: "/profile" },
+  { href: "/swipe",     labelKey: "swipe",     icon: Home,     activeStartsWith: "/swipe",     guideTarget: "nav-swipe" },
+  { href: "/group",     labelKey: "group",     icon: Users,    activeStartsWith: "/group",     guideTarget: "nav-group" },
+  { href: "/discover",  labelKey: "discover",  icon: Compass,  activeStartsWith: "/discover",  guideTarget: "nav-discover" },
+  { href: "/watchlist", labelKey: "watchlist", icon: Bookmark, activeStartsWith: "/watchlist", guideTarget: "nav-watchlist" },
+  { href: "/profile",   labelKey: "profile",   icon: User,     activeStartsWith: "/profile",   guideTarget: "nav-profile" },
 ];
 
 // Exporterar ikonerna så vi kan använda dem i ActionDock senare

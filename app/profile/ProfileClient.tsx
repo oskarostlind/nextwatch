@@ -921,9 +921,17 @@ function SettingsTab() {
   const [note, setNote] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Admin-genväg: probar /api/admin/me (404 för alla utom ADMIN_EMAIL).
+  // Medvetet ej cachad/i18n:ad — sektionen finns bara för en enda person.
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   useEffect(() => {
     let ignore = false;
+    void fetch("/api/admin/me", { cache: "no-store" })
+      .then((r) => {
+        if (!ignore && r.ok) setIsAdminUser(true);
+      })
+      .catch(() => {});
     void (async () => {
       try {
         const [nRes, bj] = await Promise.all([
@@ -1026,6 +1034,28 @@ function SettingsTab() {
 
   return (
     <div className="grid gap-8">
+      {/* Admin-genväg — renderas ENBART för ADMIN_EMAIL (probe ovan). Hårdkodad
+          svenska: sektionen är ett internverktyg, inte användar-UI. Vanlig <a>
+          (inte router-Link): /admin har egen layout utan app-chrome, så en full
+          sidladdning är rätt — och funkar likadant i iOS-WebView:n. */}
+      {isAdminUser && (
+        <section className="grid gap-3">
+          <h3 className="text-sm font-semibold text-amber-300/80">Admin</h3>
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3">
+            <div className="min-w-0">
+              <div className="text-sm text-white/85">Admin-panelen</div>
+              <div className="text-xs text-white/45">Nyckeltal, intäkter och användare. Bara du ser den här knappen.</div>
+            </div>
+            <a
+              href="/admin"
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-amber-300"
+            >
+              Öppna
+            </a>
+          </div>
+        </section>
+      )}
+
       {/* Prenumeration */}
       <section className="grid gap-3">
         <h3 className="text-sm font-semibold text-white/80">{t("subscription")}</h3>

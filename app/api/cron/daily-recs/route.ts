@@ -252,8 +252,7 @@ export async function GET(req: Request) {
       lastRecPushSentAt: true,
       lastReEngagementPushAt: true,
       lastReEngagementVariant: true,
-      // notifyMarketing läses redan här: se re-engagement-grenen nedan.
-      profile: { select: { region: true, uiLanguage: true, notifyMarketing: true } },
+      profile: { select: { region: true, uiLanguage: true } },
     },
     orderBy: { lastDailyRecAt: { sort: "asc", nulls: "first" } },
   });
@@ -294,13 +293,12 @@ export async function GET(req: Request) {
       const reEngageCooldownOver =
         !user.lastReEngagementPushAt ||
         now - user.lastReEngagementPushAt.getTime() >= REENGAGE_MIN_DAYS * DAY_MS;
-      // Marknadsföringsflaggan kollas här och inte bara i sendPushToUser: hade
-      // vi låtit push:en tystas där nere hade användaren ändå förbrukat sin
-      // körning och blivit utan filmtips. Nu faller opt-outade rakt ned till
-      // recs-grenen i stället.
-      const wantsNagging = user.profile?.notifyMarketing !== false;
 
-      if (tier >= 0 && reEngageCooldownOver && wantsNagging) {
+      // Ingen inställningsflagga här — produktbeslut 2026-08-20: "vi saknar
+      // dig"-pushen är standard för alla. Enda opt-outen är att neka push på
+      // OS-nivå (då finns inga tokens och sendPushToUser blir en no-op).
+      // NW_REENGAGE_MIN_DAYS=0 är kill switch för hela featuren.
+      if (tier >= 0 && reEngageCooldownOver) {
         const variant = pickVariant(tier, user.lastReEngagementVariant);
         const tRe = await getTranslations({ locale: uiLanguage, namespace: "push.reEngagement" });
         await sendPushToUser(user.id, {

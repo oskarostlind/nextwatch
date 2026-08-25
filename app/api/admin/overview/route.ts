@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/adminAuth";
+import { getAdmobEarnings, admobConfigured } from "@/lib/admobReport";
+
+// Prenumerationspriset (kr/mån) för MRR-estimatet. Medvetet ett estimat:
+// premium-antal × pris, i stället för att dra in App Store Connect Sales API —
+// Apple-belopp redovisas ändå där, och 19 kr × subs räcker för dashboarden.
+const PREMIUM_PRICE_SEK = Number(process.env.NW_PREMIUM_PRICE_SEK ?? 19);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +38,7 @@ export async function GET() {
     ratingsTotal,
     groupsActive,
     latestPurchases,
+    admob,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: d7 } } }),
@@ -55,6 +62,8 @@ export async function GET() {
         user: { select: { email: true } },
       },
     }),
+    // Best effort med intern cache (1 h) — får aldrig fälla resten av vyn.
+    getAdmobEarnings(),
   ]);
 
   return NextResponse.json({
@@ -74,7 +83,14 @@ export async function GET() {
       applePurchases,
       ratingsTotal,
       groupsActive,
+      // Uppskattad MRR: antal premium × månadspris. Lifetime ingår inte (ingen
+      // återkommande intäkt). Apple + Stripe skiljs inte åt — samma pris.
+      mrrEstimateSEK: premium * PREMIUM_PRICE_SEK,
+      premiumPriceSEK: PREMIUM_PRICE_SEK,
     },
+    // null + configured=false ⇒ UI:t visar "inte uppkopplat" i stället för 0 kr.
+    admob: admob ?? null,
+    admobConfigured: admobConfigured(),
     latestPurchases: latestPurchases.map((p) => ({
       amountSEK: p.amountTotal / 100,
       currency: p.currency,

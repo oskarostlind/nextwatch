@@ -361,7 +361,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   /* ---------- render (identisk med solo-swipen) ---------- */
 
-  // Höjd från 110 eftersom dragElastic numera är 1:1 i de tre riktningarna —
+  // Höjd från 110 eftersom kortet numera följer fingret 1:1 —
   // kortet följer fingret hela vägen, så samma fysiska rörelse ger längre
   // offset än förut. 130 håller släppkänslan kalibrerad.
   const DIST_THRESHOLD = 130;
@@ -461,12 +461,19 @@ export default function GroupSwipePage({ code }: { code: string }) {
                     style={{ x, y, rotate }}
                     animate={controls}
                     drag
-                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-                    // 1:1-följning i de tre riktningar som har en handling. Med 0.8
-                    // tolkade nollstora dragConstraints all rörelse som översläng och
-                    // kortet följde bara 80 % av fingret. Nedåt finns ingen handling —
-                    // där får det studsa som gummiband.
-                    dragElastic={{ left: 1, right: 1, top: 1, bottom: 0.4 }}
+                    // INGA dragConstraints och ingen momentum. Med nollstora constraints startade
+                    // framer-motion en EGEN inertia-animation mot (0,0) i samma ögonblick fingret
+                    // släpptes (VisualElementDragControls.stop -> startAnimation, min/max = 0 och
+                    // velocity = fingrets fart), medan vårt eget onDragEnd med flit körs en
+                    // bildruta senare (frame.postRender). De två animationerna skrev till samma
+                    // motion values: kortet ryckte tillbaka till mitten innan swipeOut hann ta
+                    // över, och på en långsam enhet — där postRender dröjer flera bildrutor — blev
+                    // det synligt som ett kort som stod stilla mitt på skärmen och sedan hoppade
+                    // vidare. Utan constraints finns inget att fjädra tillbaka till, och utan
+                    // momentum startas ingen inertia alls: onDragEnd äger hela släppet (antingen
+                    // swipeOut eller en uttrycklig fjäder till 0). Kortet följer fingret 1:1 av
+                    // sig självt, vilket är precis det dragElastic-hacket försökte åstadkomma.
+                    dragMomentum={false}
                     onDragEnd={(_, info) => {
                       const { offset, velocity } = info;
                       const up =
@@ -525,9 +532,16 @@ export default function GroupSwipePage({ code }: { code: string }) {
               return (
                 <div
                   key={card.id}
+                  // Ingen opacity här. Wrappern hade opacity-[0.92], vilket gör HELA
+                  // subträdet 92 % ogenomskinligt som grupp — även det svarta
+                  // kortet under. De 8 % som släpptes igenom visade kortet TVÅ steg
+                  // bort, och eftersom dess titel är vit text på nästan svart
+                  // gradient syntes den tydligt genom det inkommande kortets
+                  // titelyta när toppkortet tonade ut. Dämpningen ska komma från
+                  // filter: brightness() ensam — den gör inget genomskinligt.
                   // transition-transform: när toppkortet försvinner flyttas #3 upp
                   // till #2:s plats — utan detta hoppar den ett steg på en bildruta.
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 opacity-[0.92] transition-transform duration-200 ease-out"
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 transition-transform duration-200 ease-out"
                   style={{
                     zIndex: z,
                     transform: `translateY(${translateY}px) scale(${scale})`,

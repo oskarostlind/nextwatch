@@ -9,6 +9,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { LOCALES, bcp47, normalizeLocale, tmdbLanguage, type AppLocale } from "@/lib/i18nConfig";
 import { setUiLanguage, writeUiLanguageCookie } from "@/lib/uiLanguage";
 import LogoutButton from "@/app/components/auth/LogoutButton";
+import GuestSaveCard from "@/app/components/auth/GuestSaveCard";
 import { ProviderChip } from "@/app/components/ui/ProviderChip";
 import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } from "@/app/components/ui/kit";
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
@@ -625,6 +626,9 @@ export default function ProfileClient({ initial }: Props) {
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
       <PageHeader eyebrow={t("eyebrow")} title={t("tabProfile")} right={<LogoutButton />} />
+
+      {/* Gäster: permanent väg till konto (osynligt för alla andra). */}
+      <GuestSaveCard />
 
       <div className="mb-6">
         <SegmentedTabs tabs={TABS} value={tab} onChange={setTab} layoutId="profile-tabs" />

@@ -14,6 +14,7 @@ import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
 import { GROUP_ACTIVE_STEPS, GROUPS_START_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
 import { useTranslations } from "next-intl";
+import { nudgeSignup } from "@/lib/signupNudge";
 
 type GroupResponse = {
   code?: string;
@@ -255,6 +256,8 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           void refreshSocial();
           // Bust:a router-cachen så /swipe renderas om med nw_group-cookien.
           router.refresh();
+          // Gäst i en grupp = andra ser "Gäst" och gruppen försvinner med sessionen.
+          nudgeSignup("group");
         }
       }
     );
@@ -268,6 +271,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
           setCode(newCode);
           void refreshSocial();
           router.refresh();
+          nudgeSignup("group");
         }
       }
     );
@@ -517,4 +521,4 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       <CoachMarkTour tourId="groups-tour" steps={GROUPS_START_STEPS} />
     </div>
   );
-}
+}

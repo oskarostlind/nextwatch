@@ -1194,5 +1194,45 @@
     "tipFriend": "Tipsa en vän",
     "tmdbRating": "Betyg: {value}",
     "yourRating": "Ditt betyg: {value}/10"
+  },
+  "guestConvert": {
+    "createAccount": "Skapa konto",
+    "notNow": "Inte nu",
+    "cancel": "Avbryt",
+    "card": {
+      "eyebrow": "Du är gäst",
+      "title": "Spara din profil",
+      "body": "Skapa ett konto med Apple eller e-post så sparas dina swipes, din watchlist och dina grupper – och du kan logga in på andra enheter.",
+      "retention": "Gästprofiler som inte används på 30 dagar raderas."
+    },
+    "swipes": {
+      "title": "Du är på gång!",
+      "body": "Du har swipat en hel del nu. Skapa ett konto så tappar du inte din smakprofil om du byter telefon eller loggar ut."
+    },
+    "watchlist": {
+      "title": "Spara din watchlist",
+      "body": "Du har börjat bygga en watchlist. Som gäst finns den bara på den här enheten – med ett konto följer den med dig."
+    },
+    "group": {
+      "title": "Ta med gruppen överallt",
+      "body": "Som gäst är gruppen och era matcher knutna till den här enheten. Skapa ett konto så når du gruppen från vilken enhet som helst – och inget försvinner om du loggar ut."
+    },
+    "friend": {
+      "title": "Behåll dina vänner",
+      "body": "Vänner kopplas till ditt konto. Skapa ett så försvinner de inte om du loggar ut eller byter enhet."
+    },
+    "premium": {
+      "title": "Skapa konto innan du köper",
+      "body": "Premium kopplas till ditt konto. Som gäst kan du inte logga in igen, så köpet riskerar att försvinna om du loggar ut eller byter enhet.",
+      "continue": "Köp utan konto"
+    },
+    "logout": {
+      "button": "Logga ut",
+      "busy": "Loggar ut…",
+      "title": "Du tappar allt om du loggar ut",
+      "body": "Du använder NextWatch som gäst och kan inte logga in igen. Dina swipes, din watchlist och dina grupper försvinner för gott.",
+      "createFirst": "Skapa konto först",
+      "anyway": "Logga ut ändå"
+    }
   }
 }

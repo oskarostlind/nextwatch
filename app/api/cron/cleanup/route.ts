@@ -108,6 +108,8 @@ export async function GET(req: Request) {
 
     // Övergivna gäster. Signaturen är medvetet konservativ:
     //   - varken e-post eller Apple → inget riktigt konto
+    //   - plan = 'free' → en gäst som köpt Premium ("Köp utan konto") får
+    //     aldrig raderas av städningen
     //   - profilens displayName = 'Gäst' → har INTE gått igenom onboardingen
     //     (som sätter ett riktigt namn). Utan detta skulle en fullt onboardad
     //     användare utan registrerad e-post råka flaggas.
@@ -119,6 +121,7 @@ export async function GET(req: Request) {
     const guestWhere = `
       u."email" IS NULL
       AND u."apple_sub" IS NULL
+      AND u."plan" = 'free'
       AND EXISTS (SELECT 1 FROM "profiles" p WHERE p."user_id" = u."id" AND p."display_name" = 'Gäst')
       AND COALESCE(u."last_active_at", u."created_at") < $1
       AND NOT EXISTS (SELECT 1 FROM "group_members" gm WHERE gm."user_id" = u."id")

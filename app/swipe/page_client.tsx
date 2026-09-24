@@ -13,6 +13,7 @@ import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
+import { trackSwipeForNudge } from "@/lib/signupNudge";
 import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
 import type { ShareItem } from "@/app/components/client/ShareTitleModal";
@@ -537,6 +538,8 @@ export default function SwipePageClient() {
     saveRating(c, "dislike");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
+    // Gäst-konverteringen räknar bara solo — en gruppkväll ska inte avbrytas.
+    if (mode !== "group") trackSwipeForNudge("dislike");
   }
 
   function handleLike(c: Card): void {
@@ -566,6 +569,8 @@ export default function SwipePageClient() {
       /* best-effort */
     });
     sendGroupVoteBackground(c, "LIKE");
+    // Gäst-konverteringen räknar bara solo — en gruppkväll ska inte avbrytas.
+    if (mode !== "group") trackSwipeForNudge("like");
 
     // Toppmatch firas bara i solo — i grupp äger gruppmatchen den rutan.
     if (c.topMatch && mode !== "group") setSoloMatch(c);
@@ -579,6 +584,8 @@ export default function SwipePageClient() {
     saveRating(c, "seen");
     popTop();
     sendGroupVoteBackground(c, "DISLIKE");
+    // Gäst-konverteringen räknar bara solo — en gruppkväll ska inte avbrytas.
+    if (mode !== "group") trackSwipeForNudge("seen");
     // Betygsfrågan hoppas över för osläppta titlar — "Vad tyckte du?" om en film
     // som inte finns än är bara förvirrande.
     if (c.kind !== "upcoming") setRatePrompt(c);

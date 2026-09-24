@@ -11,6 +11,7 @@
 // till verify-endpointen.
 
 import { Capacitor } from "@capacitor/core";
+import { ensureAccountBeforePremium } from "./signupNudge";
 
 export type PurchaseResult =
   | { ok: true }
@@ -196,6 +197,9 @@ export async function openSubscriptionManagement(): Promise<boolean> {
  *     ok:true precis innan navigeringen sker).
  */
 export async function startPremiumPurchase(): Promise<PurchaseResult> {
+  // Gäst? Rekommendera konto först — annars är köpet knutet till en session
+  // som försvinner vid utloggning eller gäststädningen. "Köp ändå" går vidare.
+  if (!(await ensureAccountBeforePremium())) return { ok: false, message: "", cancelled: true };
   if (isNativeIos()) return startAppleIapPurchase();
   return startStripeCheckout();
 }

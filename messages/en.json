@@ -1194,5 +1194,45 @@
     "tipFriend": "Share with a friend",
     "tmdbRating": "Rating: {value}",
     "yourRating": "Your rating: {value}/10"
+  },
+  "guestConvert": {
+    "createAccount": "Create account",
+    "notNow": "Not now",
+    "cancel": "Cancel",
+    "card": {
+      "eyebrow": "You're a guest",
+      "title": "Save your profile",
+      "body": "Create an account with Apple or email to keep your swipes, watchlist and groups – and sign in on other devices.",
+      "retention": "Guest profiles unused for 30 days are deleted."
+    },
+    "swipes": {
+      "title": "You're on a roll!",
+      "body": "You've swiped quite a bit. Create an account so you don't lose your taste profile if you switch phones or sign out."
+    },
+    "watchlist": {
+      "title": "Save your watchlist",
+      "body": "You've started a watchlist. As a guest it only lives on this device – with an account it follows you."
+    },
+    "group": {
+      "title": "Take the group anywhere",
+      "body": "As a guest, the group and your matches are tied to this device. Create an account to reach the group from any device – and nothing is lost if you sign out."
+    },
+    "friend": {
+      "title": "Keep your friends",
+      "body": "Friends are tied to your account. Create one so they don't disappear if you sign out or switch devices."
+    },
+    "premium": {
+      "title": "Create an account before buying",
+      "body": "Premium is tied to your account. As a guest you can't sign back in, so the purchase may be lost if you sign out or switch devices.",
+      "continue": "Buy without an account"
+    },
+    "logout": {
+      "button": "Sign out",
+      "busy": "Signing out…",
+      "title": "You'll lose everything if you sign out",
+      "body": "You're using NextWatch as a guest and can't sign back in. Your swipes, watchlist and groups will be gone for good.",
+      "createFirst": "Create account first",
+      "anyway": "Sign out anyway"
+    }
   }
 }

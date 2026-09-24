@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import MatchOverlay, { type GroupMatchItem } from "../ui/MatchOverlay";
 import RatingModal, { type RatingModalItem } from "./RatingModal";
+import SignupNudge from "../auth/SignupNudge";
 import { useGroupMatchPolling } from "../../../lib/useGroupMatch";
 import { GROUP_VOTED_EVENT } from "../../../lib/groupVoteEvent";
 import { markTitleRated } from "../../../lib/swipeDeckStore";
@@ -126,6 +127,7 @@ export default function OverlayMount() {
 
   return (
     <>
+      <SignupNudge />
       <MatchOverlay open={open} item={shownItem} savedBy={savedBy} onClose={dismiss} code={groupCode} />
       <RatingModal
         open={pending.item !== null}

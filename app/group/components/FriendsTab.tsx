@@ -14,6 +14,7 @@ import CoachMarkTour from "@/app/components/client/tours/CoachMarkTour";
 import { FRIENDS_TOUR_STEPS } from "@/lib/tours/coachSteps";
 import type { FriendsInitial } from "../page";
 import { useTranslations } from "next-intl";
+import { nudgeSignup } from "@/lib/signupNudge";
 
 type SearchRow = {
   id: string;
@@ -137,6 +138,7 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
     if (!("error" in res)) {
       setSentToIds((prev) => new Set(prev).add(userId));
       void refreshSocial();
+      nudgeSignup("friend");
     }
   };
 
@@ -424,4 +426,4 @@ export default function FriendsTab({ initial }: { initial: FriendsInitial }) {
       <CoachMarkTour tourId="friends-tour" steps={FRIENDS_TOUR_STEPS} />
     </div>
   );
-}
+}

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma, withDbRetry } from "@/lib/prisma";
 import { touchLastActive } from "@/lib/lastActive";
+import { apiMsg } from "@/lib/apiMessages";
 
 type FriendsListUser = {
   id: string;
@@ -18,7 +19,7 @@ export async function GET() {
   try {
     const cookieStore = await cookies();
     const me = cookieStore.get("nw_uid")?.value ?? "";
-    if (!me) return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
     // Throttlad aktivitetsstämpel (~1/min) — driver "senast aktiv" på vänprofiler.
     touchLastActive(me);
@@ -97,6 +98,6 @@ export async function GET() {
       })),
     });
   } catch (e) {
-    return NextResponse.json({ ok: false, message: "Internal error." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

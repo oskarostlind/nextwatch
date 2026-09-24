@@ -263,14 +263,14 @@ export default function FilmChatModal({
             <h3 id="filmchat-heading" className="truncate text-base font-bold text-white">
               {friendName}
             </h3>
-            <p className="text-xs text-white/40">Filmtips fram och tillbaka</p>
+            <p className="text-xs text-white/40">{t("subtitle")}</p>
           </div>
         </div>
 
         {/* Tråden */}
         <div className="min-h-0 flex-1 overflow-y-auto py-3">
           {items === null ? (
-            <p className="py-10 text-center text-sm text-white/50">Laddar…</p>
+            <p className="py-10 text-center text-sm text-white/50">{t("loading")}</p>
           ) : items.length === 0 ? (
             <p className="px-6 py-10 text-center text-sm text-white/50">
               {t.rich("noTips", {

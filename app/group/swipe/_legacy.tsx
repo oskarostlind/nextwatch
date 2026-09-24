@@ -320,10 +320,10 @@ export default function GroupSwipePage({ code }: { code: string }) {
       body: JSON.stringify({ tmdbId: c.tmdbId, mediaType: c.mediaType, rating }),
     })
       .then((res) => {
-        if (!res.ok) notify("Kunde inte spara betyget");
+        if (!res.ok) notify(t("ratingSaveFailed"));
       })
       .catch(() => {
-        notify("Kunde inte spara betyget");
+        notify(t("ratingSaveFailed"));
       })
       .finally(() => {
         setRatingSaving(false);
@@ -608,7 +608,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
               }
             : null
         }
-        heading="Vad tyckte du?"
+        heading={t("ratingHeading")}
         saving={ratingSaving}
         onRate={submitSeenRating}
         onSkip={() => setRatePrompt(null)}

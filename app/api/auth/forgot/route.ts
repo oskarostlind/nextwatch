@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
 import { getTranslations } from "next-intl/server";
 import { normalizeLocale } from "@/lib/i18nConfig";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     const key = getRateLimitKey(req, null);
     if (!rateLimitAllow(key, "auth-forgot", { limit: AUTH_LIMIT })) {
       return NextResponse.json(
-        { ok: false, message: "För många förfrågningar. Försök igen senare." },
+        { ok: false, message: await apiMsg("tooManyRequests") },
         { status: 429 },
       );
     }
@@ -56,13 +57,13 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { email?: string };
     const email = (body.email ?? "").trim().toLowerCase();
     if (!email) {
-      return NextResponse.json({ ok: false, message: "E-post krävs." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("emailRequired") }, { status: 400 });
     }
 
     // Generiskt svar oavsett om kontot finns – läcker inte vilka adresser som är registrerade.
     const genericOk = NextResponse.json({
       ok: true,
-      message: "Om kontot finns har vi skickat en återställningslänk till din e-post.",
+      message: await apiMsg("resetSent"),
     });
 
     const user = await prisma.user.findUnique({
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     return genericOk;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Internt fel.";
+    const msg = e instanceof Error ? e.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message: msg }, { status: 500 });
   }
 }

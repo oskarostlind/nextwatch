@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type TmdbType = "movie" | "tv";
 
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
     const userId = jar.get("nw_uid")?.value;
 
     if (!code || !tmdbId || !tmdbType || !userId) {
-      return NextResponse.json({ ok: false, message: "Bad request." }, { status: 200 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 200 });
     }
 
     await prisma.groupMatchSeen.upsert({
@@ -34,6 +35,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e: unknown) {
     console.error("match/ack POST error:", e);
-    return NextResponse.json({ ok: false, message: "Internal error." }, { status: 200 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 200 });
   }
 }

@@ -10,6 +10,7 @@ import { groupMatchNeed } from "@/lib/groupSettings";
 import { tmdbDetails, type TmdbType, type TmdbLite } from "@/lib/tmdbDetails";
 import { providerGroupsFor, providerWatchUrl } from "@/lib/watchLinks";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 /**
  * TMDB-detaljerna innehåller rå watch-providers (flatrate/rent/buy) — matchrutan
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     if (!code) {
       return NextResponse.json(
-        { ok: false, message: "Missing group code.", size: 0, need: 0, count: 0, match: null, matches: [] },
+        { ok: false, message: await apiMsg("invalidRequest"), size: 0, need: 0, count: 0, match: null, matches: [] },
         { status: 200 }
       );
     }
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
     const key = getRateLimitKey(req, userId ?? null);
     if (!rateLimitAllow(key, "group-match", { limit: MATCH_LIMIT })) {
       return NextResponse.json(
-        { ok: false, message: "För många förfrågningar.", size: 0, need: 0, count: 0, match: null, matches: [] },
+        { ok: false, message: await apiMsg("tooManyRequests"), size: 0, need: 0, count: 0, match: null, matches: [] },
         { status: 429 }
       );
     }
@@ -178,7 +179,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("match GET error:", e);
     return NextResponse.json(
-      { ok: false, message: "Internal error.", size: 0, need: 0, count: 0, match: null, matches: [] },
+      { ok: false, message: await apiMsg("internalError"), size: 0, need: 0, count: 0, match: null, matches: [] },
       { status: 200 }
     );
   }

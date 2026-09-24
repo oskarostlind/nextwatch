@@ -7,13 +7,15 @@
 // Sidan är därför statiskt prerenderad och fullt prefetchbar — flikbytet
 // serveras direkt ur router-cachen utan serverrundresa.
 
+import { getTranslations } from "next-intl/server";
 import WatchlistClient from "./WatchlistClient";
 import { PageHeader } from "../components/ui/kit";
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations("watchlist");
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="Din lista" title="Watchlist" subtitle="Titlar du vill se — och betyg på dem du redan sett." />
+      <PageHeader eyebrow={t("pageEyebrow")} title={t("pageTitle")} subtitle={t("pageSubtitle")} />
       <WatchlistClient />
     </main>
   );

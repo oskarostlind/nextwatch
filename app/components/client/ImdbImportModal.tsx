@@ -118,7 +118,7 @@ export default function ImdbImportModal({ open, onClose, onDone }: Props) {
               ) : null}
             </Note>
           ) : (
-            <Note tone="error">{result.message ?? "Import misslyckades."}</Note>
+            <Note tone="error">{result.message ?? t("importFailed")}</Note>
           )
         ) : null}
 

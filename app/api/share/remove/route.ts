@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,11 +10,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const jar = await cookies();
   const me = jar.get("nw_uid")?.value ?? null;
-  if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+  if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as { id?: string };
   if (typeof body.id !== "string" || !body.id) {
-    return NextResponse.json({ ok: false, message: "id saknas." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   // deleteMany med toUserId=me: bara mottagaren kan ta bort, och ett id som

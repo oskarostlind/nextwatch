@@ -23,7 +23,7 @@ export default function LoginCard() {
       });
       const data = (await res.json()) as { ok: boolean; message?: string; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.message ?? data.error ?? 'Kunde inte logga in');
+        setError(data.message ?? data.error ?? t("signInFailed"));
         return;
       }
       window.location.href = '/swipe';

@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { signUid } from "@/lib/session";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function GET() {
     where: { userId: uid },
     select: { userId: true },
   });
-  if (!profile) return NextResponse.json({ ok: false, message: "Ingen profil." }, { status: 404 });
+  if (!profile) return NextResponse.json({ ok: false, message: await apiMsg("profileMissing") }, { status: 404 });
 
   try {
     return NextResponse.json({ ok: true, token: await signUid(uid) });

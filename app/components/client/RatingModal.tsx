@@ -56,14 +56,14 @@ function ratingAccent(n: number): string {
 export default function RatingModal({
   open,
   item,
-  heading = "Vad tyckte du?",
+  heading,
   skipLabel,
   saving = false,
   initialRating,
   onRate,
   onSkip,
   onRemove,
-  removeLabel = "Ta bort betyg",
+  removeLabel,
 }: Props) {
   const t = useTranslations("modals");
   // null = användaren har inte rört slidern än (och inget förifyllt betyg finns).
@@ -102,7 +102,7 @@ export default function RatingModal({
             exit={{ scale: 0.96, opacity: 0 }}
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
           >
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">{heading}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">{heading ?? t("ratingHeading")}</p>
 
             <div className="flex items-center justify-center gap-3">
               {poster ? (
@@ -138,7 +138,7 @@ export default function RatingModal({
                 step={1}
                 value={sliderValue}
                 disabled={saving}
-                aria-label="Betyg 1 till 10"
+                aria-label={t("ratingSliderAria")}
                 onChange={(e) => setSelected(Number(e.target.value))}
                 className="nw-rating-slider w-full disabled:opacity-50"
                 style={
@@ -176,7 +176,7 @@ export default function RatingModal({
                 onClick={onRemove}
                 className="w-full rounded-xl border border-rose-500/40 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"
               >
-                {removeLabel}
+                {removeLabel ?? t("removeRating")}
               </button>
             ) : null}
 

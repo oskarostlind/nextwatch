@@ -21,6 +21,7 @@ import {
 } from "@/lib/groupSettings";
 import { isValidSwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import { getGroupCapacity, PREMIUM_GROUP_MAX_MEMBERS } from "@/lib/groupLimits";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Ok = {
   ok: true;
@@ -69,10 +70,10 @@ function toSettingsDto(g: {
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return bad("Ingen session.", 401);
+  if (!uid) return bad(await apiMsg("noSession"), 401);
 
   const code = (new URL(req.url).searchParams.get("code") || "").toUpperCase();
-  if (!code) return bad("Gruppkod saknas.");
+  if (!code) return bad(await apiMsg("invalidRequest"));
 
   const [group, memberCount] = await Promise.all([
     prisma.group.findUnique({
@@ -92,8 +93,8 @@ export async function GET(req: NextRequest) {
     }),
     prisma.groupMember.count({ where: { groupCode: code } }),
   ]);
-  if (!group) return bad("Gruppen finns inte.", 404);
-  if (group.members.length === 0) return bad("Du är inte medlem i gruppen.", 403);
+  if (!group) return bad(await apiMsg("groupNotFound"), 404);
+  if (group.members.length === 0) return bad(await apiMsg("notGroupMember"), 403);
 
   const capacity = await getGroupCapacity(code);
 
@@ -126,25 +127,25 @@ type PatchBody = {
 export async function PATCH(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return bad("Ingen session.", 401);
+  if (!uid) return bad(await apiMsg("noSession"), 401);
 
   let body: PatchBody;
   try {
     body = (await req.json()) as PatchBody;
   } catch {
-    return bad("Ogiltig payload.");
+    return bad(await apiMsg("invalidRequest"));
   }
 
   const code = (body.code || "").toUpperCase();
-  if (!code) return bad("Gruppkod saknas.");
+  if (!code) return bad(await apiMsg("invalidRequest"));
 
   const group = await prisma.group.findUnique({
     where: { code },
     select: { code: true, createdBy: true },
   });
-  if (!group) return bad("Gruppen finns inte.", 404);
+  if (!group) return bad(await apiMsg("groupNotFound"), 404);
   if (group.createdBy !== uid) {
-    return bad("Endast gruppens skapare kan ändra inställningarna.", 403);
+    return bad(await apiMsg("ownerOnlySettings"), 403);
   }
 
   const data: {
@@ -174,28 +175,28 @@ export async function PATCH(req: NextRequest) {
   }
   if ("providers" in body) {
     if (!Array.isArray(body.providers) || body.providers.some((p) => typeof p !== "string")) {
-      return bad("Ogiltiga streamingtjänster.");
+      return bad(await apiMsg("invalidProviders"));
     }
     data.providers = body.providers as string[];
   }
   if ("maxCert" in body) {
-    if (body.maxCert !== null && !isValidCert(body.maxCert)) return bad("Ogiltig åldersgräns.");
+    if (body.maxCert !== null && !isValidCert(body.maxCert)) return bad(await apiMsg("invalidAgeLimit"));
     data.maxCert = body.maxCert as string | null;
   }
   if ("matchThreshold" in body) {
     if (body.matchThreshold !== null && !isValidThreshold(body.matchThreshold)) {
-      return bad("Ogiltig matchtröskel (minst 2 personer).");
+      return bad(await apiMsg("invalidMatchThreshold"));
     }
     data.matchThreshold = body.matchThreshold as number | null;
   }
   if ("mediaFilter" in body) {
     if (!isValidSwipeMediaFilter(body.mediaFilter)) {
-      return bad("Ogiltigt innehållsfilter (movie, tv eller both).");
+      return bad(await apiMsg("invalidRequest"));
     }
     data.mediaFilter = body.mediaFilter;
   }
 
-  if (Object.keys(data).length === 0) return bad("Inget att uppdatera.");
+  if (Object.keys(data).length === 0) return bad(await apiMsg("invalidRequest"));
 
   const [updated, memberCount] = await Promise.all([
     prisma.group.update({

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import prisma from "../../../../lib/prisma";
 import { getSwipeAllowance, swipeLimitPayload } from "../../../../lib/swipeLimit";
 import { recordSwipeGenres } from "../../../../lib/genreStats";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,20 +21,20 @@ export async function POST(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
   }
 
   const body = (await req.json()) as Body;
   const { tmdbId, mediaType, decision } = body;
 
   if (!tmdbId || !mediaType || (decision !== "like" && decision !== "dislike")) {
-    return NextResponse.json({ ok: false, message: "Ogiltig payload." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   // Daglig swipegräns för gratisanvändare (premium = obegränsat).
   const allowance = await getSwipeAllowance(uid);
   if (!allowance.allowed) {
-    return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
+    return NextResponse.json(await swipeLimitPayload(allowance), { status: 429 });
   }
 
   // Spara beslutet (upsert så upprepade swipes inte kraschar). rating rörs INTE:

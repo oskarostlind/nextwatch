@@ -71,7 +71,7 @@ export default function ActionDock({
   return (
     <div className="flex shrink-0 items-center justify-center gap-4 px-4 pb-1 pt-2">
       <RoundBtn
-        title="Nej"
+        title={t("dislike")}
         intent="danger"
         disabled={disabled}
         onClick={() => {
@@ -82,7 +82,7 @@ export default function ActionDock({
         <X className="h-6 w-6" />
       </RoundBtn>
 
-      <RoundBtn title="Info" intent="info" disabled={disabled} onClick={onInfo}>
+      <RoundBtn title={t("info")} intent="info" disabled={disabled} onClick={onInfo}>
         <Info className="h-6 w-6" />
       </RoundBtn>
 
@@ -99,7 +99,7 @@ export default function ActionDock({
       </RoundBtn>
 
       <RoundBtn
-        title="Gilla"
+        title={t("like")}
         intent="like"
         disabled={disabled}
         onClick={() => {

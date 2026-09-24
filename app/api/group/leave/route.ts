@@ -5,13 +5,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export async function POST() {
   try {
     const store = await cookies();
     const me = store.get("nw_uid")?.value ?? "";
     const code = store.get("nw_group")?.value ?? "";
-    if (!me) return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
     if (code) {
       // Ta bort medlemskapet OCH allt den här användaren lämnat efter sig i
@@ -46,6 +47,6 @@ export async function POST() {
     });
     return res;
   } catch {
-    return NextResponse.json({ ok: false, message: "Internal error." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

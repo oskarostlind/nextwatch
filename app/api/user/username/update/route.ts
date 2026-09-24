@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Ok = { ok: true; username: string | null };
 type Err = { ok: false; message: string };
@@ -20,13 +21,13 @@ type ExistsRow = { exists: boolean };
 export async function POST(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return NextResponse.json({ ok: false, message: "Ingen session." } as Err, { status: 401 });
+  if (!uid) return NextResponse.json({ ok: false, message: await apiMsg("noSession") } as Err, { status: 401 });
 
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
-    return NextResponse.json({ ok: false, message: "Ogiltig JSON." } as Err, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") } as Err, { status: 400 });
   }
 
   const desiredRaw = body.username;
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
         : null;
 
   if (desired !== null && desired !== "" && !valid(desired)) {
-    return NextResponse.json({ ok: false, message: "Ogiltigt användarnamn." } as Err, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("usernameInvalid") } as Err, { status: 400 });
   }
 
   const toStore = desired === "" ? null : desired;
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
       ) AS exists
     `;
     if (taken[0]?.exists) {
-      return NextResponse.json({ ok: false, message: "Upptaget." } as Err, { status: 409 });
+      return NextResponse.json({ ok: false, message: await apiMsg("usernameTaken") } as Err, { status: 409 });
     }
   }
 

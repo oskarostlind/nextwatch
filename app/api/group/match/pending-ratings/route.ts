@@ -14,6 +14,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 const MAX_PROMPTS = 5;
 
@@ -22,7 +23,7 @@ export async function GET() {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
     const locale = await tmdbLanguageFromCookies();
 
@@ -67,6 +68,6 @@ export async function GET() {
     return NextResponse.json({ ok: true, items }, { status: 200 });
   } catch (e) {
     console.error("pending-ratings GET error:", e);
-    return NextResponse.json({ ok: false, message: "Internal error." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

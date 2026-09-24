@@ -49,6 +49,8 @@ export default function GenreSuggestions({
   onRemoveDislike,
 }: Props) {
   const t = useTranslations("genreSuggestions");
+  // Genren är en svensk identitetssträng (se CLAUDE.md) — etiketten översätts här.
+  const tg = useTranslations("genres");
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
 
   // Beräknas EN gång vid mount. Redigeringar triggar inte om — dels för att inte
@@ -102,10 +104,11 @@ export default function GenreSuggestions({
     dismiss();
   };
 
+  const genreLabel = tg.has(suggestion.genre) ? tg(suggestion.genre) : suggestion.genre;
   const text =
     suggestion.kind === "add-like"
-      ? `Du verkar dras till ${suggestion.genre}. Lägg till i Gillar?`
-      : `Du verkar gilla ${suggestion.genre}, men den ligger i Undviker. Ta bort därifrån?`;
+      ? t("addLike", { genre: genreLabel })
+      : t("removeDislike", { genre: genreLabel });
 
   return (
     <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/[0.07] p-3">

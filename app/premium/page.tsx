@@ -32,7 +32,7 @@ export default function PremiumPage() {
         // Webb: Stripe-redirecten har redan skett.
         return;
       }
-      if (!result.cancelled) setErr(result.message || "Kunde inte starta betalning");
+      if (!result.cancelled) setErr(result.message || t("checkoutFailed"));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);

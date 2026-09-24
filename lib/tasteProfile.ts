@@ -11,6 +11,7 @@ import {
   type Seed,
   type WeightedLabel,
 } from "@/lib/tasteModel";
+import { apiMsg } from "@/lib/apiMessages";
 
 export type TasteProfileSeed = {
   id: number;
@@ -156,7 +157,7 @@ export async function computeTasteProfile(params: TasteProfileParams): Promise<T
 
   try {
     const input = await loadTasteInput(uid, groupCode);
-    if (!input) return { ok: false, message: "Ingen profil hittades.", status: 200 };
+    if (!input) return { ok: false, message: await apiMsg("profileMissing"), status: 200 };
 
     const seeds = buildSeeds(input);
     const { liked, disliked } = resolveGenreSets(input);
@@ -223,6 +224,6 @@ export async function computeTasteProfile(params: TasteProfileParams): Promise<T
     };
   } catch (err) {
     console.error("computeTasteProfile error:", err);
-    return { ok: false, message: "Internt fel vid smakprofil.", status: 500 };
+    return { ok: false, message: await apiMsg("internalError"), status: 500 };
   }
 }

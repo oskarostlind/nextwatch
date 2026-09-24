@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,12 +22,12 @@ function resolveOrigin(req: NextRequest): string {
 export async function POST(req: NextRequest) {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
-    return NextResponse.json({ ok: false, message: "Stripe is not configured." }, { status: 503 });
+    return NextResponse.json({ ok: false, message: await apiMsg("purchasesUnavailable") }, { status: 503 });
   }
 
   const uid = req.cookies.get("nw_uid")?.value;
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
   }
 
   const user = await prisma.user.findUnique({
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   });
   if (!user?.stripeCustomerId) {
     return NextResponse.json(
-      { ok: false, message: "Ingen Stripe-prenumeration hittades för det här kontot." },
+      { ok: false, message: await apiMsg("noStripeSub") },
       { status: 404 }
     );
   }
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ ok: true, url: session.url });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal error";
+    const message = error instanceof Error ? error.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

@@ -14,6 +14,7 @@
 // aldrig ut om skaparens prenumeration löper ut — taket gäller bara nya
 // anslutningar.
 
+import { apiMsg } from "@/lib/apiMessages";
 import { prisma } from "@/lib/prisma";
 import { isPremiumUser } from "@/lib/entitlements";
 
@@ -83,12 +84,12 @@ export async function canJoinGroup(
   const capacity = await getGroupCapacity(groupCode);
   if (!capacity.isFull) return { allowed: true };
 
-  return { allowed: false, capacity, message: groupFullMessage(capacity) };
+  return { allowed: false, capacity, message: await groupFullMessage(capacity) };
 }
 
 /** Enhetlig text så kod- och inbjudningsflödet säger exakt samma sak. */
-export function groupFullMessage(capacity: GroupCapacity): string {
+export async function groupFullMessage(capacity: GroupCapacity): Promise<string> {
   return capacity.limitedByFreePlan
-    ? `Gruppen är full (${capacity.max} personer). Med Premium kan den som skapade gruppen bjuda in upp till ${PREMIUM_GROUP_MAX_MEMBERS}.`
-    : `Gruppen är full (${capacity.max} personer).`;
+    ? apiMsg("groupFullPremium", { max: capacity.max, premiumMax: PREMIUM_GROUP_MAX_MEMBERS })
+    : apiMsg("groupFull", { max: capacity.max });
 }

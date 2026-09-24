@@ -1,17 +1,24 @@
 {
   "actions": {
+    "dislike": "Nej",
+    "info": "Info",
+    "like": "Gilla",
     "undo": "Ångra"
   },
   "auth": {
     "activateAccount": "Aktivera ditt konto",
+    "appleFailed": "Apple-inloggningen misslyckades.",
     "appleIosOnly": "Logga in med Apple finns i iOS-appen. Använd e-post på webben.",
+    "appleNoToken": "Apple gav ingen identitetstoken.",
     "backToSignIn": "Tillbaka till inloggningen",
     "backToStart": "Tillbaka till startsidan",
+    "checkEmail": "Kolla din mejl",
     "checkInbox": "Klart! Kolla din inbox. Klicka på länken i mejlet för att aktivera.",
     "chooseNewPassword": "Välj nytt lösenord",
     "continueWithoutAccount": "Fortsätt utan konto →",
     "createAccountEmail": "Skapa konto med e-post",
     "email": "E-post",
+    "emailPlaceholder": "du@exempel.se",
     "emailVerified": "E-post verifierad — öppnar appen…",
     "emailVerifiedWelcome": "Din e-post är verifierad. Välkommen!",
     "forgotBody": "Fyll i din e-postadress så skickar vi en länk för att välja ett nytt lösenord.",
@@ -39,6 +46,7 @@
     "passwordUpdated": "Lösenordet är uppdaterat",
     "passwordsDontMatch": "Lösenorden matchar inte.",
     "pleaseWait": "Vänta lite…",
+    "redirecting": "Omdirigerar…",
     "registerBody": "Spara ditt konto med e-post eller Apple så du kan logga in igen på andra enheter.",
     "registerOptional": "Valfritt — du kan använda appen utan att registrera dig.",
     "registerTitle": "Spara ditt konto",
@@ -51,6 +59,7 @@
     "sendVerifyLink": "Skicka verifieringslänk",
     "sending": "Skickar…",
     "signIn": "Logga in",
+    "signInFailed": "Kunde inte logga in.",
     "signInWithApple": "Logga in med Apple",
     "signingIn": "Loggar in…",
     "starting": "Startar…",
@@ -79,10 +88,13 @@
     "vhs": "VHS"
   },
   "comingSoon": {
+    "empty": "Inga kommande titlar hittades just nu.",
     "eyebrow": "På gång",
     "iosOnlyNote": "Påminnelser kan sättas i iOS-appen. Här ser du vad som är på väg.",
-    "reminderSet": "Påminns",
+    "loading": "Laddar…",
+    "noImage": "Ingen bild",
     "remindMe": "Påminn mig",
+    "reminderSet": "Påminns",
     "subtitle": "Nya filmer på väg – få en påminnelse när de släpps.",
     "title": "Kommer snart"
   },
@@ -95,6 +107,7 @@
     "movie": "Film",
     "next": "Nästa",
     "no": "Nej",
+    "noDescription": "Ingen beskrivning.",
     "remove": "Ta bort",
     "retry": "Försök igen",
     "save": "Spara",
@@ -107,15 +120,20 @@
     "yes": "Ja"
   },
   "discover": {
+    "cancel": "Avbryt",
     "eyebrow": "Utforska",
+    "loading": "Laddar…",
     "loadingInfo": "Laddar info…",
     "next": "Nästa →",
     "noDescription": "Ingen beskrivning tillgänglig.",
+    "noRating": "Betyg saknas",
     "noResults": "Inga träffar för \"{query}\".",
     "noStreamingData": "Ingen tillgänglig streamingdata för din region just nu.",
     "openProvider": "Öppna {provider}",
     "prev": "← Föregående",
     "rate": "Betygsätt",
+    "ratingHeading": "Vad tyckte du?",
+    "ratingValue": "Betyg: {value}",
     "searchFailed": "Sökningen misslyckades",
     "searchPlaceholder": "Sök titel…",
     "subtitle": "Bläddra bland filmer och serier.",
@@ -142,9 +160,10 @@
   },
   "filmChat": {
     "add": "Lägg till",
-    "added": "Tillagd ✓",
     "addToWatchlist": "Lägg till i watchlist",
+    "added": "Tillagd ✓",
     "closeSearch": "Stäng sök",
+    "loading": "Laddar…",
     "loadingInfo": "Laddar info…",
     "noDescription": "Ingen beskrivning tillgänglig.",
     "noStreamingData": "Ingen streamingdata för din region just nu.",
@@ -158,7 +177,8 @@
     "searchMovie": "Sök film att tipsa om…",
     "searchTv": "Sök serie att tipsa om…",
     "sent": "· Skickat",
-    "shareATitle": "Tipsa om en titel"
+    "shareATitle": "Tipsa om en titel",
+    "subtitle": "Filmtips fram och tillbaka"
   },
   "filters": {
     "movies": "Film",
@@ -181,8 +201,10 @@
     "activeMinutesAgo": "Aktiv för {count} min sedan",
     "likes": "Gillar",
     "loadFailed": "Kunde inte hämta profilen.",
+    "loading": "Laddar…",
     "networkError": "Nätverksfel.",
     "neverActive": "Aldrig aktiv",
+    "noImage": "Ingen bild",
     "noLikesYet": "Har inte gillat något än.",
     "openChat": "Öppna filmchatt",
     "recentFavorites": "Senaste favoriter",
@@ -243,6 +265,8 @@
     "Western": "Western"
   },
   "genreSuggestions": {
+    "addLike": "Du verkar dras till {genre}. Lägg till i Gillar?",
+    "removeDislike": "Du verkar gilla {genre}, men den ligger i Undviker. Ta bort därifrån?",
     "saveToConfirm": "Spara för att bekräfta."
   },
   "gestureTour": {
@@ -273,6 +297,8 @@
       "label": "Smakprofil"
     },
     "progress": "Så funkar swipen — {step}/{total}",
+    "ratingHeading": "Snyggt! Vad tyckte du?",
+    "ratingSaveFailed": "Kunde inte spara betyget",
     "seen": {
       "algo": "Betyget är den starkaste signalen: högt betyg drar in mer av samma, lågt styr bort flödet.",
       "effect": "Betyget väger tyngst",
@@ -304,8 +330,8 @@
     "groupLabel": "Grupp:",
     "groupSettings": "Gruppinställningar",
     "invite": "Bjud in",
-    "invited": "Inbjuden",
     "inviteFriendsHeading": "Bjud in vänner",
+    "invited": "Inbjuden",
     "invitesHeading": "Gruppinbjudningar",
     "invitesYouTo": "Bjuder in till",
     "join": "Gå med",
@@ -331,6 +357,8 @@
     "tabMatches": "Matchningar",
     "tabMatchesUnseen": "Matchningar •",
     "title": "Tillsammans",
+    "toastFriendRequest": "{name} vill bli vän med dig",
+    "toastGroupInvite": "{name} bjöd in dig till grupp {code}",
     "unknown": "Okänd",
     "you": "Du"
   },
@@ -376,6 +404,7 @@
     "providers": "Streamingtjänster",
     "providersHint": "Tomt = alla tjänster som någon medlem har.",
     "save": "Spara",
+    "saveFailed": "Kunde inte spara.",
     "saved": "Gruppinställningar sparade",
     "saving": "Sparar…",
     "seats": "Platser",
@@ -393,6 +422,8 @@
     "lookingForMore": "Letar efter fler förslag…",
     "nothingToUndo": "Inget att ångra",
     "outOfSuggestions": "Slut på förslag nu.",
+    "ratingHeading": "Vad tyckte du?",
+    "ratingSaveFailed": "Kunde inte spara betyget",
     "retry": "Försök igen",
     "undoFailed": "Kunde inte ångra på servern",
     "widenedDroppedGenres": "Få träffar med era filter — vidgade sökningen (släppte genre/sub-genre) för fler förslag.",
@@ -406,6 +437,7 @@
   "imdb": {
     "close": "Stäng",
     "heading": "Importera från IMDb",
+    "importFailed": "Importen misslyckades.",
     "importing": "Importerar…",
     "networkError": "Nätverksfel vid import.",
     "pickFile": "Välj CSV-fil",
@@ -550,6 +582,7 @@
   "match": {
     "and": "och",
     "availableOn": "Tillgänglig på",
+    "closeOverlay": "Stäng",
     "evidenceCast": "skådespelaren {label}",
     "evidenceCreator": "skaparen {label}",
     "evidenceDirector": "regissören {label}",
@@ -567,6 +600,9 @@
   },
   "modals": {
     "dragToRate": "Dra för att betygsätta",
+    "ratingHeading": "Vad tyckte du?",
+    "ratingSliderAria": "Betyg 1 till 10",
+    "removeRating": "Ta bort betyg",
     "saveRating": "Spara betyg ({value}/10)",
     "saving": "Sparar…",
     "skip": "Hoppa över"
@@ -658,6 +694,7 @@
     "bulletSwipes": "Obegränsat med swipes — gratis ingår 100 per dygn",
     "bulletTaste": "Din smakprofil: se vilka teman, regissörer och skådespelare dina swipes pekar mot",
     "buyCta": "Bli Premium – 19 kr/mån",
+    "checkoutFailed": "Kunde inte starta betalningen.",
     "eula": "Användarvillkor (EULA)",
     "eyebrow": "Uppgradera",
     "intro": "Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.",
@@ -675,7 +712,8 @@
   },
   "premiumSuccess": {
     "body": "Din premium bör aktiveras inom några sekunder. Ladda om sidan om det inte syns direkt.",
-    "title": "Tack för köpet!"
+    "title": "Tack för köpet!",
+    "toGroups": "Till grupper"
   },
   "profile": {
     "about": "Om NextWatch",
@@ -821,6 +859,14 @@
     "groupInviteAccepted": {
       "body": "{name} gick med i din grupp {code} – dags att swipa!",
       "title": "Inbjudan accepterad"
+    },
+    "groupMatchMovie": {
+      "title": "Gruppmatch! 🎬",
+      "body": "Ni har hittat en film att titta på tillsammans!"
+    },
+    "groupMatchSeries": {
+      "title": "Gruppmatch! 🎬",
+      "body": "Ni har hittat en serie att titta på tillsammans!"
     },
     "reEngagement": {
       "variants": {
@@ -1080,6 +1126,7 @@
     "analyzing": "Analyserar din smak…",
     "headingGroup": "Er gruppsmak",
     "headingSolo": "Din smakprofil",
+    "loadFailed": "Kunde inte ladda smakprofilen.",
     "networkError": "Nätverksfel.",
     "notEnoughData": "Swipa, betygsätt och fyll i favoriter nedan — då bygger vi en profil åt dig.",
     "premiumBody": "Se vilka teman, regissörer och skådespelare dina swipes egentligen pekar mot — och få förslag på genrer du missat.",
@@ -1159,6 +1206,7 @@
     }
   },
   "upsell": {
+    "adFreeUnlocked": "Klart! Annonsfritt i 24 timmar. 🎉",
     "body": "Annonsen är slut – men den behöver inte komma tillbaka.",
     "bulletsLabel": "Det här ingår",
     "close": "Stäng",
@@ -1195,6 +1243,9 @@
     "noRatingsYet": "Inga betyg än. Swipa upp på titlar du sett för att betygsätta dem.",
     "noStreamingData": "Ingen tillgänglig streamingdata för din region just nu.",
     "openProvider": "Öppna {provider}",
+    "pageEyebrow": "Din lista",
+    "pageSubtitle": "Titlar du vill se — och betyg på dem du redan sett.",
+    "pageTitle": "Watchlist",
     "rate": "Betygsätt",
     "ratePromptHeading": "Vad tyckte du?",
     "removeFromWatchlist": "Ta bort från watchlist",
@@ -1251,5 +1302,81 @@
     "retry": "Försök igen",
     "reload": "Ladda om",
     "updating": "Uppdaterar appen…"
+  },
+  "api": {
+    "accountGone": "Kontot finns inte längre.",
+    "accountUpdatedLinkSent": "Konto uppdaterat. Verifieringslänk skickad.",
+    "accountUpdatedMailFailed": "Konto uppdaterat. Kunde inte skicka e-post – kopiera länken nedan.",
+    "appleEmailLinked": "E-postadressen är kopplad till ett annat Apple-konto.",
+    "appleFailed": "Apple-inloggningen misslyckades.",
+    "appleTokenMissing": "Apple-token saknas.",
+    "cannotAddSelf": "Du kan inte lägga till dig själv.",
+    "cannotShareSelf": "Du kan inte tipsa dig själv.",
+    "deleteFailed": "Kunde inte radera kontot. Försök igen.",
+    "emailInUse": "E-postadressen används redan.",
+    "emailPasswordRequired": "E-post och lösenord krävs.",
+    "emailRequired": "E-post krävs.",
+    "emailVerified": "E-post verifierad.",
+    "finishOnboarding": "Slutför onboarding först.",
+    "friendRequestBlocked": "Det går inte att skicka en förfrågan till den här användaren.",
+    "groupFull": "Gruppen är full ({max} personer).",
+    "groupFullPremium": "Gruppen är full ({max} personer). Med Premium kan den som skapade gruppen bjuda in upp till {premiumMax}.",
+    "groupNotFound": "Gruppen finns inte.",
+    "guestFailed": "Kunde inte starta gästläge.",
+    "iapOtherAccount": "Köpet är kopplat till ett annat NextWatch-konto.",
+    "iapUnknownProduct": "Okänd produkt.",
+    "iapVerifyFailed": "Kunde inte verifiera köpet.",
+    "importFailed": "Importen misslyckades.",
+    "importNotFound": "{title}: hittades inte på TMDB",
+    "internalError": "Något gick fel. Försök igen.",
+    "invalidAgeLimit": "Ogiltig åldersgräns.",
+    "invalidGroupCode": "Ogiltig gruppkod.",
+    "invalidLink": "Ogiltig länk.",
+    "invalidMatchThreshold": "Ogiltig matchtröskel (minst 2 personer).",
+    "invalidProviders": "Ogiltiga streamingtjänster.",
+    "invalidRequest": "Ogiltig förfrågan.",
+    "invalidTip": "Ogiltigt tips.",
+    "invalidUser": "Ogiltig användare.",
+    "invitePending": "Det finns redan en väntande inbjudan.",
+    "linkExpired": "Länken är ogiltig eller har gått ut. Begär en ny.",
+    "loggedOut": "Utloggad.",
+    "noActiveGroup": "Du är inte med i någon aktiv grupp.",
+    "noEmailRegistered": "Ingen e-post registrerad.",
+    "noFileUploaded": "Ingen fil uppladdad.",
+    "noPendingRequest": "Ingen väntande förfrågan hittades.",
+    "noSession": "Sessionen saknas. Ladda om sidan och försök igen.",
+    "noStripeSub": "Ingen Stripe-prenumeration hittades för det här kontot.",
+    "notFriends": "Ni är inte vänner.",
+    "notGroupMember": "Du är inte med i gruppen.",
+    "ownerOnlyRemove": "Bara gruppens skapare kan ta bort medlemmar.",
+    "ownerOnlySettings": "Endast gruppens skapare kan ändra inställningarna.",
+    "passwordTooShort": "Lösenordet måste vara minst 8 tecken.",
+    "passwordUpdated": "Lösenordet är uppdaterat.",
+    "profileMissing": "Profilen hittades inte.",
+    "profileReadFailed": "Kunde inte läsa profilen.",
+    "purchasesUnavailable": "Köp är inte tillgängliga just nu.",
+    "removeRatingFailed": "Kunde inte ta bort betyget.",
+    "removeWatchlistFailed": "Kunde inte ta bort titeln från watchlisten.",
+    "resetSent": "Om kontot finns har vi skickat en återställningslänk till din e-post.",
+    "saveFailed": "Kunde inte spara.",
+    "sessionExpired": "Ingen session. Logga in igen.",
+    "swipeLimit": "Du har nått dagens swipegräns.",
+    "tastePremium": "Smakprofilen kräver Premium.",
+    "termsRequired": "Du behöver godkänna villkoren för att skapa konto.",
+    "tipSent": "Tips skickat.",
+    "tokenExpired": "Länken har gått ut.",
+    "tokenInvalid": "Ogiltig eller redan använd länk.",
+    "tokenMissing": "Token saknas.",
+    "tooManyLogins": "För många inloggningsförsök. Vänta en stund.",
+    "tooManyReports": "För många rapporter. Försök igen om en stund.",
+    "tooManyRequests": "För många förfrågningar. Försök igen om en stund.",
+    "undoFailed": "Kunde inte ångra.",
+    "useLeave": "Använd Lämna grupp för att ta bort dig själv.",
+    "userNotFound": "Användaren finns inte.",
+    "usernameInvalid": "Ogiltigt användarnamn.",
+    "usernameRules": "Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).",
+    "usernameTaken": "Användarnamnet är upptaget. Välj ett annat.",
+    "verifyLinkMailFailed": "Länk skapad men e-posten kunde inte skickas.",
+    "verifyLinkSent": "Verifieringslänk skickad."
   }
 }

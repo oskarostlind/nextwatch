@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export async function POST(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? "";
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
   }
 
   let token = "";
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!token) {
-    return NextResponse.json({ ok: false, message: "token required" }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   // Identiteten är cookie-baserad; säkerställ att user-raden finns.

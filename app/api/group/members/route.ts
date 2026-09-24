@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma, { withDbRetry } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type MemberDto = {
   id: string;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     const code = (u.searchParams.get("code") || "").toUpperCase();
 
     if (!code) {
-      return bad("Missing group code.");
+      return bad(await apiMsg("invalidRequest"));
     }
 
     // Gruppen kan ha gallrats bort av cron/cleanup (ett dygn utan aktivitet)
@@ -106,6 +107,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, code, members } as Ok, { status: 200 });
   } catch (e: unknown) {
     console.error("group/members GET error:", e);
-    return bad("Internal error.");
+    return bad(await apiMsg("internalError"));
   }
 }

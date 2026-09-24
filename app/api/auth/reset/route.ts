@@ -4,6 +4,7 @@ import prisma from "../../../../lib/prisma";
 import { hashPassword } from "../../../../lib/hash";
 import { setAuthCookies } from "../../../../lib/auth";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const key = getRateLimitKey(req, null);
     if (!rateLimitAllow(key, "auth-reset", { limit: AUTH_LIMIT })) {
       return NextResponse.json(
-        { ok: false, message: "För många förfrågningar. Försök igen senare." },
+        { ok: false, message: await apiMsg("tooManyRequests") },
         { status: 429 },
       );
     }
@@ -25,11 +26,11 @@ export async function POST(req: NextRequest) {
     const password = (body.password ?? "").trim();
 
     if (!token) {
-      return NextResponse.json({ ok: false, message: "Ogiltig länk." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidLink") }, { status: 400 });
     }
     if (password.length < 8) {
       return NextResponse.json(
-        { ok: false, message: "Lösenordet måste vara minst 8 tecken." },
+        { ok: false, message: await apiMsg("passwordTooShort") },
         { status: 400 },
       );
     }
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
     const ver = await prisma.verification.findUnique({ where: { token } });
     if (!ver || ver.name !== RESET_MARKER || ver.expiresAt < new Date()) {
       return NextResponse.json(
-        { ok: false, message: "Länken är ogiltig eller har gått ut. Begär en ny." },
+        { ok: false, message: await apiMsg("linkExpired") },
         { status: 400 },
       );
     }
@@ -54,11 +55,11 @@ export async function POST(req: NextRequest) {
     ]);
 
     // Logga in användaren direkt
-    const res = NextResponse.json({ ok: true, message: "Lösenordet är uppdaterat." });
+    const res = NextResponse.json({ ok: true, message: await apiMsg("passwordUpdated") });
     await setAuthCookies(res, ver.userId, { remember: true });
     return res;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Internt fel.";
+    const msg = e instanceof Error ? e.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message: msg }, { status: 500 });
   }
 }

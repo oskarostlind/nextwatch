@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyUid } from "@/lib/session";
 import { attachSessionCookies } from "@/lib/auth";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,11 +15,11 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as { token?: string };
   const token = typeof body.token === "string" ? body.token : null;
-  if (!token) return NextResponse.json({ ok: false, message: "Token saknas." }, { status: 400 });
+  if (!token) return NextResponse.json({ ok: false, message: await apiMsg("tokenMissing") }, { status: 400 });
 
   const uid = await verifyUid(token);
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Ogiltigt token." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("tokenInvalid") }, { status: 401 });
   }
 
   const user = await prisma.user.findUnique({
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   });
   if (!user?.profile) {
     // Kontot raderat sedan token sparades — säg åt klienten att slänga det.
-    return NextResponse.json({ ok: false, message: "Kontot finns inte längre.", discard: true }, { status: 410 });
+    return NextResponse.json({ ok: false, message: await apiMsg("accountGone"), discard: true }, { status: 410 });
   }
 
   const res = NextResponse.json({ ok: true });

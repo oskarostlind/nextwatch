@@ -203,7 +203,7 @@ export default function MatchOverlay({
           transition={{ duration: 0.2 }}
         >
           {/* Klick utanför kortet stänger */}
-          <button aria-label="Close overlay" onClick={close} className="absolute inset-0" />
+          <button aria-label={t("closeOverlay")} onClick={close} className="absolute inset-0" />
 
           <motion.div
             className="relative mx-4 w-full max-w-sm"

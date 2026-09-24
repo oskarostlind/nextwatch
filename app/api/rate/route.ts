@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     // Daglig swipegräns för gratisanvändare (premium = obegränsat).
     const allowance = await getSwipeAllowance(uid);
     if (!allowance.allowed) {
-      return NextResponse.json(swipeLimitPayload(allowance), { status: 429 });
+      return NextResponse.json(await swipeLimitPayload(allowance), { status: 429 });
     }
 
     // OBS: rating röres INTE här. Tidigare nollades den vid varje swipe, vilket

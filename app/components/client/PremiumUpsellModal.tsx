@@ -148,7 +148,7 @@ export default function PremiumUpsellModal() {
                         .then((ok) => {
                           if (ok) {
                             markUpsellSatisfied();
-                            notify("Klart! Annonsfritt i 24 timmar. 🎉");
+                            notify(t("adFreeUnlocked"));
                             setOpen(false);
                           }
                         })

@@ -5,6 +5,7 @@ import prisma from "../../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { isValidAvatarId } from "@/lib/avatars";
 import { sanitizeKeywordIds } from "@/lib/groupSettings";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ async function inferRegionAndLocale(): Promise<{ region: string; locale: string 
 export async function GET() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value || null;
-  if (!uid) return NextResponse.json({ ok: false, error: "No session" }, { status: 401 });
+  if (!uid) return NextResponse.json({ ok: false, error: await apiMsg("noSession") }, { status: 401 });
 
   const prof = await prisma.profile.findUnique({
     where: { userId: uid },
@@ -74,7 +75,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value || null;
-  if (!uid) return NextResponse.json({ ok: false, error: "No session" }, { status: 401 });
+  if (!uid) return NextResponse.json({ ok: false, error: await apiMsg("noSession") }, { status: 401 });
 
   const body = (await req.json()) as Record<string, unknown>;
 
@@ -125,7 +126,7 @@ export async function PUT(req: Request) {
   }
 
   if (!displayName || !dobStr) {
-    return NextResponse.json({ ok: false, error: "displayName and dob required" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   const created = await prisma.profile.create({

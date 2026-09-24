@@ -11,6 +11,7 @@ import {
   type Trailer,
 } from "../../../../lib/tmdbVideos";
 import { fillMissingRatings } from "@/lib/omdbRating";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,14 +102,14 @@ export async function GET(req: Request) {
     const type = (url.searchParams.get("type") || "").toLowerCase() as "movie" | "tv";
     const id = Number(url.searchParams.get("id") || "");
     if (!type || !id || !Number.isFinite(id)) {
-      return NextResponse.json({ ok: false, error: "missing or invalid type/id" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: await apiMsg("invalidRequest") }, { status: 400 });
     }
 
     const c = await cookies();
     const uid = c.get("nw_uid")?.value || null;
     const key = getRateLimitKey(req, uid);
     if (!rateLimitAllow(key, "tmdb-details", { limit: TMDB_DETAILS_LIMIT })) {
-      return NextResponse.json({ ok: false, error: "För många förfrågningar." }, { status: 429 });
+      return NextResponse.json({ ok: false, error: await apiMsg("tooManyRequests") }, { status: 429 });
     }
 
     const langOverride = url.searchParams.get("language") || url.searchParams.get("locale");

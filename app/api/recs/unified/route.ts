@@ -4,6 +4,7 @@ import { rateLimitAllow, getRateLimitKey, RECS_LIMIT } from "../../../../lib/rat
 import { computeUnifiedRecs } from "../../../../lib/unifiedRecs";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 import { interleaveUpcoming, loadUpcomingForUser } from "@/lib/upcomingTitles";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,11 +23,11 @@ export async function GET(req: Request) {
   // Gruppkod kan komma explicit via query (t.ex. gruppdäcket) eller från cookie.
   const groupCode = reqUrl.searchParams.get("group") || c.get("nw_group")?.value || null;
 
-  if (!uid) return fail("Ingen användare inloggad.", 401);
+  if (!uid) return fail(await apiMsg("noSession"), 401);
 
   const key = getRateLimitKey(req, uid);
   if (!rateLimitAllow(key, "recs", { limit: RECS_LIMIT })) {
-    return fail("För många förfrågningar. Försök igen senare.", 429);
+    return fail(await apiMsg("tooManyRequests"), 429);
   }
 
   const page = reqUrl.searchParams.get("page");

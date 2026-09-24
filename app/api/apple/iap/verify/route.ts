@@ -14,6 +14,7 @@ import {
   isAppleIapConfigured,
   isKnownIapProduct,
 } from "@/lib/appleIap";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,19 +29,19 @@ export async function POST(req: NextRequest) {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     if (!isAppleIapConfigured()) {
       return NextResponse.json(
-        { ok: false, message: "IAP är inte konfigurerat ännu." },
+        { ok: false, message: await apiMsg("purchasesUnavailable") },
         { status: 503 }
       );
     }
 
     const parsed = verifySchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
-      return NextResponse.json({ ok: false, message: "Ogiltig förfrågan." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
     }
 
     const transaction = await fetchAppStoreTransaction(
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (!isKnownIapProduct(transaction.productId)) {
-      return NextResponse.json({ ok: false, message: "Okänd produkt." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("iapUnknownProduct") }, { status: 400 });
     }
 
     const purchasedAt = transaction.purchaseDate ? new Date(transaction.purchaseDate) : new Date();
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     if (!result.granted && result.reason === "other_account") {
       return NextResponse.json(
-        { ok: false, message: "Köpet är kopplat till ett annat NextWatch-konto." },
+        { ok: false, message: await apiMsg("iapOtherAccount") },
         { status: 409 }
       );
     }
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[apple/iap/verify]", error);
     return NextResponse.json(
-      { ok: false, message: "Kunde inte verifiera köpet." },
+      { ok: false, message: await apiMsg("iapVerifyFailed") },
       { status: 500 }
     );
   }

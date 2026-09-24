@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Body = {
   tmdbId: number;
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value;
-    if (!uid) return bad("Ingen session.", 401);
+    if (!uid) return bad(await apiMsg("noSession"), 401);
 
     const body = (await req.json()) as Body;
     const tmdbId = Number(body.tmdbId);
@@ -33,9 +34,9 @@ export async function POST(req: Request) {
     const action = body.action;
     const groupCode = body.groupCode?.trim().toUpperCase() || undefined;
 
-    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad("Ogiltigt tmdbId.");
-    if (mediaType !== "movie" && mediaType !== "tv") return bad("Ogiltig mediaType.");
-    if (action !== "like" && action !== "dislike" && action !== "seen") return bad("Ogiltig action.");
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad(await apiMsg("invalidRequest"));
+    if (mediaType !== "movie" && mediaType !== "tv") return bad(await apiMsg("invalidRequest"));
+    if (action !== "like" && action !== "dislike" && action !== "seen") return bad(await apiMsg("invalidRequest"));
 
     await prisma.rating.deleteMany({
       where: { userId: uid, tmdbId, mediaType },
@@ -63,6 +64,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("swipe/undo error:", err);
-    return NextResponse.json({ ok: false, message: "Kunde inte ångra." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("undoFailed") }, { status: 500 });
   }
 }

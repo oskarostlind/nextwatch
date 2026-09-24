@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 import { randomUUID } from "crypto"; // ← genererar id om modellen kräver det
 
 export const runtime = "nodejs";
@@ -58,12 +59,12 @@ export async function POST(req: NextRequest) {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session" }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     const body = (await req.json()) as Body;
     if (!body?.tmdbId || !body.mediaType) {
-      return NextResponse.json({ ok: false, message: "Ogiltig payload" }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
     }
 
     // Bevakning av osläppt titel. Ligger före watchlist-kollen med flit: en
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "Internt fel";
+      error instanceof Error ? error.message : typeof error === "string" ? error : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

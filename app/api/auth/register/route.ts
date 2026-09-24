@@ -9,6 +9,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { getTranslations } from "next-intl/server";
 import { uiLocaleFromCookies } from "@/lib/serverLocale";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,12 +64,12 @@ export async function POST(req: NextRequest) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (!uid) return jsonRes(401, "Ingen session. Logga in igen.");
+    if (!uid) return jsonRes(401, await apiMsg("sessionExpired"));
 
     const key = getRateLimitKey(req, uid);
     const rateOk = rateLimitAllow(key, "auth-register", { limit: AUTH_LIMIT });
     if (!rateOk) {
-      return jsonRes(429, "För många förfrågningar. Försök igen senare.");
+      return jsonRes(429, await apiMsg("tooManyRequests"));
     }
 
     const body = (await req.json()) as {
@@ -80,11 +81,11 @@ export async function POST(req: NextRequest) {
     const email = (body.email ?? "").trim().toLowerCase();
     const password = (body.password ?? "").trim();
     const fromApp = body.from === "app";
-    if (!email || !password) return jsonRes(400, "E-post och lösenord krävs.");
+    if (!email || !password) return jsonRes(400, await apiMsg("emailPasswordRequired"));
     // Guideline 1.2: kontot får inte skapas utan godkända villkor. Kryssrutan
     // i UI:t är gaten, men servern litar inte på klienten.
     if (body.termsAccepted !== true) {
-      return jsonRes(400, "Du behöver godkänna villkoren för att skapa konto.");
+      return jsonRes(400, await apiMsg("termsRequired"));
     }
 
     // Preflight: kontrollera att nödvändiga kolumner finns
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
     });
 
     const taken = await prisma.user.findFirst({ where: { email, NOT: { id: uid } }, select: { id: true } });
-    if (taken) return jsonRes(409, "E-postadressen används redan.");
+    if (taken) return jsonRes(409, await apiMsg("emailInUse"));
 
     const hash = await bcrypt.hash(password, 12);
     const token = crypto.randomBytes(32).toString("hex");
@@ -151,8 +152,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: mailRes.sent
-        ? "Konto uppdaterat. Verifieringslänk skickad."
-        : "Konto uppdaterat. Kunde inte skicka e-post – kopiera länken nedan.",
+        ? await apiMsg("accountUpdatedLinkSent")
+        : await apiMsg("accountUpdatedMailFailed"),
       verifyUrl: link,
       emailSent: mailRes.sent,
       emailProvider: mailRes.provider ?? mailRes.reason ?? null,
@@ -161,7 +162,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       return jsonRes(500, `Databasfel (${err.code}).`, { code: err.code, meta: err.meta });
     }
-    const msg = err instanceof Error ? err.message : "Internt fel.";
+    const msg = err instanceof Error ? err.message : await apiMsg("internalError");
     return jsonRes(500, msg);
   }
 }

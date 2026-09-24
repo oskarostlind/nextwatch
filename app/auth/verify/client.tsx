@@ -67,7 +67,7 @@ export default function Client() {
             </Link>
           </>
         ) : (
-          <p className="text-sm text-white/60">Omdirigerar…</p>
+          <p className="text-sm text-white/60">{t("redirecting")}</p>
         )}
       </div>
     );

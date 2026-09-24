@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Row = {
   id: string;
@@ -19,7 +20,7 @@ type Err = { ok: false; message: string };
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return NextResponse.json({ ok: false, message: "Ingen session." } as Err, { status: 401 });
+  if (!uid) return NextResponse.json({ ok: false, message: await apiMsg("noSession") } as Err, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
@@ -60,6 +61,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(body);
   } catch (error) {
     console.error("[Search Error]:", error);
-    return NextResponse.json({ ok: false, message: "Databasfel." } as Err, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") } as Err, { status: 500 });
   }
 }

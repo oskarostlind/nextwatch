@@ -11,6 +11,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { parseImdbCsv, type ImdbImportMode } from "@/lib/imdbImport";
+import { apiMsg } from "@/lib/apiMessages";
 
 const MAX_ROWS = 500;
 const BATCH = 8;
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     const form = await req.formData();
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
     const mode: ImdbImportMode = modeRaw === "watchlist" ? "watchlist" : "ratings";
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ ok: false, message: "Ingen fil uppladdad." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noFileUploaded") }, { status: 400 });
     }
 
     const buffer = await file.arrayBuffer();
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
             const found = await tmdbFind(row.imdbId);
             if (!found) {
               failed++;
-              if (sampleErrors.length < 5) sampleErrors.push(`${row.title}: hittades inte på TMDB`);
+              if (sampleErrors.length < 5) sampleErrors.push(await apiMsg("importNotFound", { title: row.title }));
               return;
             }
             const mediaType = row.mediaType === found.mediaType ? found.mediaType : found.mediaType;
@@ -147,6 +148,6 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("ratings/import error:", err);
-    return NextResponse.json({ ok: false, message: "Import misslyckades." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("importFailed") }, { status: 500 });
   }
 }

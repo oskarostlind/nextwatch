@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) {
       return NextResponse.json(
-        { ok: false, message: "Stripe is not configured in this environment." },
+        { ok: false, message: await apiMsg("purchasesUnavailable") },
         { status: 503 }
       );
     }
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, url: session.url }, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal error";
+    const message = error instanceof Error ? error.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

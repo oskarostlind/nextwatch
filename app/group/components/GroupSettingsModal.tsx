@@ -165,7 +165,7 @@ export default function GroupSettingsModal({
       });
       const j = (await res.json()) as SettingsResp;
       if (!res.ok || !j.ok) {
-        setError(j.message ?? "Kunde inte spara.");
+        setError(j.message ?? t("saveFailed"));
         return;
       }
       notify(t("saved"));

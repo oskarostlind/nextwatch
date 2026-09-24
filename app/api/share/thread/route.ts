@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,11 +12,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const me = jar.get("nw_uid")?.value ?? null;
-  if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+  if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
   const friendId = req.nextUrl.searchParams.get("friendId")?.trim() ?? "";
   if (!friendId || friendId === me) {
-    return NextResponse.json({ ok: false, message: "Ogiltig vän." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidUser") }, { status: 400 });
   }
 
   // Samma authz som share/send: tråden finns bara mellan vänner.
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     select: { userId: true },
   });
   if (!friendship) {
-    return NextResponse.json({ ok: false, message: "Ni är inte vänner." }, { status: 403 });
+    return NextResponse.json({ ok: false, message: await apiMsg("notFriends") }, { status: 403 });
   }
 
   const [items] = await Promise.all([

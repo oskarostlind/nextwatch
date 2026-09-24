@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { revokeAppleToken } from "@/lib/appleAuth";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export async function POST() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
   }
 
   try {
@@ -83,7 +84,7 @@ export async function POST() {
   } catch (e) {
     console.error("[user/delete]", e);
     return NextResponse.json(
-      { ok: false, message: "Kunde inte radera kontot. Försök igen." },
+      { ok: false, message: await apiMsg("deleteFailed") },
       { status: 500 },
     );
   }

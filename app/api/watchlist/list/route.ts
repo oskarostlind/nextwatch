@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildWatchlistCards, listWatchlistRows } from "@/lib/watchlistCards";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (!uid) return NextResponse.json({ ok: false, items: [], message: "Ingen session" }, { status: 401 });
+    if (!uid) return NextResponse.json({ ok: false, items: [], message: await apiMsg("noSession") }, { status: 401 });
 
     const url = new URL(req.url);
 
@@ -44,6 +45,6 @@ export async function POST(req: Request) {
     const items = await buildWatchlistCards(uid);
     return NextResponse.json({ ok: true, items });
   } catch {
-    return NextResponse.json({ ok: false, items: [], message: "Internt fel" }, { status: 500 });
+    return NextResponse.json({ ok: false, items: [], message: await apiMsg("internalError") }, { status: 500 });
   }
 }

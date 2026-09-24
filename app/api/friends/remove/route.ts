@@ -10,12 +10,13 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export async function POST(req: NextRequest) {
   try {
     const jar = await cookies();
     const me = jar.get("nw_uid")?.value ?? "";
-    if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+    if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
     let userId = "";
     try {
@@ -24,8 +25,8 @@ export async function POST(req: NextRequest) {
     } catch {
       /* ignore */
     }
-    if (!userId) return NextResponse.json({ ok: false, message: "userId krävs." }, { status: 400 });
-    if (userId === me) return NextResponse.json({ ok: false, message: "Ogiltig mottagare." }, { status: 400 });
+    if (!userId) return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
+    if (userId === me) return NextResponse.json({ ok: false, message: await apiMsg("invalidUser") }, { status: 400 });
 
     await prisma.$transaction(async (tx) => {
       await tx.friendship.deleteMany({
@@ -51,6 +52,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch {
-    return NextResponse.json({ ok: false, message: "Internt fel." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

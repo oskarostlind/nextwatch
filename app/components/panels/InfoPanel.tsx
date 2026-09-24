@@ -61,7 +61,7 @@ export default function InfoPanel({
       </div>
 
       <p className="text-sm opacity-90 whitespace-pre-line">
-        {overview || "Ingen beskrivning."}
+        {overview || t("noDescription")}
       </p>
 
       <div className="mt-4 grid grid-cols-3 gap-2">

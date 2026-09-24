@@ -55,7 +55,7 @@ export default function InviteToasts() {
         if (seenRef.current.has(id)) continue;
         seenRef.current.add(id);
         const name = p.from?.displayName ?? p.from?.username ?? t("someone");
-        next.push({ id, message: `${name} vill bli vän med dig`, type: "friend" });
+        next.push({ id, message: t("toastFriendRequest", { name }), type: "friend" });
       }
     }
 
@@ -67,7 +67,7 @@ export default function InviteToasts() {
         const name = inv.from?.displayName ?? inv.from?.username ?? t("someone");
         next.push({
           id,
-          message: `${name} bjöd in dig till grupp ${inv.groupCode}`,
+          message: t("toastGroupInvite", { name, code: inv.groupCode }),
           type: "group",
         });
       }

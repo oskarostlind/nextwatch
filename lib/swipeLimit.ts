@@ -11,6 +11,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getEntitlement } from "@/lib/entitlements";
+import { apiMsg } from "@/lib/apiMessages";
 
 // Standardgräns för gratiskonton. Var tidigare 0 (= obegränsat) som default,
 // vilket i praktiken gjorde "Obegränsat med swipes" på premiumsidan till ett
@@ -122,11 +123,11 @@ function unlimitedAllowance(isPremium: boolean): SwipeAllowance {
 }
 
 /** Enhetlig 429-payload så alla swipe-endpoints svarar likadant. */
-export function swipeLimitPayload(a: SwipeAllowance) {
+export async function swipeLimitPayload(a: SwipeAllowance) {
   return {
     ok: false as const,
     error: "swipe_limit" as const,
-    message: "Du har nått dagens swipegräns.",
+    message: await apiMsg("swipeLimit"),
     limit: a.limit,
     used: a.used,
   };

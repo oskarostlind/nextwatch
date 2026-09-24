@@ -18,6 +18,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendReportMail } from "@/lib/email";
 import { rateLimitAllow, getRateLimitKey } from "@/lib/rateLimit";
+import { apiMsg } from "@/lib/apiMessages";
 
 /** Förvalda skäl i UI:t. Fritexten är valfri och kapas hårt. */
 const REASONS = [
@@ -39,13 +40,13 @@ export async function POST(req: NextRequest) {
     const jar = await cookies();
     const me = jar.get("nw_uid")?.value ?? "";
     if (!me) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     // Rapportspam ska inte kunna sänka SMTP-kontot.
     if (!rateLimitAllow(getRateLimitKey(req, me), "report", { limit: 10 })) {
       return NextResponse.json(
-        { ok: false, message: "För många rapporter. Försök igen om en stund." },
+        { ok: false, message: await apiMsg("tooManyReports") },
         { status: 429 }
       );
     }
@@ -63,10 +64,10 @@ export async function POST(req: NextRequest) {
     const alsoBlock = body.block !== false;
 
     if (!userId) {
-      return NextResponse.json({ ok: false, message: "userId krävs." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
     }
     if (userId === me) {
-      return NextResponse.json({ ok: false, message: "Ogiltig mottagare." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidUser") }, { status: 400 });
     }
 
     const [reporter, target] = await Promise.all([
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     if (!target) {
-      return NextResponse.json({ ok: false, message: "Användaren finns inte." }, { status: 404 });
+      return NextResponse.json({ ok: false, message: await apiMsg("userNotFound") }, { status: 404 });
     }
 
     // Blockera först: rapporten får aldrig fastna på ett SMTP-fel och lämna
@@ -145,6 +146,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, blocked: alsoBlock });
   } catch {
-    return NextResponse.json({ ok: false, message: "Internt fel." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
 import { getGroupCapacity, groupFullMessage } from "@/lib/groupLimits";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       typeof (body as { toUserId?: string }).toUserId !== "string"
     ) {
       return NextResponse.json(
-        { ok: false, message: "Missing toUserId." },
+        { ok: false, message: await apiMsg("invalidRequest") },
         { status: 400 }
       );
     }
@@ -61,19 +62,19 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
 
     if (!fromUserId) {
       return NextResponse.json(
-        { ok: false, message: "Not authenticated." },
+        { ok: false, message: await apiMsg("noSession") },
         { status: 401 }
       );
     }
     if (fromUserId === toUserId) {
       return NextResponse.json(
-        { ok: false, message: "Cannot add yourself." },
+        { ok: false, message: await apiMsg("cannotAddSelf") },
         { status: 400 }
       );
     }
     if (!groupCode) {
       return NextResponse.json(
-        { ok: false, message: "No active group." },
+        { ok: false, message: await apiMsg("noActiveGroup") },
         { status: 400 }
       );
     }
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
         where: { status: "pending", groupCode },
       });
       return NextResponse.json(
-        { ok: false, message: "Group does not exist (gone)." },
+        { ok: false, message: await apiMsg("groupNotFound") },
         { status: 410 }
       );
     }
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
     const toUser = await prisma.user.findUnique({ where: { id: toUserId } });
     if (!toUser) {
       return NextResponse.json(
-        { ok: false, message: "User not found." },
+        { ok: false, message: await apiMsg("userNotFound") },
         { status: 404 }
       );
     }
@@ -109,7 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
     });
     if (!member) {
       return NextResponse.json(
-        { ok: false, message: "Not a member of the active group." },
+        { ok: false, message: await apiMsg("notGroupMember") },
         { status: 403 }
       );
     }
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
     const capacity = await getGroupCapacity(groupCode);
     if (capacity.isFull) {
       return NextResponse.json(
-        { ok: false, message: groupFullMessage(capacity) },
+        { ok: false, message: await groupFullMessage(capacity) },
         { status: 403 }
       );
     }
@@ -182,13 +183,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
       (e as { code?: string }).code === "P2002"
     ) {
       return NextResponse.json(
-        { ok: false, message: "Invite already pending." },
+        { ok: false, message: await apiMsg("invitePending") },
         { status: 409 }
       );
     }
     console.error("invite POST failed", e);
     return NextResponse.json(
-      { ok: false, message: "Internal error." },
+      { ok: false, message: await apiMsg("internalError") },
       { status: 500 }
     );
   }

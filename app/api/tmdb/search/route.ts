@@ -1,6 +1,7 @@
 // app/api/tmdb/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     const locale = url.searchParams.get("locale") || (await tmdbLanguageFromCookies());
 
     if (!q || !["movie", "tv"].includes(type)) {
-      return fail(400, "Ogiltig query.");
+      return fail(400, await apiMsg("invalidRequest"));
     }
 
     const key =
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ ok: true, results });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Internt fel.";
+    const msg = e instanceof Error ? e.message : await apiMsg("internalError");
     return fail(500, msg);
   }
 }

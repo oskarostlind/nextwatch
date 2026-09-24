@@ -51,6 +51,8 @@ export default function FriendProfileModal({
   onReport?: (friendId: string) => void;
 }) {
   const t = useTranslations("friendProfile");
+  // Egen konstant: posterlistan nedan döper sin loopvariabel till `t`.
+  const noImageLabel = t("noImage");
   const [prof, setProf] = useState<Prof | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function FriendProfileModal({
   return (
     <Modal open={!!friendId} onClose={onClose}>
       <div className="p-2">
-        {loading && <p className="py-8 text-center text-sm text-white/50">Laddar…</p>}
+        {loading && <p className="py-8 text-center text-sm text-white/50">{t("loading")}</p>}
         {error && <p className="py-8 text-center text-sm text-rose-300">{error}</p>}
         {prof && (
           <div className="space-y-5">
@@ -144,7 +146,7 @@ export default function FriendProfileModal({
                         {t.poster ? (
                           <Image src={t.poster} alt={t.title} fill sizes="120px" className="object-cover" unoptimized />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-[10px] text-white/30">Ingen bild</div>
+                          <div className="flex h-full items-center justify-center text-[10px] text-white/30">{noImageLabel}</div>
                         )}
                       </div>
                       <p className="truncate text-xs text-white/70" title={t.title}>

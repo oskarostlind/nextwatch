@@ -90,7 +90,7 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
           return;
         }
         if (!res.ok || !json.ok) {
-          setError("message" in json && json.message ? json.message : "Kunde inte ladda smakprofil.");
+          setError("message" in json && json.message ? json.message : t("loadFailed"));
           setData(null);
           return;
         }
@@ -172,7 +172,7 @@ export default function TasteProfilePanel({ groupCode = null }: Props) {
     <div className="grid gap-4 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
       <div>
         <h3 className="text-sm font-semibold text-white/90">
-          {mode === "group" ? "Er gruppsmak" : "Din smakprofil"}
+          {mode === "group" ? t("headingGroup") : t("headingSolo")}
         </h3>
         <p className="mt-0.5 text-xs text-white/45">
           {mode === "group" ? t("subtitleGroup") : t("subtitleSolo")}

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
+import { apiMsg } from "@/lib/apiMessages";
 
 type ApiOk = { ok: true; requestId: string };
 type ApiErr = { ok: false; message: string };
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const cookieStore = await cookies(); // App Router: alltid await
     const me = cookieStore.get("nw_uid")?.value ?? "";
-    if (!me) return json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    if (!me) return json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
     // Minimal, typad validering utan externa deps
     let toUserId = "";
@@ -31,15 +32,15 @@ export async function POST(req: NextRequest) {
     } catch {
       /* ignore */
     }
-    if (!toUserId) return json({ ok: false, message: "toUserId required" }, { status: 400 });
-    if (toUserId === me) return json({ ok: false, message: "Cannot add yourself." }, { status: 400 });
+    if (!toUserId) return json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
+    if (toUserId === me) return json({ ok: false, message: await apiMsg("cannotAddSelf") }, { status: 400 });
 
     // Båda användarna måste finnas
     const [fromUser, toUser] = await Promise.all([
       prisma.user.findUnique({ where: { id: me }, select: { id: true, username: true } }),
       prisma.user.findUnique({ where: { id: toUserId }, select: { id: true } }),
     ]);
-    if (!fromUser || !toUser) return json({ ok: false, message: "User not found." }, { status: 404 });
+    if (!fromUser || !toUser) return json({ ok: false, message: await apiMsg("userNotFound") }, { status: 404 });
 
     // Redan vänner?
     const friendship = await prisma.friendship.findFirst({
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     if (blocked) {
-      return json({ ok: false, message: "Det går inte att skicka en förfrågan till den här användaren." }, { status: 403 });
+      return json({ ok: false, message: await apiMsg("friendRequestBlocked") }, { status: 403 });
     }
 
     // Pending i någon riktning?
@@ -138,9 +139,9 @@ export async function POST(req: NextRequest) {
         }
         return json({ ok: true, requestId: "pending" });
       }
-      return json({ ok: false, message: "Internal error." }, { status: 500 });
+      return json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
     }
   } catch {
-    return json({ ok: false, message: "Internal error." }, { status: 500 });
+    return json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

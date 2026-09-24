@@ -12,12 +12,14 @@
 // guidesidorna (utan den vore de föräldralösa och skulle ärva noll auktoritet),
 // och ger en väg till App Store med kampanjkod.
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { OCCASIONS, COMPANIONS, COMBINATIONS, guidePath } from "@/lib/guides/content";
 import AppStoreLink from "./AppStoreLink";
 
 const LINKS = [...OCCASIONS.slice(0, 3), ...COMPANIONS.slice(0, 2), ...COMBINATIONS.slice(0, 2)];
 
-export default function LandingFooter() {
+export default async function LandingFooter() {
+  const t = await getTranslations("landing");
   return (
     <footer lang="sv" className="border-t border-white/10 bg-neutral-950">
       <div className="mx-auto w-full max-w-3xl px-5 py-14">
@@ -70,9 +72,9 @@ export default function LandingFooter() {
         </nav>
 
         <div className="mt-12 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-6 text-xs text-neutral-500">
-          <Link href="/legal/privacy" className="transition hover:text-neutral-300">Integritetspolicy</Link>
-          <Link href="/legal/terms" className="transition hover:text-neutral-300">Användarvillkor</Link>
-          <Link href="/support" className="transition hover:text-neutral-300">Support</Link>
+          <Link href="/legal/privacy" className="transition hover:text-neutral-300">{t("privacy")}</Link>
+          <Link href="/legal/terms" className="transition hover:text-neutral-300">{t("terms")}</Link>
+          <Link href="/support" className="transition hover:text-neutral-300">{t("support")}</Link>
         </div>
       </div>
     </footer>

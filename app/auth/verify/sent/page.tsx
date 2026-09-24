@@ -1,12 +1,14 @@
+import { getTranslations } from "next-intl/server";
 import VerifySentClient from "./client";
 
 export const dynamic = "force-dynamic";
 
-export default function VerifySentPage() {
+export default async function VerifySentPage() {
+  const t = await getTranslations("auth");
   return (
     <main className="mx-auto max-w-lg p-6">
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h1 className="mb-2 text-2xl font-semibold">Kolla din mejl</h1>
+        <h1 className="mb-2 text-2xl font-semibold">{t("checkEmail")}</h1>
         <VerifySentClient />
         <div className="mt-6 grid gap-3 sm:flex">
           <a

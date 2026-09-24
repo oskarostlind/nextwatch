@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { canJoinGroup } from "@/lib/groupLimits";
+import { apiMsg } from "@/lib/apiMessages";
 
 type JoinBody = {
   code: string;
@@ -34,17 +35,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<JoinOk | Join
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     const raw = (await req.json().catch(() => null)) as unknown;
     if (!raw || typeof raw !== "object" || typeof (raw as JoinBody).code !== "string") {
-      return NextResponse.json({ ok: false, message: "Ogiltig body. Förväntade { code: string }." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
     }
 
     const code = (raw as JoinBody).code.trim().toUpperCase();
     if (code.length < 4 || code.length > 12) {
-      return NextResponse.json({ ok: false, message: "Ogiltig gruppkod." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: await apiMsg("invalidGroupCode") }, { status: 400 });
     }
 
     const found = await prisma.group.findUnique({
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<JoinOk | Join
     });
 
     if (!found) {
-      return NextResponse.json({ ok: false, message: "Grupp hittades inte." }, { status: 404 });
+      return NextResponse.json({ ok: false, message: await apiMsg("groupNotFound") }, { status: 404 });
     }
 
     // Medlemstak (lib/groupLimits) — gratisgrupper är små, premiumgrupper stora.
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<JoinOk | Join
 
     return res;
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Internt fel.";
+    const message = e instanceof Error ? e.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

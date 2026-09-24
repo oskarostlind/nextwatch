@@ -14,6 +14,7 @@ import prisma from "@/lib/prisma";
 import { rateLimitAllow, getRateLimitKey, MATCH_LIMIT } from "@/lib/rateLimit";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 const MAX_MATCHES = 50;
 
@@ -23,12 +24,12 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const userId = jar.get("nw_uid")?.value;
     if (!userId) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     const key = getRateLimitKey(req, userId);
     if (!rateLimitAllow(key, "group-matches", { limit: MATCH_LIMIT })) {
-      return NextResponse.json({ ok: false, message: "För många förfrågningar." }, { status: 429 });
+      return NextResponse.json({ ok: false, message: await apiMsg("tooManyRequests") }, { status: 429 });
     }
 
     const code = url.searchParams.get("code") ?? jar.get("nw_group")?.value ?? undefined;
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       select: { userId: true },
     });
     if (!membership) {
-      return NextResponse.json({ ok: false, message: "Du är inte med i gruppen." }, { status: 403 });
+      return NextResponse.json({ ok: false, message: await apiMsg("notGroupMember") }, { status: 403 });
     }
 
     const locale = await tmdbLanguageFromCookies();
@@ -73,6 +74,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, items }, { status: 200 });
   } catch (e) {
     console.error("group/matches GET error:", e);
-    return NextResponse.json({ ok: false, message: "Internal error." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

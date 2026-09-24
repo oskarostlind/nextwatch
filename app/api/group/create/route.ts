@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import crypto from "node:crypto";
+import { apiMsg } from "@/lib/apiMessages";
 
 type CreateOk = {
   ok: true;
@@ -38,7 +39,7 @@ export async function POST(): Promise<NextResponse<CreateOk | CreateErr>> {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) {
-      return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+      return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
     }
 
     // Generera (praktiskt taget) unik kod med skydd mot extremt osannolik kollision
@@ -81,7 +82,7 @@ export async function POST(): Promise<NextResponse<CreateOk | CreateErr>> {
     });
     return res;
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Internt fel.";
+    const message = e instanceof Error ? e.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

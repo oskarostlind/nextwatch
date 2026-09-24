@@ -44,7 +44,7 @@ export default function InlineLogin() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="du@exempel.se"
+            placeholder={t("emailPlaceholder")}
             required
           />
         </div>

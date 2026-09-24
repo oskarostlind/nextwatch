@@ -3,6 +3,7 @@
 // Lokal push-påminnelse (iOS via Capacitor) när en kommande film släpps.
 // Schemaläggs på enheten — ingen backend, funkar offline. På webben är det en
 // no-op (returnerar ok:false med förklaring).
+import { clientMsg } from "@/lib/clientMessages";
 import { Capacitor } from "@capacitor/core";
 
 export type ReminderResult = { ok: boolean; message?: string };
@@ -26,7 +27,7 @@ export async function scheduleReleaseReminder(opts: {
   releaseDate: string; // "YYYY-MM-DD"
 }): Promise<ReminderResult> {
   if (!canRemind()) {
-    return { ok: false, message: "Påminnelser fungerar bara i appen." };
+    return { ok: false, message: clientMsg("remindersAppOnly") };
   }
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
@@ -36,27 +37,27 @@ export async function scheduleReleaseReminder(opts: {
       perm = await LocalNotifications.requestPermissions();
     }
     if (perm.display !== "granted") {
-      return { ok: false, message: "Tillåt notiser för att få en påminnelse." };
+      return { ok: false, message: clientMsg("remindersAllowNotifications") };
     }
 
     // Notis kl 09:00 lokal tid på releasedagen.
     const at = new Date(`${opts.releaseDate}T09:00:00`);
-    if (Number.isNaN(at.getTime())) return { ok: false, message: "Okänt releasedatum." };
-    if (at.getTime() < Date.now()) return { ok: false, message: "Filmen har redan släppts." };
+    if (Number.isNaN(at.getTime())) return { ok: false, message: clientMsg("remindersUnknownDate") };
+    if (at.getTime() < Date.now()) return { ok: false, message: clientMsg("remindersAlreadyReleased") };
 
     await LocalNotifications.schedule({
       notifications: [
         {
           id: notifId(opts.tmdbId),
-          title: "Släpps idag 🎬",
-          body: `${opts.title} finns nu att se!`,
+          title: clientMsg("reminderTitle"),
+          body: clientMsg("reminderBody", { title: opts.title }),
           schedule: { at },
         },
       ],
     });
     return { ok: true };
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Kunde inte skapa påminnelse." };
+    return { ok: false, message: e instanceof Error ? e.message : clientMsg("remindersFailed") };
   }
 }
 

@@ -5,6 +5,7 @@
 // dagliga rekommendations-jobbet (app/api/cron/daily-recs) kan återanvända
 // exakt samma scoring/MMR-pipeline utan att duplicera logik.
 
+import { apiMsg } from "@/lib/apiMessages";
 import { prisma, withDbRetry } from "@/lib/prisma";
 import { parseProvidersJson } from "@/lib/groupSettings";
 import {
@@ -467,7 +468,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       ]),
     );
 
-    if (!profile) return fail("Ingen profil hittades.");
+    if (!profile) return fail(await apiMsg("profileMissing"));
 
     // Gruppläge kräver minst en laddad medlem (utöver kod).
     const isGroup = !!groupCode && groupMembers.length > 0;
@@ -1370,6 +1371,6 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     };
   } catch (err) {
     console.error("computeUnifiedRecs error:", err);
-    return fail("Internt fel vid rekommendation.", 500);
+    return fail(await apiMsg("internalError"), 500);
   }
 }

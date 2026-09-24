@@ -6,6 +6,7 @@ import { verifyAppleIdentityToken, exchangeAppleAuthCode } from "../../../../lib
 import { setAuthCookies } from "../../../../lib/auth";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
     const key = getRateLimitKey(req, null);
     if (!rateLimitAllow(key, "auth-apple", { limit: AUTH_LIMIT })) {
       return NextResponse.json(
-        { ok: false, message: "För många inloggningsförsök." },
+        { ok: false, message: await apiMsg("tooManyLogins") },
         { status: 429 }
       );
     }
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     const appleFullName = fullNameFrom(body.givenName, body.familyName);
     if (!identityToken) {
       return NextResponse.json(
-        { ok: false, message: "Saknar Apple-token" },
+        { ok: false, message: await apiMsg("appleTokenMissing") },
         { status: 400 }
       );
     }
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
       if (byEmail) {
         if (byEmail.appleSub && byEmail.appleSub !== claims.sub) {
           return NextResponse.json(
-            { ok: false, message: "E-postadressen är kopplad till ett annat Apple-konto." },
+            { ok: false, message: await apiMsg("appleEmailLinked") },
             { status: 409 }
           );
         }
@@ -178,7 +179,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[auth/apple]", err);
     return NextResponse.json(
-      { ok: false, message: "Apple-inloggning misslyckades" },
+      { ok: false, message: await apiMsg("appleFailed") },
       { status: 401 }
     );
   }

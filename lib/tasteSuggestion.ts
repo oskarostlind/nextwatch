@@ -9,6 +9,7 @@
 
 import { buildSeeds, buildTasteMaps, loadTasteInput } from "@/lib/tasteModel";
 import { SUBGENRES } from "@/lib/subgenres";
+import { apiMsg } from "@/lib/apiMessages";
 
 /**
  * TMDB movie-genre-id → svensk etikett. Samma 18 som GROUP_GENRES
@@ -73,7 +74,7 @@ export type TasteSuggestionResult =
 
 export async function computeTasteSuggestion(uid: string): Promise<TasteSuggestionResult> {
   const input = await loadTasteInput(uid, null);
-  if (!input) return { ok: false, message: "Ingen profil hittades.", status: 200 };
+  if (!input) return { ok: false, message: await apiMsg("profileMissing"), status: 200 };
 
   const ratingsCount = input.ratings.length;
   if (ratingsCount < MIN_RATINGS_FOR_SUGGESTION) {

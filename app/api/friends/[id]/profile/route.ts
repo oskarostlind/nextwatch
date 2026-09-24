@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { tmdbDetails, type TmdbType } from "@/lib/tmdbDetails";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const jar = await cookies();
   const me = jar.get("nw_uid")?.value ?? null;
-  if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
-  if (!id || id === me) return NextResponse.json({ ok: false, message: "Ogiltig profil." }, { status: 400 });
+  if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
+  if (!id || id === me) return NextResponse.json({ ok: false, message: await apiMsg("invalidUser") }, { status: 400 });
 
   // Måste vara vänner (båda riktningar).
   const friendship = await prisma.friendship.findFirst({
@@ -25,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     select: { userId: true },
   });
   if (!friendship) {
-    return NextResponse.json({ ok: false, message: "Ni är inte vänner." }, { status: 403 });
+    return NextResponse.json({ ok: false, message: await apiMsg("notFriends") }, { status: 403 });
   }
 
   const [user, profile, likes] = await Promise.all([
@@ -43,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   ]);
 
   if (!user || !profile) {
-    return NextResponse.json({ ok: false, message: "Profilen saknas." }, { status: 404 });
+    return NextResponse.json({ ok: false, message: await apiMsg("profileMissing") }, { status: 404 });
   }
 
   // Vännens topplista visas för DEN SOM TITTAR — språket ska följa

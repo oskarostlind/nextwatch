@@ -1,6 +1,7 @@
 // app/recs/useUnifiedRecs.ts
 "use client";
 
+import { clientMsg } from "@/lib/clientMessages";
 import { useEffect, useState } from "react";
 
 export type MediaKind = "movie" | "tv";
@@ -41,7 +42,7 @@ export function useUnifiedRecs(page: number) {
       try {
         const res = await fetch(`/api/recs/unified?page=${page}`, { cache: "no-store" });
         if (!res.ok) {
-          let message = "Kunde inte ladda rekommendationer.";
+          let message = clientMsg("recsLoadFailed");
           try {
             const body = (await res.json()) as { message?: string };
             if (body?.message) message = body.message;
@@ -51,7 +52,7 @@ export function useUnifiedRecs(page: number) {
         }
         const data = (await res.json()) as UnifiedResp;
         if (!("ok" in data) || !data.ok) {
-          if (alive) setErr("Kunde inte ladda rekommendationer.");
+          if (alive) setErr(clientMsg("recsLoadFailed"));
           return;
         }
         if (!alive) return;
@@ -59,7 +60,7 @@ export function useUnifiedRecs(page: number) {
         setMode(data.mode);
         setGroup(data.group);
       } catch {
-        if (alive) setErr("Nätverksfel.");
+        if (alive) setErr(clientMsg("networkError"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -86,9 +87,9 @@ export async function sendGroupVote(params: {
   if (!res.ok) {
     try {
       const body = (await res.json()) as { message?: string };
-      return { ok: false, message: body?.message ?? "Kunde inte skicka röst." };
+      return { ok: false, message: body?.message ?? clientMsg("voteFailed") };
     } catch {
-      return { ok: false, message: "Kunde inte skicka röst." };
+      return { ok: false, message: clientMsg("voteFailed") };
     }
   }
   return (await res.json()) as { ok: boolean; message?: string };

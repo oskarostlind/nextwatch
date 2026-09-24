@@ -289,12 +289,11 @@ export async function notifyGroupMatchIfNeeded(
       select: { userId: true },
     });
 
-    const mediaLabel = tmdbType === "movie" ? "film" : "serie";
+    // Mottagarens språk, inte avsändarens — se sendLocalizedPushToUser.
     await Promise.all(
       members.map(({ userId }) =>
-        sendPushToUser(userId, {
-          title: "Gruppmatch! 🎬",
-          body: `Ni har hittat en ${mediaLabel} att titta på tillsammans!`,
+        sendLocalizedPushToUser(userId, {
+          key: tmdbType === "movie" ? "groupMatchMovie" : "groupMatchSeries",
           data: {
             type: "group_match",
             groupCode,

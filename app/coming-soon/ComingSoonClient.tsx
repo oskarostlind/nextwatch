@@ -65,9 +65,9 @@ export default function ComingSoonClient() {
       {note && <Note tone="error">{note}</Note>}
 
       {items === null ? (
-        <p className="py-10 text-center text-sm text-white/50">Laddar…</p>
+        <p className="py-10 text-center text-sm text-white/50">{t("loading")}</p>
       ) : items.length === 0 ? (
-        <p className="py-10 text-center text-sm text-white/50">Inga kommande titlar hittades just nu.</p>
+        <p className="py-10 text-center text-sm text-white/50">{t("empty")}</p>
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {items.map((it) => {
@@ -78,7 +78,7 @@ export default function ComingSoonClient() {
                   {it.poster ? (
                     <Image src={it.poster} alt={it.title} fill sizes="(max-width:768px) 45vw, 220px" className="object-cover" unoptimized />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-white/30">Ingen bild</div>
+                    <div className="flex h-full items-center justify-center text-xs text-white/30">{t("noImage")}</div>
                   )}
                 </div>
                 <div className="flex flex-1 flex-col gap-2 p-3">

@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { signUid } from "../../../../lib/session";
 import { sanitizeKeywordIds } from "@/lib/groupSettings";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
       });
     }
     if (!validUsername(username!)) {
-      return fail(400, "Användarnamn måste vara 3–20 tecken (a–z, 0–9, _, .).", debug);
+      return fail(400, await apiMsg("usernameRules"), debug);
     }
 
     const taken = await prisma.user.findFirst({
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     if (taken) {
-      return fail(409, "Användarnamnet är upptaget. Välj ett annat.", debug);
+      return fail(409, await apiMsg("usernameTaken"), debug);
     }
 
     await prisma.user.update({
@@ -263,7 +264,7 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error("[save-onboarding] error:", err);
-    const message = err instanceof Error ? err.message : "Ett fel uppstod.";
+    const message = err instanceof Error ? err.message : await apiMsg("internalError");
     return fail(500, message, true);
   }
 }

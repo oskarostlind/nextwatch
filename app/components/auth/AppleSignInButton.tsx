@@ -28,7 +28,7 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
 
       const identityToken = result.response?.identityToken;
       if (!identityToken) {
-        setError("Apple gav ingen identitetstoken.");
+        setError(t("appleNoToken"));
         return;
       }
 
@@ -63,7 +63,7 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
       };
 
       if (!res.ok || !data.ok) {
-        setError(data.message ?? "Apple-inloggning misslyckades");
+        setError(data.message ?? t("appleFailed"));
         return;
       }
 

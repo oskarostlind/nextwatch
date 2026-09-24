@@ -10,6 +10,7 @@
 // från /api/apple/iap/config, köp med purchaseProduct(), posta transactionId
 // till verify-endpointen.
 
+import { clientMsg } from "@/lib/clientMessages";
 import { Capacitor } from "@capacitor/core";
 import { ensureAccountBeforePremium } from "./signupNudge";
 
@@ -43,7 +44,7 @@ async function startAppleIapPurchase(): Promise<PurchaseResult> {
     if (!config.enabled || !productId) {
       return {
         ok: false,
-        message: "Premium-köp är inte tillgängligt i appen ännu. Försök igen senare.",
+        message: clientMsg("purchaseUnavailableRetry"),
       };
     }
 
@@ -68,7 +69,7 @@ async function startAppleIapPurchase(): Promise<PurchaseResult> {
       return {
         ok: false,
         message:
-          "Köpet gick igenom men kunde inte verifieras. Starta om appen — kontakta oss om premium inte aktiveras.",
+          clientMsg("purchaseUnverified"),
       };
     }
 
@@ -79,7 +80,7 @@ async function startAppleIapPurchase(): Promise<PurchaseResult> {
       return { ok: false, message: "", cancelled: true };
     }
     console.error("[premiumPurchase] IAP misslyckades:", message);
-    return { ok: false, message: "Köpet kunde inte slutföras. Försök igen." };
+    return { ok: false, message: clientMsg("purchaseFailed") };
   }
 }
 
@@ -96,9 +97,9 @@ async function startStripeCheckout(): Promise<PurchaseResult> {
       window.location.href = js.url;
       return { ok: true };
     }
-    return { ok: false, message: js.message ?? "Kunde inte starta betalning." };
+    return { ok: false, message: js.message ?? clientMsg("checkoutFailed") };
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Kunde inte starta betalning." };
+    return { ok: false, message: e instanceof Error ? e.message : clientMsg("checkoutFailed") };
   }
 }
 
@@ -110,7 +111,7 @@ async function startStripeCheckout(): Promise<PurchaseResult> {
  */
 export async function restorePremiumPurchases(): Promise<PurchaseResult> {
   if (!isNativeIos()) {
-    return { ok: false, message: "Återställning av köp görs i iOS-appen." };
+    return { ok: false, message: clientMsg("restoreOnIos") };
   }
   try {
     const configRes = await fetch("/api/apple/iap/config", { cache: "no-store" });
@@ -120,7 +121,7 @@ export async function restorePremiumPurchases(): Promise<PurchaseResult> {
     };
     const productId = config.products?.monthly ?? null;
     if (!config.enabled || !productId) {
-      return { ok: false, message: "Premium-köp är inte tillgängligt i appen ännu." };
+      return { ok: false, message: clientMsg("purchaseUnavailable") };
     }
 
     const { NativePurchases } = await import("@capgo/native-purchases");
@@ -138,7 +139,7 @@ export async function restorePremiumPurchases(): Promise<PurchaseResult> {
     if (!latest) {
       return {
         ok: false,
-        message: "Ingen aktiv prenumeration hittades på det här Apple-kontot.",
+        message: clientMsg("noActiveSubscription"),
       };
     }
 
@@ -158,10 +159,10 @@ export async function restorePremiumPurchases(): Promise<PurchaseResult> {
     } | null;
 
     if (!verifyRes.ok || !js?.ok) {
-      return { ok: false, message: js?.message ?? "Kunde inte verifiera köpet." };
+      return { ok: false, message: js?.message ?? clientMsg("purchaseVerifyFailed") };
     }
     if (js.active === false) {
-      return { ok: false, message: "Prenumerationen har gått ut." };
+      return { ok: false, message: clientMsg("subscriptionExpired") };
     }
     return { ok: true };
   } catch (err) {
@@ -170,7 +171,7 @@ export async function restorePremiumPurchases(): Promise<PurchaseResult> {
       return { ok: false, message: "", cancelled: true };
     }
     console.error("[premiumPurchase] restore misslyckades:", message);
-    return { ok: false, message: "Kunde inte återställa köp. Försök igen." };
+    return { ok: false, message: clientMsg("restoreFailed") };
   }
 }
 

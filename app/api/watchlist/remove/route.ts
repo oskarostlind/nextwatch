@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { PrismaClient } from "@prisma/client";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,14 +19,14 @@ export async function POST(req: Request) {
   try {
     const c = await cookies();
     const uid = c.get("nw_uid")?.value;
-    if (!uid) return bad("Ingen session (nw_uid saknas).", 401);
+    if (!uid) return bad(await apiMsg("noSession"), 401);
 
     const body = (await req.json()) as Body;
     const tmdbId = Number(body.tmdbId);
     const mediaType = body.mediaType;
 
-    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad("Ogiltigt tmdbId.");
-    if (mediaType !== "movie" && mediaType !== "tv") return bad("Ogiltig mediaType.");
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad(await apiMsg("invalidRequest"));
+    if (mediaType !== "movie" && mediaType !== "tv") return bad(await apiMsg("invalidRequest"));
 
     // Rå SQL så vi slipper ev. Prisma-fältnamnsskillnader
     await prisma.$executeRawUnsafe(
@@ -38,6 +39,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("watchlist/remove error:", err);
-    return NextResponse.json({ ok: false, message: "Kunde inte ta bort titel från watchlist." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("removeWatchlistFailed") }, { status: 500 });
   }
 }

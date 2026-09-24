@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const jar = await cookies();
   const me = jar.get("nw_uid")?.value ?? null;
-  if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+  if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as {
     toUserId?: string;
@@ -29,10 +30,10 @@ export async function POST(req: NextRequest) {
   const mediaType = body.mediaType === "movie" || body.mediaType === "tv" ? body.mediaType : null;
   const title = typeof body.title === "string" && body.title.trim() ? body.title.trim().slice(0, 200) : null;
   if (!toUserId || !tmdbId || !mediaType || !title) {
-    return NextResponse.json({ ok: false, message: "Ogiltigt tips." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidTip") }, { status: 400 });
   }
   if (toUserId === me) {
-    return NextResponse.json({ ok: false, message: "Du kan inte tipsa dig själv." }, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("cannotShareSelf") }, { status: 400 });
   }
 
   const friendship = await prisma.friendship.findFirst({
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     select: { userId: true },
   });
   if (!friendship) {
-    return NextResponse.json({ ok: false, message: "Ni är inte vänner." }, { status: 403 });
+    return NextResponse.json({ ok: false, message: await apiMsg("notFriends") }, { status: 403 });
   }
 
   // Samma tips igen bumpar raden (nytt datum, oläst igen) i stället för dubblett.
@@ -75,5 +76,5 @@ export async function POST(req: NextRequest) {
     });
   })().catch(() => {});
 
-  return NextResponse.json({ ok: true, message: "Tips skickat." });
+  return NextResponse.json({ ok: true, message: await apiMsg("tipSent") });
 }

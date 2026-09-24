@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import { recordSwipeGenres } from "../../../../lib/genreStats";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
   try {
     const c = await cookies();
     const uid = c.get("nw_uid")?.value;
-    if (!uid) return bad("Ingen session (nw_uid saknas).", 401);
+    if (!uid) return bad(await apiMsg("noSession"), 401);
 
     const body = (await req.json()) as Body;
 
@@ -32,9 +33,9 @@ export async function POST(req: Request) {
     const rating = Number(body.rating);
     const mediaType = body.mediaType;
 
-    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad("Ogiltigt tmdbId.");
-    if (mediaType !== "movie" && mediaType !== "tv") return bad("Ogiltig mediaType.");
-    if (!Number.isFinite(rating) || rating < 1 || rating > 10) return bad("rating måste vara 1–10.");
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return bad(await apiMsg("invalidRequest"));
+    if (mediaType !== "movie" && mediaType !== "tv") return bad(await apiMsg("invalidRequest"));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 10) return bad(await apiMsg("invalidRequest"));
 
     // Robust mot avsaknad av komposit-unik i genererade typer:
     const existing = await prisma.rating.findFirst({
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("ratings/save error:", err);
     return NextResponse.json(
-      { ok: false, message: "Kunde inte spara betyg." },
+      { ok: false, message: await apiMsg("saveFailed") },
       { status: 500 }
     );
   }

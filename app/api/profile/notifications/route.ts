@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 export type NotificationPrefs = {
   dailyRecs: boolean;
@@ -80,14 +81,14 @@ export async function PUT(req: NextRequest) {
   if (typeof body.marketing === "boolean") data.notifyMarketing = body.marketing;
 
   if (Object.keys(data).length === 0) {
-    return NextResponse.json({ ok: false, error: "no valid fields" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   // Profilen kan saknas fÃ¶r nyregistrerade â€“ uppdatera bara om den finns.
   const existing = await prisma.profile.findUnique({ where: { userId: uid }, select: { userId: true } });
   if (!existing) {
     return NextResponse.json(
-      { ok: false, error: "profile_missing", message: "SlutfÃ¶r onboarding fÃ¶rst." },
+      { ok: false, error: "profile_missing", message: await apiMsg("finishOnboarding") },
       { status: 409 }
     );
   }

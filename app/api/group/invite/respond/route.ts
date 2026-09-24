@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
 import { canJoinGroup } from "@/lib/groupLimits";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Action = "accept" | "decline";
 type Body = { id: string; action: Action };
@@ -116,6 +117,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (e: unknown) {
     console.error("invite/respond POST error:", e);
-    return bad("Internal error.");
+    return bad(await apiMsg("internalError"));
   }
 }

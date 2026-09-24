@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { tmdbFetch } from "@/lib/tmdbClient";
 import { extractKeywordIds } from "@/lib/subgenres";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (!uid) return NextResponse.json({ ok: false, items: [], message: "Ingen session" }, { status: 401 });
+    if (!uid) return NextResponse.json({ ok: false, items: [], message: await apiMsg("noSession") }, { status: 401 });
 
     const allRows = await prisma.rating.findMany({
       where: { userId: uid, rating: { not: null } },
@@ -141,6 +142,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, items });
   } catch {
-    return NextResponse.json({ ok: false, items: [], message: "Internt fel" }, { status: 500 });
+    return NextResponse.json({ ok: false, items: [], message: await apiMsg("internalError") }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Ok = { ok: true };
 type Err = { ok: false; message: string };
@@ -18,17 +19,17 @@ type Body = { requestId?: string };
 export async function POST(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return json(401, { ok: false, message: "Ingen session." });
+  if (!uid) return json(401, { ok: false, message: await apiMsg("noSession") });
 
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
-    return json(400, { ok: false, message: "Ogiltig JSON." });
+    return json(400, { ok: false, message: await apiMsg("invalidRequest") });
   }
 
   const requestId = body.requestId?.trim();
-  if (!requestId) return json(400, { ok: false, message: "requestId krävs." });
+  if (!requestId) return json(400, { ok: false, message: await apiMsg("invalidRequest") });
 
   const pending = await prisma.friendRequest.findFirst({
     where: { id: requestId, toUserId: uid, status: "pending" },
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!pending) {
-    return json(404, { ok: false, message: "Ingen väntande förfrågan hittades." });
+    return json(404, { ok: false, message: await apiMsg("noPendingRequest") });
   }
 
   await prisma.friendRequest.update({

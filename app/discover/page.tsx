@@ -374,7 +374,7 @@ export default function DiscoverPage() {
         </div>
       )}
       {(busy || searchBusy) && displayItems.length > 0 && (
-        <div className="mb-3 text-sm text-neutral-400">Laddar…</div>
+        <div className="mb-3 text-sm text-neutral-400">{t("loading")}</div>
       )}
 
       {/* Förstaladdning (och tom sökning) får skelett i stället för naken text. */}
@@ -441,7 +441,7 @@ export default function DiscoverPage() {
                 {active.year ? ` (${active.year})` : ""}
               </h2>
               <p className="mt-1 text-sm text-neutral-300">
-                {active.voteAverage != null ? `Betyg: ${fmtRating(active.voteAverage)}` : "Betyg saknas"}
+                {active.voteAverage != null ? t("ratingValue", { value: fmtRating(active.voteAverage) }) : t("noRating")}
               </p>
 
               <p className="mt-3 text-sm leading-relaxed text-neutral-200">
@@ -549,8 +549,8 @@ export default function DiscoverPage() {
               }
             : null
         }
-        heading="Vad tyckte du?"
-        skipLabel="Avbryt"
+        heading={t("ratingHeading")}
+        skipLabel={t("cancel")}
         saving={rateSaving}
         initialRating={rateTarget ? userRatings[`${rateTarget.mediaType}_${rateTarget.id}`] : undefined}
         onRate={submitRating}

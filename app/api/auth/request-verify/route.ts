@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import nodemailer from "nodemailer";
 import { getTranslations } from "next-intl/server";
 import { uiLocaleFromCookies } from "@/lib/serverLocale";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,10 +49,10 @@ export async function POST(req: NextRequest) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (!uid) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+    if (!uid) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
     const u = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, email: true } });
-    if (!u?.email) return NextResponse.json({ ok: false, message: "Ingen e-post registrerad." }, { status: 400 });
+    if (!u?.email) return NextResponse.json({ ok: false, message: await apiMsg("noEmailRegistered") }, { status: 400 });
 
     await prisma.verification.deleteMany({ where: { userId: uid } });
 
@@ -73,13 +74,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: mailRes.sent ? "Verifieringslänk skickad." : "Länk skapad men e-post kunde inte skickas.",
+      message: mailRes.sent ? await apiMsg("verifyLinkSent") : await apiMsg("verifyLinkMailFailed"),
       verifyUrl: link,
       emailSent: mailRes.sent,
       emailProvider: mailRes.provider ?? mailRes.reason ?? null,
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Internt fel.";
+    const msg = e instanceof Error ? e.message : await apiMsg("internalError");
     return NextResponse.json({ ok: false, message: msg }, { status: 500 });
   }
 }

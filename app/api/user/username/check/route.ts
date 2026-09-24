@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Ok = { ok: true; available: boolean };
 type Err = { ok: false; message: string };
@@ -18,15 +19,15 @@ type ExistsRow = { exists: boolean };
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
-  if (!uid) return NextResponse.json({ ok: false, message: "Ingen session." } as Err, { status: 401 });
+  if (!uid) return NextResponse.json({ ok: false, message: await apiMsg("noSession") } as Err, { status: 401 });
 
   const u = new URL(req.url);
   const username = (u.searchParams.get("u") ?? u.searchParams.get("username") ?? "").trim().toLowerCase();
   if (!username) {
-    return NextResponse.json({ ok: false, message: "Saknar 'username'." } as Err, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") } as Err, { status: 400 });
   }
   if (!valid(username)) {
-    return NextResponse.json({ ok: false, message: "Ogiltigt format." } as Err, { status: 400 });
+    return NextResponse.json({ ok: false, message: await apiMsg("usernameInvalid") } as Err, { status: 400 });
   }
 
   const exists = await prisma.$queryRaw<ExistsRow[]>`

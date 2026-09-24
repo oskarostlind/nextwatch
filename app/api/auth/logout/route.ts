@@ -1,6 +1,7 @@
 // app/api/auth/logout/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,5 +17,5 @@ export async function POST() {
     if (jar.get(name)) jar.set(name, "", opts);
   });
 
-  return NextResponse.json({ ok: true, message: "Logged out." });
+  return NextResponse.json({ ok: true, message: await apiMsg("loggedOut") });
 }

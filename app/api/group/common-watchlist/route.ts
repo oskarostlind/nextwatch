@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { tmdbGet } from "@/lib/tasteModel";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,10 +27,10 @@ type TmdbTitle = {
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const me = jar.get("nw_uid")?.value ?? null;
-  if (!me) return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+  if (!me) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
   const code = req.nextUrl.searchParams.get("code")?.trim().toUpperCase() ?? "";
-  if (!code) return NextResponse.json({ ok: false, message: "Kod saknas." }, { status: 400 });
+  if (!code) return NextResponse.json({ ok: false, message: await apiMsg("invalidRequest") }, { status: 400 });
 
   // Authz-kollen och överlappen är oberoende (groupBy:n filtrerar relationellt
   // på gruppmedlemskap i stället för på en id-lista) — kör dem i EN parallell
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
   const memberIds = members.map((m) => m.userId);
   // Authz: bara medlemmar får se gruppens gemensamma titlar.
   if (!memberIds.includes(me)) {
-    return NextResponse.json({ ok: false, message: "Inte medlem i gruppen." }, { status: 403 });
+    return NextResponse.json({ ok: false, message: await apiMsg("notGroupMember") }, { status: 403 });
   }
   if (memberIds.length < 2) return NextResponse.json({ ok: true, memberCount: memberIds.length, items: [] });
 

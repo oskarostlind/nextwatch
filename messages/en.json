@@ -1,17 +1,24 @@
 {
   "actions": {
+    "dislike": "Nope",
+    "info": "Info",
+    "like": "Like",
     "undo": "Undo"
   },
   "auth": {
     "activateAccount": "Activate your account",
+    "appleFailed": "Sign in with Apple failed.",
     "appleIosOnly": "Sign in with Apple is available in the iOS app. Use email on the web.",
+    "appleNoToken": "Apple returned no identity token.",
     "backToSignIn": "Back to sign in",
     "backToStart": "Back to the start page",
+    "checkEmail": "Check your email",
     "checkInbox": "Done! Check your inbox. Click the link in the email to activate.",
     "chooseNewPassword": "Choose a new password",
     "continueWithoutAccount": "Continue without an account →",
     "createAccountEmail": "Create account with email",
     "email": "Email",
+    "emailPlaceholder": "you@example.com",
     "emailVerified": "Email verified — opening the app…",
     "emailVerifiedWelcome": "Your email is verified. Welcome!",
     "forgotBody": "Enter your email address and we'll send you a link to choose a new password.",
@@ -39,6 +46,7 @@
     "passwordUpdated": "Your password has been updated",
     "passwordsDontMatch": "The passwords don't match.",
     "pleaseWait": "Please wait…",
+    "redirecting": "Redirecting…",
     "registerBody": "Save your account with email or Apple so you can sign in again on other devices.",
     "registerOptional": "Optional — you can use the app without signing up.",
     "registerTitle": "Save your account",
@@ -51,6 +59,7 @@
     "sendVerifyLink": "Send verification link",
     "sending": "Sending…",
     "signIn": "Sign in",
+    "signInFailed": "Couldn't sign in.",
     "signInWithApple": "Sign in with Apple",
     "signingIn": "Signing in…",
     "starting": "Starting…",
@@ -79,10 +88,13 @@
     "vhs": "VHS"
   },
   "comingSoon": {
+    "empty": "No upcoming titles found right now.",
     "eyebrow": "Upcoming",
     "iosOnlyNote": "Reminders can be set in the iOS app. Here you can see what's on the way.",
-    "reminderSet": "Reminder set",
+    "loading": "Loading…",
+    "noImage": "No image",
     "remindMe": "Remind me",
+    "reminderSet": "Reminder set",
     "subtitle": "New films on the way – get a reminder when they're released.",
     "title": "Coming soon"
   },
@@ -95,6 +107,7 @@
     "movie": "Movie",
     "next": "Next",
     "no": "No",
+    "noDescription": "No description.",
     "remove": "Remove",
     "retry": "Try again",
     "save": "Save",
@@ -107,15 +120,20 @@
     "yes": "Yes"
   },
   "discover": {
+    "cancel": "Cancel",
     "eyebrow": "Explore",
+    "loading": "Loading…",
     "loadingInfo": "Loading info…",
     "next": "Next →",
     "noDescription": "No description available.",
+    "noRating": "No rating",
     "noResults": "No results for \"{query}\".",
     "noStreamingData": "No streaming data available for your region right now.",
     "openProvider": "Open {provider}",
     "prev": "← Previous",
     "rate": "Rate",
+    "ratingHeading": "What did you think?",
+    "ratingValue": "Rating: {value}",
     "searchFailed": "The search failed",
     "searchPlaceholder": "Search titles…",
     "subtitle": "Browse films and series.",
@@ -142,9 +160,10 @@
   },
   "filmChat": {
     "add": "Add",
-    "added": "Added ✓",
     "addToWatchlist": "Add to watchlist",
+    "added": "Added ✓",
     "closeSearch": "Close search",
+    "loading": "Loading…",
     "loadingInfo": "Loading info…",
     "noDescription": "No description available.",
     "noStreamingData": "No streaming data for your region right now.",
@@ -158,7 +177,8 @@
     "searchMovie": "Search films to share…",
     "searchTv": "Search series to share…",
     "sent": "· Sent",
-    "shareATitle": "Share a title"
+    "shareATitle": "Share a title",
+    "subtitle": "Movie tips back and forth"
   },
   "filters": {
     "movies": "Films",
@@ -181,8 +201,10 @@
     "activeMinutesAgo": "Active {count} min ago",
     "likes": "Likes",
     "loadFailed": "Couldn't load the profile.",
+    "loading": "Loading…",
     "networkError": "Network error.",
     "neverActive": "Never active",
+    "noImage": "No image",
     "noLikesYet": "Hasn't liked anything yet.",
     "openChat": "Open film chat",
     "recentFavorites": "Recent favourites",
@@ -243,6 +265,8 @@
     "Western": "Western"
   },
   "genreSuggestions": {
+    "addLike": "You seem drawn to {genre}. Add it to Likes?",
+    "removeDislike": "You seem to like {genre}, but it's in Dislikes. Remove it from there?",
     "saveToConfirm": "Save to confirm."
   },
   "gestureTour": {
@@ -273,6 +297,8 @@
       "label": "Taste profile"
     },
     "progress": "How swiping works — {step}/{total}",
+    "ratingHeading": "Nice! What did you think?",
+    "ratingSaveFailed": "Couldn't save the rating",
     "seen": {
       "algo": "Your rating is the strongest signal: a high score pulls in more of the same, a low one steers the feed away.",
       "effect": "Ratings count most",
@@ -304,8 +330,8 @@
     "groupLabel": "Group:",
     "groupSettings": "Group settings",
     "invite": "Invite",
-    "invited": "Invited",
     "inviteFriendsHeading": "Invite friends",
+    "invited": "Invited",
     "invitesHeading": "Group invites",
     "invitesYouTo": "Invites you to",
     "join": "Join",
@@ -331,6 +357,8 @@
     "tabMatches": "Matches",
     "tabMatchesUnseen": "Matches •",
     "title": "Together",
+    "toastFriendRequest": "{name} wants to be your friend",
+    "toastGroupInvite": "{name} invited you to group {code}",
     "unknown": "Unknown",
     "you": "You"
   },
@@ -376,6 +404,7 @@
     "providers": "Streaming services",
     "providersHint": "Empty = every service any member has.",
     "save": "Save",
+    "saveFailed": "Couldn't save.",
     "saved": "Group settings saved",
     "saving": "Saving…",
     "seats": "Seats",
@@ -393,6 +422,8 @@
     "lookingForMore": "Looking for more suggestions…",
     "nothingToUndo": "Nothing to undo",
     "outOfSuggestions": "Out of suggestions for now.",
+    "ratingHeading": "What did you think?",
+    "ratingSaveFailed": "Couldn't save the rating",
     "retry": "Try again",
     "undoFailed": "Couldn't undo on the server",
     "widenedDroppedGenres": "Few hits with your filters — widened the search (dropped genre/sub-genre) for more suggestions.",
@@ -406,6 +437,7 @@
   "imdb": {
     "close": "Close",
     "heading": "Import from IMDb",
+    "importFailed": "Import failed.",
     "importing": "Importing…",
     "networkError": "Network error during import.",
     "pickFile": "Choose CSV file",
@@ -550,6 +582,7 @@
   "match": {
     "and": "and",
     "availableOn": "Available on",
+    "closeOverlay": "Close",
     "evidenceCast": "the actor {label}",
     "evidenceCreator": "the creator {label}",
     "evidenceDirector": "the director {label}",
@@ -567,6 +600,9 @@
   },
   "modals": {
     "dragToRate": "Drag to rate",
+    "ratingHeading": "What did you think?",
+    "ratingSliderAria": "Rating 1 to 10",
+    "removeRating": "Remove rating",
     "saveRating": "Save rating ({value}/10)",
     "saving": "Saving…",
     "skip": "Skip"
@@ -658,6 +694,7 @@
     "bulletSwipes": "Unlimited swipes — free includes 100 per day",
     "bulletTaste": "Your taste profile: see which themes, directors and actors your swipes point to",
     "buyCta": "Get Premium – SEK 19/month",
+    "checkoutFailed": "Couldn't start the payment.",
     "eula": "Terms of Use (EULA)",
     "eyebrow": "Upgrade",
     "intro": "Remove ads and swipe without limits. SEK 19/month, no lock-in.",
@@ -675,7 +712,8 @@
   },
   "premiumSuccess": {
     "body": "Your premium should activate within a few seconds. Reload the page if it doesn't show up right away.",
-    "title": "Thanks for your purchase!"
+    "title": "Thanks for your purchase!",
+    "toGroups": "Go to groups"
   },
   "profile": {
     "about": "About NextWatch",
@@ -821,6 +859,14 @@
     "groupInviteAccepted": {
       "body": "{name} joined your group {code} – time to swipe!",
       "title": "Invite accepted"
+    },
+    "groupMatchMovie": {
+      "title": "Group match! 🎬",
+      "body": "You've found a movie to watch together!"
+    },
+    "groupMatchSeries": {
+      "title": "Group match! 🎬",
+      "body": "You've found a series to watch together!"
     },
     "reEngagement": {
       "variants": {
@@ -1080,6 +1126,7 @@
     "analyzing": "Analysing your taste…",
     "headingGroup": "Your group's taste",
     "headingSolo": "Your taste profile",
+    "loadFailed": "Couldn't load the taste profile.",
     "networkError": "Network error.",
     "notEnoughData": "Swipe, rate and fill in favourites below — then we'll build a profile for you.",
     "premiumBody": "See which themes, directors and actors your swipes really point to — and get suggestions for genres you've missed.",
@@ -1159,6 +1206,7 @@
     }
   },
   "upsell": {
+    "adFreeUnlocked": "Done! Ad-free for 24 hours. 🎉",
     "body": "That ad is over — it doesn't have to come back.",
     "bulletsLabel": "What you get",
     "close": "Close",
@@ -1195,6 +1243,9 @@
     "noRatingsYet": "No ratings yet. Swipe up on titles you've seen to rate them.",
     "noStreamingData": "No streaming data available for your region right now.",
     "openProvider": "Open {provider}",
+    "pageEyebrow": "Your list",
+    "pageSubtitle": "Titles you want to watch — and ratings for the ones you've seen.",
+    "pageTitle": "Watchlist",
     "rate": "Rate",
     "ratePromptHeading": "What did you think?",
     "removeFromWatchlist": "Remove from watchlist",
@@ -1251,5 +1302,81 @@
     "retry": "Try again",
     "reload": "Reload",
     "updating": "Updating the app…"
+  },
+  "api": {
+    "accountGone": "The account no longer exists.",
+    "accountUpdatedLinkSent": "Account updated. Verification link sent.",
+    "accountUpdatedMailFailed": "Account updated. Couldn't send the email – copy the link below.",
+    "appleEmailLinked": "That email is linked to a different Apple account.",
+    "appleFailed": "Sign in with Apple failed.",
+    "appleTokenMissing": "Missing Apple token.",
+    "cannotAddSelf": "You can't add yourself.",
+    "cannotShareSelf": "You can't send a tip to yourself.",
+    "deleteFailed": "Couldn't delete the account. Please try again.",
+    "emailInUse": "That email address is already in use.",
+    "emailPasswordRequired": "Email and password are required.",
+    "emailRequired": "Email is required.",
+    "emailVerified": "Email verified.",
+    "finishOnboarding": "Finish onboarding first.",
+    "friendRequestBlocked": "You can't send a request to this user.",
+    "groupFull": "The group is full ({max} people).",
+    "groupFullPremium": "The group is full ({max} people). With Premium, the group's creator can invite up to {premiumMax}.",
+    "groupNotFound": "The group doesn't exist.",
+    "guestFailed": "Couldn't start guest mode.",
+    "iapOtherAccount": "This purchase is linked to a different NextWatch account.",
+    "iapUnknownProduct": "Unknown product.",
+    "iapVerifyFailed": "Couldn't verify the purchase.",
+    "importFailed": "Import failed.",
+    "importNotFound": "{title}: not found on TMDB",
+    "internalError": "Something went wrong. Please try again.",
+    "invalidAgeLimit": "Invalid age limit.",
+    "invalidGroupCode": "Invalid group code.",
+    "invalidLink": "Invalid link.",
+    "invalidMatchThreshold": "Invalid match threshold (at least 2 people).",
+    "invalidProviders": "Invalid streaming services.",
+    "invalidRequest": "Invalid request.",
+    "invalidTip": "Invalid tip.",
+    "invalidUser": "Invalid user.",
+    "invitePending": "An invite is already pending.",
+    "linkExpired": "The link is invalid or has expired. Request a new one.",
+    "loggedOut": "Signed out.",
+    "noActiveGroup": "You're not in an active group.",
+    "noEmailRegistered": "No email registered.",
+    "noFileUploaded": "No file uploaded.",
+    "noPendingRequest": "No pending request found.",
+    "noSession": "Your session is missing. Reload the page and try again.",
+    "noStripeSub": "No Stripe subscription was found for this account.",
+    "notFriends": "You're not friends.",
+    "notGroupMember": "You're not in this group.",
+    "ownerOnlyRemove": "Only the group's creator can remove members.",
+    "ownerOnlySettings": "Only the group's creator can change the settings.",
+    "passwordTooShort": "The password must be at least 8 characters.",
+    "passwordUpdated": "Your password has been updated.",
+    "profileMissing": "Profile not found.",
+    "profileReadFailed": "Couldn't load the profile.",
+    "purchasesUnavailable": "Purchases aren't available right now.",
+    "removeRatingFailed": "Couldn't remove the rating.",
+    "removeWatchlistFailed": "Couldn't remove the title from your watchlist.",
+    "resetSent": "If the account exists, we've sent a reset link to your email.",
+    "saveFailed": "Couldn't save.",
+    "sessionExpired": "No session. Please sign in again.",
+    "swipeLimit": "You've reached today's swipe limit.",
+    "tastePremium": "The taste profile requires Premium.",
+    "termsRequired": "You need to accept the terms to create an account.",
+    "tipSent": "Tip sent.",
+    "tokenExpired": "The link has expired.",
+    "tokenInvalid": "Invalid or already used link.",
+    "tokenMissing": "Token is missing.",
+    "tooManyLogins": "Too many sign-in attempts. Please wait a moment.",
+    "tooManyReports": "Too many reports. Please try again in a moment.",
+    "tooManyRequests": "Too many requests. Please try again in a moment.",
+    "undoFailed": "Couldn't undo.",
+    "useLeave": "Use Leave group to remove yourself.",
+    "userNotFound": "User not found.",
+    "usernameInvalid": "Invalid username.",
+    "usernameRules": "Usernames must be 3–20 characters (a–z, 0–9, _, .).",
+    "usernameTaken": "That username is taken. Please choose another.",
+    "verifyLinkMailFailed": "Link created, but the email couldn't be sent.",
+    "verifyLinkSent": "Verification link sent."
   }
 }

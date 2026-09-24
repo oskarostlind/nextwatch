@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
+import { apiMsg } from "@/lib/apiMessages";
 
 type Ok = { ok: true; friendship?: { userId: string; friendId: string } };
 type Err = { ok: false; message: string };
@@ -33,13 +34,13 @@ export async function POST(req: NextRequest) {
   try {
     const jar = await cookies();
     const uid = jar.get("nw_uid")?.value ?? null;
-    if (!uid) return json(401, { ok: false, message: "Ingen session." });
+    if (!uid) return json(401, { ok: false, message: await apiMsg("noSession") });
 
     let body: Body;
     try {
       body = (await req.json()) as Body;
     } catch {
-      return json(400, { ok: false, message: "Ogiltig JSON." });
+      return json(400, { ok: false, message: await apiMsg("invalidRequest") });
     }
 
     const { requestId, fromUserId, fromUsername } = body;
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
       });
       if (existing) return json(200, { ok: true, friendship: { userId: a, friendId: b } });
     }
-    return json(404, { ok: false, message: "Ingen väntande förfrågan hittades." });
+    return json(404, { ok: false, message: await apiMsg("noPendingRequest") });
   }
 
   // 2) Markera som accepterad (id är UUID i DB)
@@ -145,6 +146,6 @@ export async function POST(req: NextRequest) {
 
   return json(200, { ok: true, friendship: { userId: a, friendId: b } });
   } catch {
-    return NextResponse.json({ ok: false, message: "Ett fel uppstod." }, { status: 500 });
+    return NextResponse.json({ ok: false, message: await apiMsg("internalError") }, { status: 500 });
   }
 }

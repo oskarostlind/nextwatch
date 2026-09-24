@@ -19,6 +19,7 @@ import {
   REWARDED_MAX_PER_DAY,
   REWARDED_SWIPE_BONUS,
 } from "@/lib/swipeLimit";
+import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function POST() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
   if (!uid) {
-    return NextResponse.json({ ok: false, message: "Ingen session." }, { status: 401 });
+    return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
   }
 
   if (REWARDED_MAX_PER_DAY <= 0) {

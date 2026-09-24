@@ -250,10 +250,10 @@ export default function SwipeGestureTour() {
       body: JSON.stringify({ tmdbId: demoCard.tmdbId, mediaType: demoCard.mediaType, rating }),
     })
       .then((res) => {
-        if (!res.ok) notify("Kunde inte spara betyget");
+        if (!res.ok) notify(t("ratingSaveFailed"));
         else ratedRef.current = true;
       })
-      .catch(() => notify("Kunde inte spara betyget"))
+      .catch(() => notify(t("ratingSaveFailed")))
       .finally(() => {
         setRatingSaving(false);
         setPhase("summary");
@@ -334,7 +334,7 @@ export default function SwipeGestureTour() {
           year: demoCard.year,
           poster: demoCard.poster,
         }}
-        heading="Snyggt! Vad tyckte du?"
+        heading={t("ratingHeading")}
         saving={ratingSaving}
         onRate={submitRating}
         onSkip={skipRating}

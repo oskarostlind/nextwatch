@@ -15,6 +15,7 @@ import {
   normalizeSwipeMediaFilter,
   type SwipeMediaFilter,
 } from "@/lib/swipeMediaFilter";
+import { apiMsg } from "@/lib/apiMessages";
 
 export type SwipeSettings = {
   /** Visa hyr-/köpalternativ på titelkort. */
@@ -70,7 +71,7 @@ export async function PUT(req: NextRequest) {
   if (typeof body.showKidsContent === "boolean") data.showKidsContent = body.showKidsContent;
 
   if (Object.keys(data).length === 0) {
-    return NextResponse.json({ ok: false, error: "no valid fields" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: await apiMsg("invalidRequest") }, { status: 400 });
   }
 
   // Profilen kan saknas för nyregistrerade – uppdatera bara om den finns.
@@ -80,7 +81,7 @@ export async function PUT(req: NextRequest) {
   });
   if (!existing) {
     return NextResponse.json(
-      { ok: false, error: "profile_missing", message: "Slutför onboarding först." },
+      { ok: false, error: "profile_missing", message: await apiMsg("finishOnboarding") },
       { status: 409 }
     );
   }

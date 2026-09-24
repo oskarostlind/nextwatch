@@ -80,7 +80,7 @@ const G = {
 export const OCCASIONS: Guide[] = [
   {
     slug: "ikvall",
-    title: "Vad ska vi se ikväll? Så bestämmer ni på 30 sekunder",
+    title: "Vad ska vi se ikväll? Så bestämmer ni snabbt",
     heading: "Vad ska vi se ikväll?",
     metaDescription:
       "Fastnar ni varje gång? Här är metoden som gör slut på förhandlingen, plus högt betygsatta filmer som funkar för de flesta sällskap ikväll.",
@@ -130,7 +130,7 @@ export const OCCASIONS: Guide[] = [
   },
   {
     slug: "fredagsmys",
-    title: "Film till fredagsmys — trygga val som ingen protesterar mot",
+    title: "Film till fredagsmys – trygga val",
     heading: "Film till fredagsmys",
     metaDescription:
       "Fredagsmys tål inte en film som kräver koncentration. Här är filmer som funkar med tacos, avbrott och halvt uppmärksamma tittare.",
@@ -176,7 +176,7 @@ export const OCCASIONS: Guide[] = [
   },
   {
     slug: "dejtkvall",
-    title: "Film till dejtkvällen — utan att det blir pinsamt",
+    title: "Film till dejtkvällen – val som funkar för två",
     heading: "Film till dejtkvällen",
     metaDescription:
       "Filmvalet på en dejt säger mer än man vill. Här är filmer som funkar för två, och en metod för att välja utan att någon måste gissa vad den andra vill.",
@@ -215,7 +215,7 @@ export const OCCASIONS: Guide[] = [
   },
   {
     slug: "nar-man-inte-orkar-tanka",
-    title: "Film när man inte orkar tänka — lättittat som ändå är bra",
+    title: "Film när man inte orkar tänka",
     heading: "Film när man inte orkar tänka",
     metaDescription:
       "Slut på energi men vill ändå se något som inte är dåligt? Högt betygsatta filmer under 100 minuter som inte kräver något av dig.",
@@ -260,7 +260,7 @@ export const OCCASIONS: Guide[] = [
 export const COMPANIONS: Guide[] = [
   {
     slug: "kompisar",
-    title: "Film att se med kompisar — val som håller för ett helt gäng",
+    title: "Film att se med kompisar – val för hela gänget",
     heading: "Film att se med kompisar",
     metaDescription:
       "Ju fler ni är, desto svårare blir valet. Filmer som fungerar i grupp, och en metod som skalar bättre än att alla ropar förslag.",
@@ -309,7 +309,7 @@ export const COMPANIONS: Guide[] = [
     title: "Film för två — när ni har olika smak",
     heading: "Film för två",
     metaDescription:
-      "Hen vill ha action, du vill ha drama. Så hittar ni något ni båda faktiskt vill se, i stället för något ingen valde.",
+      "Hen vill ha action, du vill ha drama. Så hittar ni något ni båda faktiskt vill se, i stället för den kompromiss ingen valde.",
     targetQuery: "film för två olika smak",
     campaign: "web-tva",
     intro: [
@@ -345,7 +345,7 @@ export const COMPANIONS: Guide[] = [
   },
   {
     slug: "familjen",
-    title: "Film för hela familjen — som faktiskt fungerar för alla åldrar",
+    title: "Film för hela familjen – för alla åldrar",
     heading: "Film för hela familjen",
     metaDescription:
       "En sjuåring och en fjortonåring vill sällan samma sak. Familjefilmer med högt betyg, och ett sätt att välja där alla får vara med.",
@@ -487,7 +487,7 @@ export const COMBINATIONS: Guide[] = [
     title: "Vad kan vi se om vi har Viaplay och Max?",
     heading: "Viaplay + Max",
     metaDescription:
-      "Nordisk drama och HBO:s katalog i samma lista. Vad ni kan se med Viaplay och Max tillsammans, sorterat på betyg.",
+      "Nordisk drama och HBO:s katalog i samma lista. Vad ni faktiskt kan se med Viaplay och Max tillsammans, uppdaterat dagligen.",
     targetQuery: "vad kan vi se om vi har viaplay och max",
     campaign: "web-viaplay-max",
     intro: [

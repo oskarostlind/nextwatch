@@ -79,13 +79,22 @@ export default async function HomePage() {
   });
 
   return (
-    <AuthGate>
-      <HeroDeck cards={cards} />
-      {/* Serverrenderad fot under heron. HeroDeck är en klientkomponent med
-          swipebara kort — för en crawler var startsidan tom på rubriker, text
-          och interna länkar, och hela sajten saknade App Store-länk. Foten ger
-          alla tre och gör guidesidorna länkade i stället för föräldralösa. */}
+    <>
+      <AuthGate>
+        <HeroDeck cards={cards} />
+      </AuthGate>
+      {/* UTANFÖR AuthGate med flit. Foten är serverrenderat marknadsinnehåll:
+          rubriker, brödtext, App Store-länk och länkarna till guidesidorna.
+          Inuti gaten hamnade den bara i RSC-payloaden — AuthGate startar i
+          status "checking" och renderar en laddningsvy, så serverns HTML
+          innehöll noll <h2>, noll apps.apple.com och noll interna länkar
+          (uppmätt på produktion 2026-09-24). Guidesidorna hade i praktiken
+          ingen inlänk alls.
+
+          Att den ligger utanför är ofarligt för det gaten skyddar: inloggade
+          med verifierad profil redirectas redan server-side ovan, och under
+          den korta "checking"-vyn ligger foten under vikningen. */}
       <LandingFooter />
-    </AuthGate>
+    </>
   );
 }

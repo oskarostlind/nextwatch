@@ -14,7 +14,7 @@ import GuideShell from "@/app/components/guide/GuideShell";
 
 export const revalidate = 86400;
 
-const TITLE = "Vilken film ska vi se? Guider för varje kväll och sällskap";
+const TITLE = "Vilken film ska vi se? Guider för varje kväll";
 const DESCRIPTION =
   "Fastnar ni i valet? Guider för olika kvällar, olika sällskap och olika streamingtjänster — med aktuella filmtips och en metod som faktiskt ger ett beslut.";
 

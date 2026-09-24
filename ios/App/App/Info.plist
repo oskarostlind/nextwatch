@@ -64,6 +64,22 @@
 	     icke-personaliserade annonser — aldrig blockerande. -->
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Nextwatch använder detta för att visa mer relevanta annonser. Nekar du visas fortfarande annonser, men inte anpassade efter dig.</string>
+	<!-- Meta App Events (appen "NextWatch Publisher", 1277172887819315) för
+	     Metas appkampanjer: installationer attribueras via SKAdNetwork (Metas
+	     id:n v9wttpbfk9/n38lu8286q finns redan i listan nedan). Auto-loggning är
+	     AV — SDK:n startas från webben via @capgo/capacitor-facebook-analytics
+	     (lib/metaAppEvents.ts) så att den bara körs i appen, aldrig på webben.
+	     IDFA skickas bara om användaren redan sagt ja till ATT (AdMob-flödet). -->
+	<key>FacebookAppID</key>
+	<string>1277172887819315</string>
+	<key>FacebookClientToken</key>
+	<string>db30731dcaa999193e044c452fd61293</string>
+	<key>FacebookDisplayName</key>
+	<string>NextWatch</string>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<true/>
 	<!-- SKAdNetwork-id:n för Googles annonsnätverk + certifierade partners
 	     (krävs för attribution på iOS 14+). Googles officiella lista. -->
 	<key>SKAdNetworkItems</key>

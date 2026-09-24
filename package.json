@@ -21,6 +21,7 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/push-notifications": "^8.1.1",
     "@capacitor/splash-screen": "^8.0.1",
+    "@capgo/capacitor-facebook-analytics": "^8.1.13",
     "@capgo/native-purchases": "^8.6.3",
     "@prisma/client": "^6.16.2",
     "@vercel/speed-insights": "^1.2.0",

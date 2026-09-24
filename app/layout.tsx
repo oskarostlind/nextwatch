@@ -7,6 +7,7 @@ import { getLocale } from "next-intl/server";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
+import MetaAppEvents from "./components/client/MetaAppEvents";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
 import { SITE_URL } from "@/lib/seo";
@@ -94,6 +95,7 @@ export default async function RootLayout({
           <AppShell>{children}</AppShell>
 
           <AppDeepLinkHandler />
+          <MetaAppEvents />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

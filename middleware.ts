@@ -130,6 +130,6 @@ export async function middleware(req: NextRequest) {
 // hoppa över dem via filändelse så middleware inte kör på varje asset-request.
 export const config = {
   matcher: [
-    "/((?!_next/|api/session/init|api/session/restore|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webmanifest|txt|xml)$).*)",
+    "/((?!_next/|api/session/init|api/session/restore|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webmanifest|txt|xml|html)$).*)",
   ],
 };

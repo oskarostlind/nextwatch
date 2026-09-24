@@ -6,6 +6,7 @@ import { jitterFor } from "@/lib/deckVisuals";
 import { CURATED, type HeroCard } from "@/lib/curatedHero";
 import HeroDeck from "./components/landing/HeroDeck";
 import AuthGate from "./components/client/AuthGate";
+import LandingFooter from "./components/landing/LandingFooter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,11 @@ export default async function HomePage() {
   return (
     <AuthGate>
       <HeroDeck cards={cards} />
+      {/* Serverrenderad fot under heron. HeroDeck är en klientkomponent med
+          swipebara kort — för en crawler var startsidan tom på rubriker, text
+          och interna länkar, och hela sajten saknade App Store-länk. Foten ger
+          alla tre och gör guidesidorna länkade i stället för föräldralösa. */}
+      <LandingFooter />
     </AuthGate>
   );
 }

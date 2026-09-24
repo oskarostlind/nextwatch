@@ -31,6 +31,13 @@ const PUBLIC_ROUTES = [
   // och länkarna i App Store Connect pekar hit).
   /^\/legal(?:\/.*)?$/,
   /^\/support$/,
+  // SEO-landningssidorna (lib/guides/content.ts) vänder sig till utloggade
+  // besökare från Google. BottomTabs hör inte hemma där — de leder till
+  // ytor som kräver konto, och mobilramen kapar tabellerna.
+  /^\/vilken-film-ska-vi-se$/,
+  /^\/vad-ska-vi-se(?:\/.*)?$/,
+  /^\/film-for(?:\/.*)?$/,
+  /^\/vad-kan-vi-se(?:\/.*)?$/,
 ];
 
 /**

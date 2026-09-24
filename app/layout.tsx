@@ -9,12 +9,40 @@ import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
+import { SITE_URL } from "@/lib/seo";
 
 const ADSENSE_CLIENT_FALLBACK = "ca-pub-2616665688666431";
 
+// Metadata var på engelska ("NextWatch" / "Swipe your next watch") för en app
+// vars hela marknad är svensk, och saknade metadataBase, canonical och OG-taggar.
+// Titeln är skriven mot samma sökintent som App Store-namnet, så webb och butik
+// drar åt samma håll. Se marketing-videos/nextwatch/marketing/SEO-PLAN.md.
 export const metadata: Metadata = {
-  title: "NextWatch",
-  description: "Swipe your next watch",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "NextWatch – hitta kvällens film när ni är flera",
+    // Undersidor sätter bara sin egen titel; suffixet läggs på här.
+    template: "%s | NextWatch",
+  },
+  description:
+    "Swipa tillsammans och se bara det ni är överens om. NextWatch filtrerar på era streamingtjänster – Netflix, Viaplay, Disney+, Max och fler. Gratis svensk app.",
+  applicationName: "NextWatch",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "sv_SE",
+    url: SITE_URL,
+    siteName: "NextWatch",
+    title: "NextWatch – hitta kvällens film när ni är flera",
+    description:
+      "Alla i sällskapet swipar samtidigt. Appen visar bara filmerna och serierna ni är överens om, på tjänsterna ni faktiskt har.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "NextWatch – hitta kvällens film när ni är flera",
+    description:
+      "Alla swipar samtidigt. Appen visar bara det ni är överens om. Gratis i App Store.",
+  },
   other: {
     // AdSense site-verification (works independent of the ads feature flag,
     // so Google can verify/review the site before ads are switched on).

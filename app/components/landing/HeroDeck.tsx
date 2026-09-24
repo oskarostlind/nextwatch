@@ -290,8 +290,15 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       <Pile liked={liked} reduce={reduce} />
 
       {/* Diskret legal-rad — Apple/AdMob kräver nåbar policy och TMDB kräver
-          attribution. Medvetet nästan osynlig: heron äger fortfarande scenen. */}
-      <footer className="absolute inset-x-0 bottom-2 z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 text-center text-[10px] text-white/25">
+          attribution. Medvetet nästan osynlig: heron äger fortfarande scenen.
+          
+          Låg fram till 2026-09-24 som `absolute bottom-2`. Heron är centrerad
+          (justify-center) i en min-h-behållare, så på ett lågt fönster växte
+          det centrerade innehållet ned UNDER den absolut positionerade raden
+          och "Hoppa in som gäst" hamnade ovanpå legal-länkarna. Nu ligger raden
+          i flödet med mt-auto: den sitter kvar längst ned när det finns plats,
+          och knuffas undan i stället för att krocka när det inte gör det. */}
+      <footer className="relative z-20 mt-auto flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 pb-3 pt-10 text-center text-[10px] text-white/25">
         <a href="/legal/privacy" className="transition hover:text-white/60">{t("privacy")}</a>
         <a href="/legal/terms" className="transition hover:text-white/60">{t("terms")}</a>
         <a href="/support" className="transition hover:text-white/60">{t("support")}</a>

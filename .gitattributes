@@ -1,0 +1,8 @@
+# Normalisera radslut. Utan det här checkar Windows ut CRLF och git visar
+# hela filer som ändrade trots att inte ett tecken skiljer (23 filer 2026-09-24).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.p8 binary

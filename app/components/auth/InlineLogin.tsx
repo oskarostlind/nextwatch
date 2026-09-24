@@ -22,7 +22,7 @@ export default function InlineLogin() {
       // if (!res.ok) throw new Error("Fel e-post eller lösenord.");
       // router.replace("/swipe");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Ett fel uppstod.");
+      setErr(e instanceof Error ? e.message : t("genericErrorShort"));
     } finally {
       setLoading(false);
     }

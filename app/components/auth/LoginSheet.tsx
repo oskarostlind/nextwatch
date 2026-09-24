@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 import LoginCard from "./LoginCard";
 
 /**
@@ -22,6 +23,7 @@ export default function LoginSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useTranslations("auth");
   // Esc stänger, och bakgrunden ska inte gå att scrolla bakom arket.
   React.useEffect(() => {
     if (!open) return;
@@ -48,7 +50,7 @@ export default function LoginSheet({
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Logga in"
+            aria-label={t("signIn")}
             className="fixed inset-x-0 bottom-0 z-[61] max-h-[92dvh] overflow-y-auto rounded-t-3xl border-t border-white/10 bg-neutral-950 px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-3"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}

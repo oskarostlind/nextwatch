@@ -10,8 +10,10 @@
     "checkInbox": "Klart! Kolla din inbox. Klicka på länken i mejlet för att aktivera.",
     "chooseNewPassword": "Välj nytt lösenord",
     "continueWithoutAccount": "Fortsätt utan konto →",
+    "createAccountEmail": "Skapa konto med e-post",
     "email": "E-post",
     "emailVerified": "E-post verifierad — öppnar appen…",
+    "emailVerifiedWelcome": "Din e-post är verifierad. Välkommen!",
     "forgotBody": "Fyll i din e-postadress så skickar vi en länk för att välja ett nytt lösenord.",
     "forgotPassword": "Glömt lösenord?",
     "forgotTitle": "Glömt lösenord?",
@@ -21,6 +23,7 @@
     "guestFailed": "Kunde inte starta gästläge.",
     "invalidLink": "Ogiltig länk",
     "invalidLinkBody": "Länken saknar token. Begär en ny återställningslänk.",
+    "missingToken": "Token saknas.",
     "nativeHint": "När du verifierat kan du byta tillbaka hit — vi uppdaterar automatiskt. Du kan också trycka \"Ta mig tillbaka till appen\" i Safari efter verifieringen.",
     "networkError": "Nätverksfel",
     "networkErrorDot": "Nätverksfel.",
@@ -31,24 +34,31 @@
     "or": "eller",
     "orWithEmail": "eller med e-post",
     "password": "Lösenord",
-    "passwordsDontMatch": "Lösenorden matchar inte.",
+    "passwordMin": "Minst 8 tecken",
     "passwordTooShort": "Lösenordet måste vara minst 8 tecken.",
     "passwordUpdated": "Lösenordet är uppdaterat",
+    "passwordsDontMatch": "Lösenorden matchar inte.",
+    "pleaseWait": "Vänta lite…",
     "registerBody": "Spara ditt konto med e-post eller Apple så du kan logga in igen på andra enheter.",
+    "registerOptional": "Valfritt — du kan använda appen utan att registrera dig.",
+    "registerTitle": "Spara ditt konto",
     "repeatPassword": "Upprepa lösenordet",
     "requestNewLink": "Begär ny länk",
     "resetSent": "Om kontot finns har vi skickat en återställningslänk till <email></email>. Kolla även skräpposten.",
     "saveNewPassword": "Spara nytt lösenord",
     "saving": "Sparar…",
-    "sending": "Skickar…",
     "sendResetLink": "Skicka återställningslänk",
     "sendVerifyLink": "Skicka verifieringslänk",
+    "sending": "Skickar…",
     "signIn": "Logga in",
+    "signInWithApple": "Logga in med Apple",
     "signingIn": "Loggar in…",
     "starting": "Startar…",
     "termsAccept": "Jag godkänner <terms>användarvillkoren</terms> och <privacy>integritetspolicyn</privacy>, och accepterar att stötande innehåll eller kränkande beteende inte tolereras.",
     "verifyLinkSent": "Verifieringslänk skickad.",
-    "verifySentBody": "Vi har skickat en länk för att bekräfta din e-post. Öppna mejlet och klicka på länken."
+    "verifySentBody": "Vi har skickat en länk för att bekräfta din e-post. Öppna mejlet och klicka på länken.",
+    "verifying": "Verifierar…",
+    "verifyingEmail": "Verifierar e-post…"
   },
   "avatars": {
     "alien": "Alien",
@@ -1234,5 +1244,12 @@
       "createFirst": "Skapa konto först",
       "anyway": "Logga ut ändå"
     }
+  },
+  "errorPage": {
+    "title": "Något gick fel",
+    "body": "Sidan kunde inte visas. Det beror oftast på en uppdatering av appen — försök igen.",
+    "retry": "Försök igen",
+    "reload": "Ladda om",
+    "updating": "Uppdaterar appen…"
   }
 }

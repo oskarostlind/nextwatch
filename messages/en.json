@@ -10,8 +10,10 @@
     "checkInbox": "Done! Check your inbox. Click the link in the email to activate.",
     "chooseNewPassword": "Choose a new password",
     "continueWithoutAccount": "Continue without an account →",
+    "createAccountEmail": "Create account with email",
     "email": "Email",
     "emailVerified": "Email verified — opening the app…",
+    "emailVerifiedWelcome": "Your email is verified. Welcome!",
     "forgotBody": "Enter your email address and we'll send you a link to choose a new password.",
     "forgotPassword": "Forgot your password?",
     "forgotTitle": "Forgot your password?",
@@ -21,6 +23,7 @@
     "guestFailed": "Couldn't start guest mode.",
     "invalidLink": "Invalid link",
     "invalidLinkBody": "The link is missing a token. Request a new reset link.",
+    "missingToken": "Token is missing.",
     "nativeHint": "Once you've verified you can switch back here — we update automatically. You can also tap \"Take me back to the app\" in Safari after verifying.",
     "networkError": "Network error",
     "networkErrorDot": "Network error.",
@@ -31,24 +34,31 @@
     "or": "or",
     "orWithEmail": "or with email",
     "password": "Password",
-    "passwordsDontMatch": "The passwords don't match.",
+    "passwordMin": "At least 8 characters",
     "passwordTooShort": "The password must be at least 8 characters.",
     "passwordUpdated": "Your password has been updated",
+    "passwordsDontMatch": "The passwords don't match.",
+    "pleaseWait": "Please wait…",
     "registerBody": "Save your account with email or Apple so you can sign in again on other devices.",
+    "registerOptional": "Optional — you can use the app without signing up.",
+    "registerTitle": "Save your account",
     "repeatPassword": "Repeat the password",
     "requestNewLink": "Request a new link",
     "resetSent": "If that account exists we've sent a reset link to <email></email>. Check your spam folder too.",
     "saveNewPassword": "Save new password",
     "saving": "Saving…",
-    "sending": "Sending…",
     "sendResetLink": "Send reset link",
     "sendVerifyLink": "Send verification link",
+    "sending": "Sending…",
     "signIn": "Sign in",
+    "signInWithApple": "Sign in with Apple",
     "signingIn": "Signing in…",
     "starting": "Starting…",
     "termsAccept": "I accept the <terms>terms of use</terms> and the <privacy>privacy policy</privacy>, and agree that offensive content and abusive behaviour are not tolerated.",
     "verifyLinkSent": "Verification link sent.",
-    "verifySentBody": "We've sent a link to confirm your email. Open the email and click the link."
+    "verifySentBody": "We've sent a link to confirm your email. Open the email and click the link.",
+    "verifying": "Verifying…",
+    "verifyingEmail": "Verifying email…"
   },
   "avatars": {
     "alien": "Alien",
@@ -1234,5 +1244,12 @@
       "createFirst": "Create account first",
       "anyway": "Sign out anyway"
     }
+  },
+  "errorPage": {
+    "title": "Something went wrong",
+    "body": "The page couldn't be shown. This is usually caused by an app update — please try again.",
+    "retry": "Try again",
+    "reload": "Reload",
+    "updating": "Updating the app…"
   }
 }

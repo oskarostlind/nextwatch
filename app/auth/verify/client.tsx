@@ -3,22 +3,24 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { APP_VERIFY_RETURN_URL, isLikelyMobileBrowser } from "@/lib/nativeApp";
 
 export default function Client() {
+  const t = useTranslations("auth");
   const sp = useSearchParams();
   const router = useRouter();
   const token = sp.get("token");
   const fromApp = sp.get("from") === "app";
 
   const [state, setState] = useState<"loading" | "ok" | "err">("loading");
-  const [msg, setMsg] = useState<string>("Verifierar…");
+  const [msg, setMsg] = useState<string>(() => t("verifying"));
 
   useEffect(() => {
     async function run() {
       if (!token) {
         setState("err");
-        setMsg("Token saknas.");
+        setMsg(t("missingToken"));
         return;
       }
       try {
@@ -26,11 +28,11 @@ export default function Client() {
         const data: { ok?: boolean; message?: string } = await res.json();
         if (!res.ok || !data?.ok) {
           setState("err");
-          setMsg(data?.message || "Ett fel uppstod.");
+          setMsg(data?.message || t("genericErrorShort"));
           return;
         }
         setState("ok");
-        setMsg("Din e-post är verifierad. Välkommen!");
+        setMsg(t("emailVerifiedWelcome"));
 
         // Webbanvändare utan app-kontext: behåll automatisk redirect.
         if (!fromApp && !isLikelyMobileBrowser()) {
@@ -38,7 +40,7 @@ export default function Client() {
         }
       } catch (e) {
         setState("err");
-        setMsg(e instanceof Error ? e.message : "Ett fel uppstod.");
+        setMsg(e instanceof Error ? e.message : t("genericErrorShort"));
       }
     }
     void run();

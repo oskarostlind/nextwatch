@@ -40,7 +40,7 @@ export default function RegisterClient() {
     });
     const data = (await res.json()) as { ok?: boolean; message?: string };
     if (!res.ok || !data?.ok) {
-      setErr(data?.message || "Ett fel uppstod.");
+      setErr(data?.message || t("genericErrorShort"));
       return;
     }
     setOkMsg(data.message || t("verifyLinkSent"));
@@ -112,7 +112,7 @@ export default function RegisterClient() {
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
             className="w-full rounded-xl border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-white/20"
-            placeholder="Minst 8 tecken"
+            placeholder={t("passwordMin")}
             autoComplete="new-password"
           />
         </div>
@@ -121,7 +121,7 @@ export default function RegisterClient() {
           disabled={!terms}
           className="w-full rounded-xl bg-cyan-500 py-2.5 font-medium text-black transition hover:bg-cyan-400 disabled:opacity-50"
         >
-          Skapa konto med e-post
+          {t("createAccountEmail")}
         </button>
       </form>
 

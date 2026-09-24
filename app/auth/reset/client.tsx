@@ -80,7 +80,7 @@ export default function ResetPasswordClient() {
   return (
     <>
       <h1 className="mb-1 text-xl font-semibold">{t("chooseNewPassword")}</h1>
-      <p className="mb-4 text-sm text-neutral-400">Minst 8 tecken.</p>
+      <p className="mb-4 text-sm text-neutral-400">{t("passwordMin")}.</p>
 
       <form onSubmit={onSubmit} className="space-y-3">
         <div className="space-y-1">

@@ -11,7 +11,10 @@ export default async function Page() {
   if (!uid) {
     redirect("/onboarding?next=/swipe");
   }
-  const profile = await prisma.profile.findUnique({ where: { userId: uid }, select: { userId: true } });
+  const profile = await prisma.profile.findUnique({
+    where: { userId: uid },
+    select: { userId: true, providers: true },
+  });
   if (!profile) {
     redirect("/onboarding?next=/swipe");
   }
@@ -24,7 +27,9 @@ export default async function Page() {
 
   return (
     <>
-      <Client />
+      {/* Profil utan tjänster (typiskt gäst som hoppade över onboardingen) →
+          ProviderPromptSheet frågar efter några swipes. */}
+      <Client needsProviders={!Array.isArray(profile.providers) || profile.providers.length === 0} />
       <SwipeGestureTour />
     </>
   );

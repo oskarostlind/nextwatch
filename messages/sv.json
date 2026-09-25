@@ -1378,5 +1378,15 @@
     "usernameTaken": "Användarnamnet är upptaget. Välj ett annat.",
     "verifyLinkMailFailed": "Länk skapad men e-posten kunde inte skickas.",
     "verifyLinkSent": "Verifieringslänk skickad."
+  },
+  "providerPrompt": {
+    "title": "Vilka tjänster har du?",
+    "body": "Så visar vi bara filmer och serier du faktiskt kan se. Tar två sekunder.",
+    "cta": "{count, plural, one {Visa mina tips (1 tjänst)} other {Visa mina tips (# tjänster)}}",
+    "pickOne": "Välj minst en tjänst",
+    "saving": "Sparar…",
+    "saved": "Klart! Dina tips anpassas nu efter dina tjänster.",
+    "error": "Kunde inte spara. Försök igen.",
+    "skip": "Hoppa över – ändra senare i Profil"
   }
 }

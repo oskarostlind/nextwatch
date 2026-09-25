@@ -1378,5 +1378,15 @@
     "usernameTaken": "That username is taken. Please choose another.",
     "verifyLinkMailFailed": "Link created, but the email couldn't be sent.",
     "verifyLinkSent": "Verification link sent."
+  },
+  "providerPrompt": {
+    "title": "Which services do you have?",
+    "body": "So we only show movies and shows you can actually watch. Takes two seconds.",
+    "cta": "{count, plural, one {Show my picks (1 service)} other {Show my picks (# services)}}",
+    "pickOne": "Pick at least one service",
+    "saving": "Saving…",
+    "saved": "Done! Your picks now match your services.",
+    "error": "Couldn't save. Try again.",
+    "skip": "Skip – change later in Profile"
   }
 }

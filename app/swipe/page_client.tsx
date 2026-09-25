@@ -50,6 +50,10 @@ const RatingModal = dynamic(() => import("@/app/components/client/RatingModal"),
 const ShareTitleModal = dynamic(() => import("@/app/components/client/ShareTitleModal"), {
   ssr: false,
 });
+// Laddas bara för profiler utan tjänster — alla andra betalar inget för den.
+const ProviderPromptSheet = dynamic(() => import("@/app/components/client/ProviderPromptSheet"), {
+  ssr: false,
+});
 const SwipeLimitWall = dynamic(() => import("@/app/components/client/SwipeLimitWall"), {
   ssr: false,
 });
@@ -342,7 +346,7 @@ function MediaFilterPill({
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
-export default function SwipePageClient() {
+export default function SwipePageClient({ needsProviders = false }: { needsProviders?: boolean } = {}) {
   const t = useTranslations("swipe");
   const router = useRouter();
   const { showPaidOptions, mediaFilter } = useSwipeSettings();
@@ -692,6 +696,10 @@ export default function SwipePageClient() {
     else handleSeen(c);
     // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
     registerSwipeForAds();
+    // ProviderPromptSheet räknar swipes via det här eventet (sträng i stället
+    // för import av SOLO_SWIPED_EVENT — importen hade dragit in arket i
+    // förstaladdningens bundle).
+    if (needsProviders) window.dispatchEvent(new Event("nw:solo-swiped"));
     // Återställ direkt (utan animation) så nästa kort inte glider in från sidan.
     x.set(0);
     y.set(0);
@@ -707,6 +715,7 @@ export default function SwipePageClient() {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
+      {needsProviders ? <ProviderPromptSheet /> : null}
       {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
           poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
           fel bildvariant. */}

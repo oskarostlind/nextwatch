@@ -27,21 +27,55 @@ async function plugin(): Promise<FbPlugin | null> {
   }
 }
 
+// Tillfällig diagnostik (se app/api/debug/meta-sdk) — tas bort när eventen syns i Meta.
+function report(d: Record<string, unknown>): void {
+  try {
+    void fetch("/api/debug/meta-sdk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...d, t: new Date().toISOString() }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* best effort */
+  }
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export async function startMetaAppEvents(): Promise<void> {
   if (started || !isNativeIos()) return;
   started = true;
+  const d: Record<string, unknown> = {};
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    d.available = Capacitor.isPluginAvailable("FacebookAnalytics");
+  } catch (e) {
+    d.availableErr = errMsg(e);
+  }
   const fb = await plugin();
-  if (!fb) return;
+  d.jsLoaded = !!fb;
+  if (!fb) return report(d);
+  try {
+    d.version = (await fb.getPluginVersion()).version;
+  } catch (e) {
+    d.versionErr = errMsg(e);
+  }
   try {
     const { AdMob } = await import("@capacitor-community/admob");
     const att = await AdMob.trackingAuthorizationStatus();
+    d.att = att.status;
     if (att.status === "authorized") await fb.enableAdvertiserTracking();
-  } catch {
-    /* ingen ATT-info → spårning förblir av */
+  } catch (e) {
+    d.attErr = errMsg(e);
   }
   try {
     await fb.initAppEvents();
-  } catch {
-    /* pluginet saknas i äldre builds (före SDK-builden) — tyst no-op */
+    d.init = "ok";
+  } catch (e) {
+    d.initErr = errMsg(e);
   }
+  report(d);
 }

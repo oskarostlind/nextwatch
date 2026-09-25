@@ -2,8 +2,12 @@
 //
 // AdMob för iOS-appen (webben har inga native-annonser; AdSense nekade sajten
 // och webbens annonskort visar bara premium-CTA). Två format:
-//   - interstitial var 15:e swipe, aldrig tätare än var 3:e minut
-//   - rewarded: titta klart på en video → 24h annonsfritt (nw_adfree_until)
+//   - interstitial var NEXT_PUBLIC_AD_EVERY:e swipe (default 15), aldrig
+//     tätare än NEXT_PUBLIC_AD_MIN_GAP_SEC (default 180 s, 0 = av)
+//   - rewarded: titta klart på en video → +swipes på dagsgränsen
+//     (/api/swipe/bonus). Tidigare gav den 24h annonsfritt — borttaget
+//     2026-09-25 (Oskars beslut): att köpa sig fri från annonser med EN annons
+//     slog undan både annonsintäkten och premiumargumentet.
 // Bannern togs BORT (Oskars beslut 2026-07-18): den låg i vägen för knapparna
 // och förstörde upplevelsen oavsett placering — intäkten motiverade den inte.
 //
@@ -16,6 +20,7 @@
 // en build utan env aldrig visar skarpa annonser av misstag.
 
 import { isNativeIos } from "@/lib/premiumPurchase";
+import { adEveryFromEnv } from "@/lib/ads";
 
 const TEST_IDS = {
   interstitial: "ca-app-pub-3940256099942544/4411468910",
@@ -52,7 +57,10 @@ function adId(kind: keyof typeof TEST_IDS): string {
   return env;
 }
 
-/* ---------- 24h annonsfritt ---------- */
+/* ---------- 24h annonsfritt (legacy) ----------
+ * Beviljas inte längre. Läsningen finns kvar så att fönster som redan delats
+ * ut respekteras tills de löper ut (senast 24h efter deployen) — kan tas bort
+ * därefter. */
 
 const ADFREE_KEY = "nw_adfree_until";
 
@@ -69,18 +77,14 @@ export function adFreeActive(): boolean {
   return adFreeUntil() > Date.now();
 }
 
-function grantAdFree24h(): void {
-  try {
-    window.localStorage.setItem(ADFREE_KEY, String(Date.now() + 24 * 60 * 60 * 1000));
-  } catch {
-    /* privat läge — annonserna tystas ändå denna session via minnesflaggan */
-  }
-}
-
 /* ---------- Tillstånd ---------- */
 
-const INTERSTITIAL_EVERY = 15;
-const INTERSTITIAL_MIN_GAP_MS = 3 * 60 * 1000;
+const INTERSTITIAL_EVERY = adEveryFromEnv(15);
+const INTERSTITIAL_MIN_GAP_MS = (() => {
+  const raw = process.env.NEXT_PUBLIC_AD_MIN_GAP_SEC;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  return (Number.isFinite(n) && n >= 0 ? Math.floor(n) : 180) * 1000;
+})();
 /**
  * Efter ett misslyckat försök väntar vi bara så här många swipes innan nästa,
  * i stället för hela INTERSTITIAL_EVERY. "No fill" är ofta övergående (nytt
@@ -196,7 +200,7 @@ export async function initAdMobIfEligible(): Promise<boolean> {
   return initInFlight;
 }
 
-/* ---------- Interstitial (var 15:e swipe) ---------- */
+/* ---------- Interstitial (var INTERSTITIAL_EVERY:e swipe) ---------- */
 
 let dismissListenerBound = false;
 
@@ -243,8 +247,8 @@ async function prepareInterstitial(): Promise<void> {
 }
 
 /**
- * Anropas per genomförd swipe (solo). Visar interstitial var 15:e swipe med
- * 3-minuters golv. Fire-and-forget — får aldrig blockera swipeflödet.
+ * Anropas per genomförd swipe (solo och grupp). Visar interstitial var
+ * INTERSTITIAL_EVERY:e swipe med tidsgolv. Fire-and-forget — får aldrig blockera swipeflödet.
  */
 export function registerSwipeForAds(): void {
   if (!initialized || !eligible || adFreeActive()) return;
@@ -290,8 +294,8 @@ export function registerSwipeForAds(): void {
 
 /**
  * Visar en belöningsvideo och resolvar true om användaren tittade klart
- * (Rewarded-eventet fyrade). Delas av båda belöningarna: 24h annonsfritt
- * och +swipes vid nådd dagsgräns.
+ * (Rewarded-eventet fyrade). Enda belöningen är +swipes (/api/swipe/bonus),
+ * erbjuds i dagsgränsväggen och i premium-CTA:n efter en annons.
  */
 async function showRewardedVideo(): Promise<boolean> {
   if (!(await initAdMobIfEligible())) return false;
@@ -320,28 +324,10 @@ async function showRewardedVideo(): Promise<boolean> {
   }
 }
 
-/* ---------- Rewarded: 24h annonsfritt ---------- */
-
-/** Kan erbjudandet visas alls? (native, ej premium, inte redan aktivt) */
-export function canOfferAdFreeReward(): boolean {
-  return initialized && eligible && !adFreeActive();
-}
+/* ---------- Rewarded: +swipes ---------- */
 
 /**
- * Visar belöningsvideon. Resolvar true om användaren tittade klart och fick
- * sina 24h — bannern tas ner direkt.
- */
-export async function watchRewardedForAdFree(): Promise<boolean> {
-  const ok = await showRewardedVideo();
-  if (ok) grantAdFree24h();
-  return ok;
-}
-
-/* ---------- Rewarded: +swipes vid nådd dagsgräns ---------- */
-
-/**
- * Kan "+swipes"-erbjudandet visas? Till skillnad från annonsfritt kräver det
- * inget aktivt fönster — bara native + ej premium. Servern (via
+ * Kan "+swipes"-erbjudandet visas? Native + ej premium. Servern (via
  * /api/swipe/limit rewardedRemaining) avgör om det finns grants kvar idag.
  */
 export function canOfferSwipeReward(): boolean {

@@ -86,7 +86,7 @@ Until 2026-08-13 every one of these was inert and premium bought nothing — the
 
 | Gate | Free | Premium | Where |
 |---|---|---|---|
-| Ads | interstitial every 15 swipes (iOS, solo **and** group), ad card every 10th (web, solo only) | none | `lib/ads.ts`, `lib/admobAds.ts` |
+| Ads | interstitial every `NEXT_PUBLIC_AD_EVERY` swipes (default 15, min gap `NEXT_PUBLIC_AD_MIN_GAP_SEC` default 180 s; iOS, solo **and** group), ad card every `NEXT_PUBLIC_AD_EVERY`th (default 10; web, solo only) | none | `lib/ads.ts`, `lib/admobAds.ts` |
 | Daily swipes | 100 / rolling 24 h (+100 per rewarded video, max 3/day, iOS only — `/api/swipe/bonus` writes `SwipeBonus` rows) | unlimited | `lib/swipeLimit.ts` |
 | Group size | 3 members | 20 members | `lib/groupLimits.ts` |
 | Taste profile | upsell | full panel | `lib/tasteFeature.ts` |

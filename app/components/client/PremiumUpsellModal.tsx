@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Crown, PlayCircle, X } from "lucide-react";
 import { goPremium } from "@/lib/premiumPurchase";
-import { canOfferAdFreeReward, watchRewardedForAdFree } from "@/lib/admobAds";
+import { canOfferSwipeReward, watchRewardedForSwipes } from "@/lib/admobAds";
 import { notify } from "@/app/components/lib/notify";
 // maybeTriggerAdUpsell bor i lib/adUpsellEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
@@ -34,13 +34,26 @@ export default function PremiumUpsellModal() {
   const [open, setOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [watching, setWatching] = useState(false);
-  // Rewarded-erbjudandet finns bara i native-appen (AdMob), aldrig på webben.
+  // Rewarded-erbjudandet (+swipes) finns bara i native-appen (AdMob), aldrig
+  // på webben, och bara när servern har grants kvar idag (rewardedRemaining).
   const [rewardAvailable, setRewardAvailable] = useState(false);
+  const [rewardBonus, setRewardBonus] = useState(100);
 
   useEffect(() => {
     const onUpsell = () => {
-      setRewardAvailable(canOfferAdFreeReward());
+      setRewardAvailable(false);
       setOpen(true);
+      if (!canOfferSwipeReward()) return;
+      void fetch("/api/swipe/limit", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j: { ok?: boolean; limit?: number | null; rewardedRemaining?: number; rewardedBonus?: number } | null) => {
+          if (!j?.ok || j.limit === null) return;
+          if (typeof j.rewardedBonus === "number") setRewardBonus(j.rewardedBonus);
+          setRewardAvailable((j.rewardedRemaining ?? 0) > 0);
+        })
+        .catch(() => {
+          /* best-effort — utan svar visas bara premiumknappen */
+        });
     };
     // I native-appen triggas CTA:n av AdMob-interstitials (AdSense-korten som
     // driver maybeTriggerAdUpsell är avstängda där) — samma frekvensspärr.
@@ -144,11 +157,11 @@ export default function PremiumUpsellModal() {
                     disabled={watching}
                     onClick={() => {
                       setWatching(true);
-                      void watchRewardedForAdFree()
+                      void watchRewardedForSwipes()
                         .then((ok) => {
                           if (ok) {
                             markUpsellSatisfied();
-                            notify(t("adFreeUnlocked"));
+                            notify(t("swipesUnlocked", { bonus: rewardBonus }));
                             setOpen(false);
                           }
                         })
@@ -157,7 +170,7 @@ export default function PremiumUpsellModal() {
                     className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 active:scale-[0.98] disabled:opacity-50"
                   >
                     <PlayCircle className="h-4 w-4" />
-                    {watching ? t("loadingVideo") : t("watchAd")}
+                    {watching ? t("loadingVideo") : t("watchAd", { bonus: rewardBonus })}
                   </button>
                 )}
 

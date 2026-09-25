@@ -406,7 +406,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     if (dir === "right") handleLike(c);
     else if (dir === "left") handleDislike(c);
     else handleSeen(c);
-    // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
+    // AdMob-interstitial var NEXT_PUBLIC_AD_EVERY:e swipe (default 15) (endast native iOS + gratis, no-op annars).
     // Räknaren i lib/admobAds är modulglobal och delas med solo-swipen, så en
     // användare som växlar mellan lägena får inte annonser dubbelt så tätt.
     registerSwipeForAds();
@@ -444,7 +444,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       {/* Lyssnar på "nw:admob-ad-shown" — utan den visas interstitials i
-          gruppläget men aldrig uppföljande upsell ("slipp annonser i 24h"). */}
+          gruppläget men aldrig uppföljande upsell (premium / +swipes-video). */}
       <PremiumUpsellModal />
       <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
         {cards[0] ? (

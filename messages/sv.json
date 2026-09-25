@@ -1206,7 +1206,7 @@
     }
   },
   "upsell": {
-    "adFreeUnlocked": "Klart! Annonsfritt i 24 timmar. 🎉",
+    "swipesUnlocked": "Klart! +{bonus} swipes idag. 🎉",
     "body": "Annonsen är slut – men den behöver inte komma tillbaka.",
     "bulletsLabel": "Det här ingår",
     "close": "Stäng",
@@ -1216,7 +1216,7 @@
     "legal": "19 kr/mån, förnyas automatiskt tills du säger upp. Avsluta när du vill.",
     "loadingVideo": "Laddar video…",
     "opening": "Öppnar…",
-    "watchAd": "Titta på en video – slipp annonser i 24h"
+    "watchAd": "Titta på en video – få {bonus} swipes till"
   },
   "watch": {
     "closeTrailer": "Stäng trailer",

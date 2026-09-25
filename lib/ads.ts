@@ -13,8 +13,22 @@
 
 import type { SwipeCard } from "@/lib/swipeDeck";
 
+/**
+ * Annonsfrekvens, styrs utan kodändring via NEXT_PUBLIC_AD_EVERY i Vercel
+ * (t.ex. 10, 15, 20). Samma variabel styr både webbens annonskort och
+ * iOS-appens AdMob-interstitial (lib/admobAds.ts), solo och grupp.
+ * Osatt/ogiltig -> respektive default (webb 10, iOS 15). NEXT_PUBLIC_ bakas in
+ * vid build, så ett nytt värde kräver en redeploy — men ingen ny iOS-build,
+ * appen laddar www.nextwatch.se via server.url.
+ */
+export function adEveryFromEnv(fallback: number): number {
+  const raw = process.env.NEXT_PUBLIC_AD_EVERY;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 2 ? Math.floor(n) : fallback;
+}
+
 /** Vart N:te kort blir en annons (räknat på riktiga titlar). */
-export const AD_EVERY = 10;
+export const AD_EVERY = adEveryFromEnv(10);
 
 /**
  * Global feature-flagga. Annonser är PÅ som standard sedan 2026-08-13 — de är

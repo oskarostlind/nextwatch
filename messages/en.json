@@ -1206,7 +1206,7 @@
     }
   },
   "upsell": {
-    "adFreeUnlocked": "Done! Ad-free for 24 hours. 🎉",
+    "swipesUnlocked": "Done! +{bonus} swipes today. 🎉",
     "body": "That ad is over — it doesn't have to come back.",
     "bulletsLabel": "What you get",
     "close": "Close",
@@ -1216,7 +1216,7 @@
     "legal": "SEK 19/month, renews automatically until you cancel. Cancel any time.",
     "loadingVideo": "Loading video…",
     "opening": "Opening…",
-    "watchAd": "Watch a video – no ads for 24h"
+    "watchAd": "Watch a video – get {bonus} more swipes"
   },
   "watch": {
     "closeTrailer": "Close trailer",

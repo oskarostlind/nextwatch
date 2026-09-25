@@ -468,7 +468,9 @@ export default function SwipePageClient() {
   function dismissAdCard(c: Card): void {
     if (!countedAds.current.has(c.id)) {
       countedAds.current.add(c.id);
-      maybeTriggerAdUpsell();
+      // Utan AdSense-klient ÄR annonskortet redan en premium-CTA — ett
+      // CTA-ark direkt efter vore samma erbjudande två gånger i rad.
+      if (adsenseClientId()) maybeTriggerAdUpsell();
     }
     popTop();
   }

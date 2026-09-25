@@ -18,10 +18,13 @@ let started = false;
 
 type FbPlugin = typeof import("@capgo/capacitor-facebook-analytics")["FacebookAnalytics"];
 
-async function plugin(): Promise<FbPlugin | null> {
+// OBS: Capacitor-pluginobjekt är proxies som svarar på ALLA egenskaper — även
+// `then`. Returneras pluginet direkt från en async-funktion tolkas det som en
+// promise och `await` hänger för evigt. Därför lindas det i ett objekt.
+async function plugin(): Promise<{ fb: FbPlugin } | null> {
   try {
     const mod = await import("@capgo/capacitor-facebook-analytics");
-    return mod.FacebookAnalytics;
+    return { fb: mod.FacebookAnalytics };
   } catch {
     return null;
   }
@@ -66,9 +69,10 @@ export async function startMetaAppEvents(): Promise<void> {
   report({ ...d });
   if (started || !d.isNativeIos) return;
   started = true;
-  const fb = await withTimeout(plugin()).catch(() => null);
-  d.jsLoaded = !!fb;
-  if (!fb) return report({ ...d, step: "nojs" });
+  const wrapped = await withTimeout(plugin()).catch(() => null);
+  d.jsLoaded = !!wrapped;
+  if (!wrapped) return report({ ...d, step: "nojs" });
+  const fb = wrapped.fb;
   try {
     d.version = (await withTimeout(fb.getPluginVersion())).version;
   } catch (e) {

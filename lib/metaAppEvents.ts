@@ -45,37 +45,48 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function withTimeout<T>(p: Promise<T>, ms = 4000): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout ${ms}ms`)), ms)),
+  ]);
+}
+
 export async function startMetaAppEvents(): Promise<void> {
-  if (started || !isNativeIos()) return;
-  started = true;
-  const d: Record<string, unknown> = {};
+  const d: Record<string, unknown> = { step: "start", started };
   try {
     const { Capacitor } = await import("@capacitor/core");
+    d.native = Capacitor.isNativePlatform();
+    d.platform = Capacitor.getPlatform();
     d.available = Capacitor.isPluginAvailable("FacebookAnalytics");
   } catch (e) {
-    d.availableErr = errMsg(e);
+    d.capErr = errMsg(e);
   }
-  const fb = await plugin();
+  d.isNativeIos = isNativeIos();
+  report({ ...d });
+  if (started || !d.isNativeIos) return;
+  started = true;
+  const fb = await withTimeout(plugin()).catch(() => null);
   d.jsLoaded = !!fb;
-  if (!fb) return report(d);
+  if (!fb) return report({ ...d, step: "nojs" });
   try {
-    d.version = (await fb.getPluginVersion()).version;
+    d.version = (await withTimeout(fb.getPluginVersion())).version;
   } catch (e) {
     d.versionErr = errMsg(e);
   }
   try {
     const { AdMob } = await import("@capacitor-community/admob");
-    const att = await AdMob.trackingAuthorizationStatus();
+    const att = await withTimeout(AdMob.trackingAuthorizationStatus());
     d.att = att.status;
-    if (att.status === "authorized") await fb.enableAdvertiserTracking();
+    if (att.status === "authorized") await withTimeout(fb.enableAdvertiserTracking());
   } catch (e) {
     d.attErr = errMsg(e);
   }
   try {
-    await fb.initAppEvents();
+    await withTimeout(fb.initAppEvents());
     d.init = "ok";
   } catch (e) {
     d.initErr = errMsg(e);
   }
-  report(d);
+  report({ ...d, step: "done" });
 }

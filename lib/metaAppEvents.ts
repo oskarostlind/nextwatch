@@ -27,10 +27,10 @@ async function plugin(): Promise<FbPlugin | null> {
   }
 }
 
-// Tillfällig diagnostik (se app/api/debug/meta-sdk) — tas bort när eventen syns i Meta.
+// Tillfällig diagnostik (se app/api/diag/meta-sdk) — tas bort när eventen syns i Meta.
 function report(d: Record<string, unknown>): void {
   try {
-    void fetch("/api/debug/meta-sdk", {
+    void fetch("/api/diag/meta-sdk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...d, t: new Date().toISOString() }),

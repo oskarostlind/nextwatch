@@ -165,8 +165,36 @@ function appendUnique(existing: SwipeCard[], incoming: SwipeCard[]): SwipeCard[]
  * appliceras — därför slipper varje byte en omhämtning.
  */
 function visibleCards(all: SwipeCard[], filter: SwipeMediaFilter): SwipeCard[] {
-  if (filter === "both") return all;
-  return all.filter((c) => c.kind === "ad" || c.mediaType === filter);
+  const filtered = filter === "both" ? all : all.filter((c) => c.kind === "ad" || c.mediaType === filter);
+  return tidyAds(filtered);
+}
+
+/**
+ * Sant efter första swipen i den här sessionen. Före det får leken aldrig
+ * börja med ett annonskort — det var det man möttes av direkt när man öppnade
+ * /swipe (2026-09-26): premium-CTA:n "Reklamplats" som allra första kort.
+ */
+let swipedThisSession = false;
+
+/**
+ * Annonser får aldrig ligga två i rad, och aldrig först innan användaren swipat
+ * något alls. Båda kunde hända: bakgrundspåfyllningen (appendUnique) slänger
+ * titlar som redan finns i den hydrerade leken men behöll annonskorten som
+ * injicerats mellan dem, och film/serie-filtret visar alltid annonser men döljer
+ * titlarna runt dem.
+ */
+function tidyAds(cards: SwipeCard[]): SwipeCard[] {
+  if (!cards.some((c) => c.kind === "ad")) return cards;
+  const out: SwipeCard[] = [];
+  for (const c of cards) {
+    if (c.kind === "ad") {
+      const prev = out[out.length - 1];
+      if (!prev && !swipedThisSession) continue;
+      if (prev && prev.kind === "ad") continue;
+    }
+    out.push(c);
+  }
+  return out;
 }
 
 /**
@@ -400,7 +428,12 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
       return;
     }
 
-    const mapped = withAdsMaybe(mapUnifiedItems(data.items), targetPage);
+    // Dubblettfiltrera FÖRE annonsinjiceringen — annars försvinner titlarna
+    // (de fanns redan i den hydrerade leken) men annonserna mellan dem blir
+    // kvar och hamnar i klump, eller allra först.
+    const fresh = mapUnifiedItems(data.items);
+    const known = replace ? new Set<string>() : new Set(soloState.allCards.map((c) => c.id));
+    const mapped = withAdsMaybe(fresh.filter((c) => !known.has(c.id)), targetPage);
     soloState = nextSolo({
       allCards: replace ? mapped : appendUnique(soloState.allCards, mapped),
       page: targetPage,
@@ -475,7 +508,15 @@ export function popSoloCard() {
   // leken (id är unikt) — inte allCards[0], som kan vara av den dolda typen.
   const top = soloState.cards[0];
   if (!top) return;
-  soloState = nextSolo({ allCards: soloState.allCards.filter((c) => c.id !== top.id) });
+  let all = soloState.allCards;
+  if (!swipedThisSession) {
+    // Annonser som låg före första kortet var dolda (tidyAds) — släng dem så
+    // de inte dyker upp som kort nummer två i stället.
+    const topIdx = all.findIndex((c) => c.id === top.id);
+    all = all.filter((c, i) => !(c.kind === "ad" && i < topIdx));
+    swipedThisSession = true;
+  }
+  soloState = nextSolo({ allCards: all.filter((c) => c.id !== top.id) });
   emit();
   persistSoloDeckSoon();
   if (backgroundPrefetchEnabled) void maybePrefetchSoloPages();

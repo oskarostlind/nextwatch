@@ -9,6 +9,13 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 25;
 
+// newest (standard) | active (senast aktiv först) | ratings (flest swipes)
+function orderBy(sort: string | null) {
+  if (sort === "active") return [{ lastActiveAt: { sort: "desc" as const, nulls: "last" as const } }];
+  if (sort === "ratings") return [{ ratings: { _count: "desc" as const } }];
+  return [{ createdAt: "desc" as const }];
+}
+
 export async function GET(req: NextRequest) {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
@@ -33,7 +40,7 @@ export async function GET(req: NextRequest) {
     prisma.user.count({ where }),
     prisma.user.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: orderBy(req.nextUrl.searchParams.get("sort")),
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {

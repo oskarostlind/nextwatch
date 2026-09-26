@@ -1,17 +1,20 @@
 "use client";
 
-// Admin-dashboard: intäkter + nyckeltal + sökbar användarlista med åtgärder.
-// Servern har redan gate:at (app/admin/page.tsx), och varje API-anrop gate:ar
-// igen — klienten antar bara att den får svar.
+// Admin-dashboard. Servern har redan gate:at (app/admin/page.tsx), och varje
+// API-anrop gate:ar igen — klienten antar bara att den får svar.
 //
-// Designprincip (omgjord 2026-08-25): intäkterna överst (det man oftast vill
-// se), varje sektion har en förklarande underrubrik i klarspråk, och varje
-// siffra en kort hint om vad den faktiskt betyder — dashboarden ska gå att
-// läsa utan att öppna koden.
+// Omgjord 2026-09-26, mobile-first (Oskar kollar ofta från telefonen):
+//   - Två flikar: Översikt (nyckeltal + dag-för-dag-grafer + intäkter) och
+//     Användare (sök/sortera, tryck på en rad för hela profilen).
+//   - Graferna läser /api/admin/timeseries — en serie per graf, periodväljare
+//     7/30/90/365 dagar.
+//   - Användarprofilen (UserSheet) öppnas som helskärmsark på mobil och
+//     sidopanel på desktop, med "Lägg till som vän" och adminåtgärderna.
 
-import { useCallback, useEffect, useState } from "react";
-import { PageHeader, Button } from "@/app/components/ui/kit";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
+import { DailyChart, type Point } from "./charts";
+import UserSheet from "./UserSheet";
 
 type Stats = {
   totalUsers: number;
@@ -30,20 +33,18 @@ type Stats = {
   premiumPriceSEK: number;
 };
 
-type AdmobEarnings = {
-  today: number;
-  last7d: number;
-  last30d: number;
-  currency: string;
-  fetchedAt: string;
-};
+type AdmobEarnings = { today: number; last7d: number; last30d: number; currency: string; fetchedAt: string };
 
-type PurchaseRow = {
-  amountSEK: number;
-  currency: string;
-  product: string;
-  createdAt: string;
-  email: string | null;
+type PurchaseRow = { amountSEK: number; currency: string; product: string; createdAt: string; email: string | null };
+
+type SeriesRow = {
+  day: string;
+  signups: number;
+  active: number;
+  swipes: number;
+  watchlist: number;
+  purchases: number;
+  groups: number;
 };
 
 type AdminUser = {
@@ -59,61 +60,76 @@ type AdminUser = {
   ratings: number;
 };
 
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("sv-SE");
-}
+type Tab = "overview" | "users";
+type Sort = "newest" | "active" | "ratings";
+
+const RANGES = [7, 30, 90, 365] as const;
 
 function fmtKr(n: number): string {
   return `${n.toLocaleString("sv-SE", { maximumFractionDigits: n < 100 ? 2 : 0 })} kr`;
 }
 
-/** Sektionsrubrik med förklaring i klarspråk. */
-function SectionHeader({ title, sub }: { title: string; sub: string }) {
+function ago(iso: string | null): string {
+  if (!iso) return "aldrig";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 90) return "nyss";
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  if (s < 86400) return `${Math.round(s / 3600)} h`;
+  const d = Math.round(s / 86400);
+  return d < 60 ? `${d} d` : new Date(iso).toLocaleDateString("sv-SE");
+}
+
+function Kpi({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: "money" | "up";
+}) {
+  const color = tone === "money" ? "text-emerald-300" : "text-white";
   return (
-    <div className="mb-3">
-      <h2 className="text-base font-bold text-white">{title}</h2>
-      <p className="text-xs text-white/45">{sub}</p>
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
+      <div className="truncate text-[11px] uppercase tracking-wide text-white/40">{label}</div>
+      <div className={`mt-0.5 truncate text-2xl font-bold tabular-nums ${color}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] leading-snug text-white/40">{sub}</div>}
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  hint,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  accent?: "money" | "warn";
-}) {
-  const valueColor =
-    accent === "money" ? "text-emerald-300" : accent === "warn" ? "text-amber-300" : "text-white";
+function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="text-[11px] uppercase tracking-wide text-white/40">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${valueColor}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-xs leading-snug text-white/40">{hint}</div>}
+    <div className="mb-3 mt-8 first:mt-0">
+      <h2 className="text-base font-bold text-white">{children}</h2>
+      {sub && <p className="text-xs text-white/40">{sub}</p>}
     </div>
   );
 }
 
 export default function AdminClient() {
+  const [tab, setTab] = useState<Tab>("overview");
+  const [range, setRange] = useState<(typeof RANGES)[number]>(30);
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [admob, setAdmob] = useState<AdmobEarnings | null>(null);
   const [admobConfigured, setAdmobConfigured] = useState(true);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+
+  const [series, setSeries] = useState<SeriesRow[] | null>(null);
+  const [usersBefore, setUsersBefore] = useState(0);
+
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [sort, setSort] = useState<Sort>("newest");
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [openUser, setOpenUser] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadOverview = useCallback(() => {
     void fetch("/api/admin/overview", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -127,10 +143,27 @@ export default function AdminClient() {
       .catch(() => {});
   }, []);
 
-  const loadUsers = useCallback((query: string, pageNum: number) => {
+  useEffect(loadOverview, [loadOverview]);
+
+  useEffect(() => {
+    setSeries(null);
+    void fetch(`/api/admin/timeseries?days=${range}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.ok) {
+          setSeries(j.series as SeriesRow[]);
+          setUsersBefore(j.usersBefore as number);
+        }
+      })
+      .catch(() => {});
+  }, [range]);
+
+  const loadUsers = useCallback((query: string, pageNum: number, s: Sort) => {
     const usp = new URLSearchParams();
     if (query) usp.set("q", query);
     usp.set("page", String(pageNum));
+    usp.set("sort", s);
+    setUsersLoading(true);
     void fetch(`/api/admin/users?${usp.toString()}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -140,263 +173,363 @@ export default function AdminClient() {
           setPage(j.page as number);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setUsersLoading(false));
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => loadUsers(q, 1), q ? 300 : 0);
+    const t = setTimeout(() => loadUsers(q, 1, sort), q ? 300 : 0);
     return () => clearTimeout(t);
-  }, [q, loadUsers]);
+  }, [q, sort, loadUsers]);
 
-  async function action(userId: string, body: Record<string, string>) {
-    setBusyId(userId);
-    setNote(null);
-    try {
-      const res = await fetch("/api/admin/users/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ userId, ...body }),
-      });
-      const j = (await res.json()) as { ok?: boolean; message?: string };
-      setNote(j.message ?? (j.ok ? "Klart." : "Misslyckades."));
-      loadUsers(q, page);
-    } catch {
-      setNote("Nätverksfel.");
-    } finally {
-      setBusyId(null);
-      setConfirmDelete(null);
-    }
-  }
+  const pick = useCallback(
+    (key: keyof Omit<SeriesRow, "day">): Point[] => (series ?? []).map((r) => ({ day: r.day, value: r[key] })),
+    [series],
+  );
 
+  const cumulative = useMemo<Point[]>(() => {
+    let acc = usersBefore;
+    return (series ?? []).map((r) => {
+      acc += r.signups;
+      return { day: r.day, value: acc };
+    });
+  }, [series, usersBefore]);
+
+  const today = series?.[series.length - 1];
+  const yesterday = series?.[series.length - 2];
   const pages = Math.max(1, Math.ceil(total / 25));
+  const closeSheet = useCallback(() => setOpenUser(null), []);
+  const refreshAfterAction = useCallback(() => {
+    loadUsers(q, page, sort);
+    loadOverview();
+  }, [loadUsers, loadOverview, q, page, sort]);
 
   return (
-    <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto px-4 py-6">
-      <PageHeader eyebrow="Endast du ser detta" title="Admin" subtitle="Intäkter, nyckeltal och användare." />
-
-      {/* ══ Intäkter ══ */}
-      <section className="mb-8">
-        <SectionHeader
-          title="Intäkter"
-          sub="Vad appen drar in — prenumerationer och annonser. Apples exakta utbetalningar finns i App Store Connect."
-        />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard
-            label="MRR (uppskattad)"
-            value={stats ? fmtKr(stats.mrrEstimateSEK) : "…"}
-            hint={
-              stats
-                ? `${stats.premium} premium × ${stats.premiumPriceSEK} kr/mån. Lifetime (${stats.lifetime} st) räknas inte — ingen månadsintäkt.`
-                : undefined
-            }
-            accent="money"
-          />
-          <StatCard
-            label="Stripe totalt"
-            value={stats ? fmtKr(stats.stripeRevenueSEK) : "…"}
-            hint={stats ? `${stats.stripePurchases} köp via webben, sedan start.` : undefined}
-            accent="money"
-          />
-          <StatCard
-            label="Apple-köp"
-            value={stats?.applePurchases ?? "…"}
-            hint="Antal IAP-transaktioner. Belopp och utbetalningar: App Store Connect."
-          />
-          <StatCard
-            label="AdMob idag"
-            value={admob ? `${admob.today.toLocaleString("sv-SE", { maximumFractionDigits: 2 })} ${admob.currency}` : admobConfigured ? "…" : "—"}
-            hint={
-              admob
-                ? `7 dagar: ${admob.last7d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} · 30 dagar: ${admob.last30d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} ${admob.currency}. Uppskattat av Google, uppdateras varje timme.`
-                : admobConfigured
-                  ? "Hämtar från Google…"
-                  : "Inte uppkopplat — se docs/admob-setup.md (fyra env-varar i Vercel)."
-            }
-            accent={admob ? "money" : undefined}
-          />
-        </div>
-
-        {/* Senaste köp — bara Stripe syns här (Apple-transaktioner saknar belopp hos oss). */}
-        {purchases.length > 0 && (
-          <div className="mt-4">
-            <h3 className="mb-2 text-sm font-semibold text-white/60">Senaste köp (Stripe)</h3>
-            <div className="grid gap-1.5">
-              {purchases.map((p, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-sm"
-                >
-                  <span className="truncate text-white/70">
-                    {p.email ?? "okänd"} · {p.product}
-                  </span>
-                  <span className="shrink-0 font-medium text-emerald-300">
-                    {p.amountSEK.toLocaleString("sv-SE")} {p.currency.toUpperCase()} · {fmtDate(p.createdAt)}
-                  </span>
-                </div>
-              ))}
-            </div>
+    <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-y-auto">
+      {/* ══ Sticky topp: titel + flikar ══ */}
+      <div
+        className="sticky top-0 z-20 border-b border-white/10 bg-neutral-950/90 px-4 pb-3 backdrop-blur"
+        style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}
+      >
+        <div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-widest text-cyan-400/80">Endast du ser detta</p>
+            <h1 className="text-2xl font-bold tracking-tight">Admin</h1>
           </div>
-        )}
-      </section>
-
-      {/* ══ Användare & aktivitet ══ */}
-      <section className="mb-8">
-        <SectionHeader title="Användare & aktivitet" sub="Hur appen växer och används just nu." />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard
-            label="Användare totalt"
-            value={stats?.totalUsers ?? "…"}
-            hint={stats ? `+${stats.new7d} senaste veckan · +${stats.new30d} senaste månaden` : undefined}
-          />
-          <StatCard
-            label="Aktiva senaste 7 d"
-            value={stats?.active7d ?? "…"}
-            hint={
-              stats
-                ? `${stats.totalUsers > 0 ? Math.round((stats.active7d / stats.totalUsers) * 100) : 0} % av alla konton.`
-                : undefined
-            }
-          />
-          <StatCard
-            label="Betalande"
-            value={stats ? stats.premium + stats.lifetime : "…"}
-            hint={stats ? `${stats.premium} premium · ${stats.lifetime} lifetime.` : undefined}
-          />
-          <StatCard
-            label="Verifierade"
-            value={stats?.verified ?? "…"}
-            hint="Konton som klickat på verifieringsmejlet."
-          />
-          <StatCard label="Betyg totalt" value={stats?.ratingsTotal ?? "…"} hint="Alla swipes/betyg som satts, någonsin." />
-          <StatCard
-            label="Aktiva grupper"
-            value={stats?.groupsActive ?? "…"}
-            hint="Gallras automatiskt efter 24–48 h inaktivitet."
-          />
         </div>
-      </section>
-
-      {/* ══ Användarlista ══ */}
-      <section>
-        <SectionHeader
-          title={`Användare (${total})`}
-          sub="Sök, ändra plan, skicka om verifiering eller radera konton. Radering tar bort allt — samma flöde som när användaren raderar sig själv."
-        />
-        <div className="mb-3">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Sök e-post, användarnamn, namn…"
-            className="w-full max-w-md rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40"
-          />
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.06] p-1">
+          {(
+            [
+              ["overview", "Översikt"],
+              ["users", `Användare${stats ? ` · ${stats.totalUsers}` : ""}`],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTab(k)}
+              className={`rounded-lg py-2 text-sm font-semibold transition ${
+                tab === k ? "bg-white text-neutral-950" : "text-white/60 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {note && (
-          <p className="mb-3 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-200">{note}</p>
-        )}
+      <div className="px-4 pb-[max(env(safe-area-inset-bottom),96px)] pt-5">
+        {tab === "overview" && (
+          <>
+            {/* ══ Idag ══ */}
+            <SectionTitle sub="Svensk kalenderdag. Aktiva = unika användare som swipat.">Idag</SectionTitle>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Kpi
+                label="Nya användare"
+                value={today?.signups ?? "…"}
+                sub={yesterday ? `igår ${yesterday.signups}` : undefined}
+              />
+              <Kpi label="Aktiva" value={today?.active ?? "…"} sub={yesterday ? `igår ${yesterday.active}` : undefined} />
+              <Kpi label="Swipes" value={today?.swipes ?? "…"} sub={yesterday ? `igår ${yesterday.swipes}` : undefined} />
+              <Kpi
+                label="MRR (uppskattad)"
+                value={stats ? fmtKr(stats.mrrEstimateSEK) : "…"}
+                sub={stats ? `${stats.premium} premium × ${stats.premiumPriceSEK} kr` : undefined}
+                tone="money"
+              />
+            </div>
 
-        <div className="grid gap-2">
-          {users.map((u) => (
-            <div key={u.id} className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar avatarId={u.avatarId} name={u.displayName ?? u.username ?? u.email} size={36} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-white/90">
-                      {u.displayName ?? u.username ?? "—"}
-                      {u.username && <span className="ml-1 text-white/40">@{u.username}</span>}
-                      {u.plan !== "free" && (
-                        <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">
-                          {u.plan}
-                        </span>
-                      )}
-                    </div>
-                    <div className="truncate text-xs text-white/45">
-                      {u.email ?? "ingen e-post"} · {u.verified ? "verifierad" : "overifierad"} · {u.ratings} betyg
-                      · reg {fmtDate(u.createdAt)} · aktiv {fmtDate(u.lastActiveAt)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  <select
-                    value={u.plan}
-                    disabled={busyId === u.id}
-                    onChange={(e) => void action(u.id, { action: "setPlan", plan: e.target.value })}
-                    className="rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 text-xs text-white/80"
+            {/* ══ Trender ══ */}
+            <div className="mb-3 mt-8 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-white">Dag för dag</h2>
+                <p className="text-xs text-white/40">Tryck/hovra på en stapel för dagens siffra.</p>
+              </div>
+              <div className="flex rounded-lg bg-white/[0.06] p-0.5">
+                {RANGES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRange(r)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold tabular-nums transition ${
+                      range === r ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
+                    }`}
                   >
-                    <option value="free">free</option>
-                    <option value="premium">premium</option>
-                    <option value="lifetime">lifetime</option>
-                  </select>
-                  {!u.verified && u.email && (
-                    <Button
-                      variant="secondary"
-                      disabled={busyId === u.id}
-                      onClick={() => void action(u.id, { action: "resendVerify" })}
-                    >
-                      Skicka verifiering
-                    </Button>
-                  )}
-                  {confirmDelete === u.id ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={busyId === u.id}
-                        onClick={() => void action(u.id, { action: "delete" })}
-                        className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
-                      >
-                        Bekräfta radering
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(null)}
-                        className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70"
-                      >
-                        Avbryt
-                      </button>
-                    </>
-                  ) : (
+                    {r === 365 ? "1 år" : `${r} d`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!series ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="h-[228px] animate-pulse rounded-2xl bg-white/[0.04]" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <DailyChart title="Nya användare" hint="Registrerade konton per dag." data={pick("signups")} color="#22d3ee" />
+                <DailyChart
+                  title="Användare totalt"
+                  hint="Kumulativt antal konton (raderade konton räknas inte)."
+                  data={cumulative}
+                  kind="line"
+                  summary="last"
+                  color="#22d3ee"
+                />
+                <DailyChart
+                  title="Aktiva användare"
+                  hint="Unika användare som swipat minst en gång den dagen."
+                  data={pick("active")}
+                  summary="avg"
+                  color="#a78bfa"
+                />
+                <DailyChart title="Swipes" hint="Alla gilla/nej/sett/betyg." data={pick("swipes")} color="#a78bfa" />
+                <DailyChart title="Till bevakningslistan" data={pick("watchlist")} color="#f472b6" />
+                <DailyChart
+                  title="Köp"
+                  hint="Stripe-köp + Apple-transaktioner (inkl. förnyelser)."
+                  data={pick("purchases")}
+                  color="#34d399"
+                />
+                <DailyChart
+                  title="Skapade grupper"
+                  hint="Grupper gallras efter 24–48 h, så äldre dagar underskattas."
+                  data={pick("groups")}
+                  color="#fbbf24"
+                />
+              </div>
+            )}
+
+            {/* ══ Intäkter ══ */}
+            <SectionTitle sub="Apples exakta utbetalningar finns i App Store Connect.">Intäkter</SectionTitle>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Kpi
+                label="Betalande"
+                value={stats ? stats.premium + stats.lifetime : "…"}
+                sub={stats ? `${stats.premium} premium · ${stats.lifetime} lifetime` : undefined}
+              />
+              <Kpi
+                label="Stripe totalt"
+                value={stats ? fmtKr(stats.stripeRevenueSEK) : "…"}
+                sub={stats ? `${stats.stripePurchases} köp via webben` : undefined}
+                tone="money"
+              />
+              <Kpi label="Apple-köp" value={stats?.applePurchases ?? "…"} sub="IAP-transaktioner" />
+              <Kpi
+                label="AdMob idag"
+                value={
+                  admob
+                    ? `${admob.today.toLocaleString("sv-SE", { maximumFractionDigits: 2 })} ${admob.currency}`
+                    : admobConfigured
+                      ? "…"
+                      : "—"
+                }
+                sub={
+                  admob
+                    ? `7 d ${admob.last7d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} · 30 d ${admob.last30d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })}`
+                    : admobConfigured
+                      ? "Hämtar…"
+                      : "Inte uppkopplat (docs/admob-setup.md)"
+                }
+                tone={admob ? "money" : undefined}
+              />
+            </div>
+
+            {purchases.length > 0 && (
+              <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/40">Senaste köp (Stripe)</h3>
+                <div className="divide-y divide-white/5">
+                  {purchases.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span className="min-w-0 truncate text-white/70">{p.email ?? "okänd"}</span>
+                      <span className="shrink-0 tabular-nums text-emerald-300">
+                        {p.amountSEK.toLocaleString("sv-SE")} {p.currency.toUpperCase()}
+                        <span className="ml-2 text-white/35">{new Date(p.createdAt).toLocaleDateString("sv-SE")}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ══ Totalt ══ */}
+            <SectionTitle sub="Sedan start.">Totalt</SectionTitle>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Kpi
+                label="Användare"
+                value={stats?.totalUsers ?? "…"}
+                sub={stats ? `+${stats.new7d} 7 d · +${stats.new30d} 30 d` : undefined}
+              />
+              <Kpi
+                label="Aktiva 7 d"
+                value={stats?.active7d ?? "…"}
+                sub={
+                  stats && stats.totalUsers > 0
+                    ? `${Math.round((stats.active7d / stats.totalUsers) * 100)} % av alla`
+                    : undefined
+                }
+              />
+              <Kpi
+                label="Verifierade"
+                value={stats?.verified ?? "…"}
+                sub={
+                  stats && stats.totalUsers > 0
+                    ? `${Math.round((stats.verified / stats.totalUsers) * 100)} % av alla`
+                    : undefined
+                }
+              />
+              <Kpi label="Swipes" value={stats?.ratingsTotal.toLocaleString("sv-SE") ?? "…"} sub={`${stats?.groupsActive ?? "…"} aktiva grupper`} />
+            </div>
+          </>
+        )}
+
+        {tab === "users" && (
+          <>
+            {/* Sök + sortering — sticky under flikarna så de går att nå medan man scrollar. */}
+            <div className="space-y-2">
+              <div className="relative">
+                <svg
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/35"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Sök e-post, användarnamn, namn…"
+                  inputMode="search"
+                  className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-9 pr-3 text-base text-white outline-none placeholder:text-neutral-500 focus:ring-2 focus:ring-cyan-500/40 sm:text-sm"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-white/40">{total} träffar</span>
+                <div className="flex rounded-lg bg-white/[0.06] p-0.5">
+                  {(
+                    [
+                      ["newest", "Nyast"],
+                      ["active", "Senast aktiv"],
+                      ["ratings", "Flest swipes"],
+                    ] as const
+                  ).map(([k, label]) => (
                     <button
+                      key={k}
                       type="button"
-                      disabled={busyId === u.id}
-                      onClick={() => setConfirmDelete(u.id)}
-                      className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10"
+                      onClick={() => setSort(k)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                        sort === k ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
+                      }`}
                     >
-                      Radera
+                      {label}
                     </button>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
-          ))}
-        </div>
 
-        {pages > 1 && (
-          <div className="mt-4 flex items-center justify-center gap-3 text-sm text-white/60">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => loadUsers(q, page - 1)}
-              className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-40"
+            <div
+              className={`mt-3 divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] transition-opacity ${
+                usersLoading ? "opacity-60" : ""
+              }`}
             >
-              Föregående
-            </button>
-            <span>
-              Sida {page} av {pages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= pages}
-              onClick={() => loadUsers(q, page + 1)}
-              className="rounded-lg border border-white/15 px-3 py-1.5 disabled:opacity-40"
-            >
-              Nästa
-            </button>
-          </div>
+              {users.length === 0 && !usersLoading && (
+                <p className="px-4 py-8 text-center text-sm text-white/40">Inga användare matchar.</p>
+              )}
+              {users.map((u) => {
+                const name = u.displayName ?? u.username ?? u.email ?? "Namnlös";
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => setOpenUser(u.id)}
+                    className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-white/[0.04] active:bg-white/[0.06]"
+                  >
+                    <Avatar avatarId={u.avatarId} name={name} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-white/90">{name}</span>
+                        {u.plan !== "free" && (
+                          <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-px text-[9px] font-bold uppercase text-emerald-300">
+                            {u.plan === "premium" ? "PRO" : "LIFE"}
+                          </span>
+                        )}
+                        {!u.verified && (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="Overifierad" />
+                        )}
+                      </div>
+                      <div className="truncate text-xs text-white/40">
+                        {u.username ? `@${u.username} · ` : ""}
+                        {u.email ?? "ingen e-post"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right text-[11px] leading-tight tabular-nums text-white/45">
+                      <div>{u.ratings} swipes</div>
+                      <div className="text-white/30">aktiv {ago(u.lastActiveAt)}</div>
+                    </div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-white/25">
+                      <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+
+            {pages > 1 && (
+              <div className="mt-4 flex items-center justify-between gap-3 text-sm text-white/60">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => loadUsers(q, page - 1, sort)}
+                  className="rounded-xl border border-white/15 px-4 py-2.5 disabled:opacity-30"
+                >
+                  ← Föregående
+                </button>
+                <span className="tabular-nums">
+                  {page} / {pages}
+                </span>
+                <button
+                  type="button"
+                  disabled={page >= pages}
+                  onClick={() => loadUsers(q, page + 1, sort)}
+                  className="rounded-xl border border-white/15 px-4 py-2.5 disabled:opacity-30"
+                >
+                  Nästa →
+                </button>
+              </div>
+            )}
+          </>
         )}
-      </section>
+      </div>
+
+      {openUser && <UserSheet userId={openUser} onClose={closeSheet} onChanged={refreshAfterAction} />}
     </main>
   );
 }

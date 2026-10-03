@@ -136,7 +136,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
     // routes. Ett min-h på fulla 100dvh här ovanpå den paddingen gör sidan högre
     // än viewporten — därav scrollbaren. Heron ska aldrig scrolla; den är en scen,
     // inte ett dokument.
-    <div className="relative flex min-h-[calc(100dvh-env(safe-area-inset-top))] w-full flex-col items-center justify-center overflow-hidden bg-[#0a0a0a]">
+    <div className="relative flex min-h-[calc(100dvh-env(safe-area-inset-top))] w-full flex-col items-center overflow-hidden bg-[#0a0a0a]">
       {/* Accentglöd. Två staplade lager som korsfadas med opacity — bakgrundsfärg
           animeras aldrig, och blur är förbjuden (fill-rate i WebView). */}
       <AnimatePresence>
@@ -162,8 +162,12 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       />
 
       {/* Ingen egen safe-area-padding här: AppShell äger den redan, och dubbla
-          lager tryckte ner headern långt under notchen. */}
-      <header className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-5 py-4">
+          lager tryckte ner headern långt under notchen.
+
+          I flödet (inte absolute) sedan 2026-10-03: foten har mt-auto, vilket
+          äter justify-center — scenen började då på y=0 och rubriken lade sig
+          ovanpå "NextWatch"/"Logga in" på telefon. */}
+      <header className="relative z-30 flex w-full shrink-0 items-center justify-between px-5 pb-2 pt-4">
         <span className="text-sm font-semibold tracking-tight text-white/90">NextWatch</span>
         {/* Diskret med flit: heron ska äga ytan. Men den här länken är enda vägen
             in för befintliga konton — startsidan är iOS-appens launch-skärm för
@@ -179,7 +183,10 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
       <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} />
 
-      <h1 className="relative z-20 mb-7 px-6 text-center text-[clamp(1.6rem,5vw,2.6rem)] font-semibold leading-[1.1] tracking-[-0.02em] text-white">
+      {/* Scenen: tar resten av höjden mellan header och fot och centrerar sig
+          där, så luften fördelas jämnt ovanför och under leken. */}
+      <div className="relative z-20 flex w-full flex-1 flex-col items-center justify-center py-4">
+      <h1 className="relative z-20 mb-6 max-w-[22ch] px-6 text-center text-[clamp(1.6rem,5vw,2.6rem)] font-semibold leading-[1.1] tracking-[-0.02em] text-white">
         {t.rich("headline", {
           accent: (chunks) => (
             <span style={{ color: top?.accent ?? "#fff" }} className="transition-colors duration-500">
@@ -192,7 +199,14 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       {/* EN perspective-wrapper. Nästlade 3d-kontexter spränger lagerantalet i WKWebView. */}
       <div
         className="relative z-20 flex items-center justify-center"
-        style={{ perspective: 1100, width: "clamp(248px, 74vw, 330px)", aspectRatio: "2 / 3" }}
+        style={{
+          perspective: 1100,
+          // Bredden styrs av BÅDE vyns bredd och höjd: ~400px av höjden går till
+          // header, rubrik, knappar och fot, resten får kortet (2:3). Tidigare
+          // 74vw gav ett ~430px högt kort på iPhone, och sidan blev trång.
+          width: "clamp(200px, min(66vw, calc((100dvh - 400px) / 1.5)), 330px)",
+          aspectRatio: "2 / 3",
+        }}
         onPointerDown={() => setTouched(true)}
       >
         {/* Blockkanten: ETT element som läses som ~40 kvarvarande kort, och som
@@ -257,7 +271,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         )}
       </div>
 
-      <div className="relative z-20 mt-8 flex flex-col items-center gap-3">
+      <div className="relative z-20 mt-9 flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -286,6 +300,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           className="text-[13px] font-medium text-white/45 underline decoration-white/25 underline-offset-4 transition hover:text-white/80 disabled:opacity-60"
         />
       </div>
+      </div>
 
       <Pile liked={liked} reduce={reduce} />
 
@@ -298,7 +313,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           och "Hoppa in som gäst" hamnade ovanpå legal-länkarna. Nu ligger raden
           i flödet med mt-auto: den sitter kvar längst ned när det finns plats,
           och knuffas undan i stället för att krocka när det inte gör det. */}
-      <footer className="relative z-20 mt-auto flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4 pb-3 pt-10 text-center text-[10px] text-white/25">
+      <footer className="relative z-20 flex w-full shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 px-6 pb-4 pt-6 text-center text-[10px] text-white/25">
         <a href="/legal/privacy" className="transition hover:text-white/60">{t("privacy")}</a>
         <a href="/legal/terms" className="transition hover:text-white/60">{t("terms")}</a>
         <a href="/support" className="transition hover:text-white/60">{t("support")}</a>

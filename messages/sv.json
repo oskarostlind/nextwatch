@@ -5,6 +5,12 @@
     "like": "Gilla",
     "undo": "Ångra"
   },
+  "appBar": {
+    "ariaLabel": "Hämta NextWatch-appen",
+    "close": "Stäng",
+    "get": "Hämta",
+    "tagline": "Hitta kvällens film – gratis"
+  },
   "auth": {
     "activateAccount": "Aktivera ditt konto",
     "appleFailed": "Apple-inloggningen misslyckades.",

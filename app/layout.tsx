@@ -8,9 +8,10 @@ import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
 import MetaAppEvents from "./components/client/MetaAppEvents";
+import IphoneAppBar from "./components/client/IphoneAppBar";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
-import { SITE_URL } from "@/lib/seo";
+import { APP_STORE_ID, SITE_URL } from "@/lib/seo";
 
 const ADSENSE_CLIENT_FALLBACK = "ca-pub-2616665688666431";
 
@@ -48,6 +49,11 @@ export const metadata: Metadata = {
     // AdSense site-verification (works independent of the ads feature flag,
     // so Google can verify/review the site before ads are switched on).
     "google-adsense-account": ADSENSE_CLIENT_FALLBACK,
+    // Apples smart app banner. Ritas bara av Safari på iOS — inget händer på
+    // desktop, Android eller i andra iOS-webbläsare (där tar IphoneAppBar
+    // över). I vår egen Capacitor-WebView visas den inte heller: WKWebView
+    // tolkar inte taggen.
+    "apple-itunes-app": `app-id=${APP_STORE_ID}`,
   },
 };
 
@@ -96,6 +102,10 @@ export default async function RootLayout({
 
           <AppDeepLinkHandler />
           <MetaAppEvents />
+
+          {/* Nedladdningsrad för iPhone utanför Safari (Instagram/Facebook-
+              webbläsaren, Chrome, Firefox). Renderas först efter mount. */}
+          <IphoneAppBar />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

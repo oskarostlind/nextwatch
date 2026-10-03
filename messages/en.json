@@ -5,6 +5,12 @@
     "like": "Like",
     "undo": "Undo"
   },
+  "appBar": {
+    "ariaLabel": "Get the NextWatch app",
+    "close": "Close",
+    "get": "Get",
+    "tagline": "Find tonight's movie – free"
+  },
   "auth": {
     "activateAccount": "Activate your account",
     "appleFailed": "Sign in with Apple failed.",

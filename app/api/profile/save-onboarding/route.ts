@@ -6,6 +6,7 @@ import { sessionCookieOpts } from "../../../../lib/cookies";
 import { signUid } from "../../../../lib/session";
 import { sanitizeKeywordIds } from "@/lib/groupSettings";
 import { apiMsg } from "@/lib/apiMessages";
+import { stampAcquisition } from "@/lib/acquisitionServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
     } else {
       await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
     }
+    await stampAcquisition(uid);
 
     const body = (await req.json()) as Record<string, unknown>;
     const displayName = requireString(body, "displayName");

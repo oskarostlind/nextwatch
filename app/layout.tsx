@@ -9,6 +9,7 @@ import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
 import MetaAppEvents from "./components/client/MetaAppEvents";
 import IphoneAppBar from "./components/client/IphoneAppBar";
+import AcquisitionBeacon from "./components/client/AcquisitionBeacon";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
 import { APP_STORE_ID, SITE_URL } from "@/lib/seo";
@@ -106,6 +107,8 @@ export default async function RootLayout({
           {/* Nedladdningsrad för iPhone utanför Safari (Instagram/Facebook-
               webbläsaren, Chrome, Firefox). Renderas först efter mount. */}
           <IphoneAppBar />
+          {/* Källspårning (första besöket) — se lib/acquisition.ts. */}
+          <AcquisitionBeacon />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

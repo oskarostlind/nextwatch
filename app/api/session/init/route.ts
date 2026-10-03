@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { signUid, verifyUid } from "../../../../lib/session";
+import { stampAcquisition } from "@/lib/acquisitionServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,12 +22,14 @@ export async function GET() {
     if (!uid) {
       uid = newId();
       await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
+      await stampAcquisition(uid);
       const res = NextResponse.json({ ok: true, userId: uid, hasProfile: false });
       res.cookies.set("nw_uid", await signUid(uid), sessionCookieOpts(60 * 60 * 24 * 365, true));
       return res;
     }
 
     await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
+    await stampAcquisition(uid);
     const profile = await prisma.profile.findUnique({ where: { userId: uid } });
     return NextResponse.json({ ok: true, userId: uid, hasProfile: !!profile });
   } catch (e: unknown) {

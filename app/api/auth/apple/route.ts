@@ -7,6 +7,7 @@ import { setAuthCookies } from "../../../../lib/auth";
 import { sessionCookieOpts } from "../../../../lib/cookies";
 import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rateLimit";
 import { apiMsg } from "@/lib/apiMessages";
+import { stampAcquisition } from "@/lib/acquisitionServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,6 +139,8 @@ export async function POST(req: Request) {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+    // Källa: bara nya konton får en (se TRACKING_START i lib/acquisitionServer).
+    await stampAcquisition(user.id);
 
     // Refresh token sparas enbart för att kunna återkalla kopplingen när
     // kontot raderas (TN3194). Best-effort: saknas SIWA-nyckeln i miljön

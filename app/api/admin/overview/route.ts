@@ -39,6 +39,9 @@ export async function GET() {
     groupsActive,
     latestPurchases,
     admob,
+    visitsBySource,
+    usersBySource,
+    accountsBySource,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: d7 } } }),
@@ -64,7 +67,35 @@ export async function GET() {
     }),
     // Best effort med intern cache (1 h) — får aldrig fälla resten av vyn.
     getAdmobEarnings(),
+    // Källor senaste 30 d (lib/acquisition.ts). Besök = första besök per
+    // webbläsare/app-installation; nya användare = alla nya rader (även
+    // anonyma gäster); konton = de med e-post eller Apple-inloggning.
+    prisma.acquisitionVisit
+      .groupBy({ by: ["source"], where: { createdAt: { gte: d30 } }, _count: { _all: true } })
+      .catch(() => []),
+    prisma.user
+      .groupBy({ by: ["acqSource"], where: { createdAt: { gte: d30 } }, _count: { _all: true } })
+      .catch(() => []),
+    prisma.user
+      .groupBy({
+        by: ["acqSource"],
+        where: { createdAt: { gte: d30 }, OR: [{ email: { not: null } }, { appleSub: { not: null } }] },
+        _count: { _all: true },
+      })
+      .catch(() => []),
   ]);
+
+  // Slå ihop de tre grupperingarna till en rad per källa.
+  const srcMap = new Map<string, { source: string | null; visits: number; users: number; accounts: number }>();
+  const row = (s: string | null) => {
+    const k = s ?? "__unknown";
+    if (!srcMap.has(k)) srcMap.set(k, { source: s, visits: 0, users: 0, accounts: 0 });
+    return srcMap.get(k)!;
+  };
+  for (const v of visitsBySource) row(v.source).visits = v._count._all;
+  for (const u of usersBySource) row(u.acqSource).users = u._count._all;
+  for (const a of accountsBySource) row(a.acqSource).accounts = a._count._all;
+  const sources = [...srcMap.values()].sort((a, b) => b.visits + b.users - (a.visits + a.users));
 
   return NextResponse.json({
     ok: true,
@@ -91,6 +122,7 @@ export async function GET() {
     // null + configured=false ⇒ UI:t visar "inte uppkopplat" i stället för 0 kr.
     admob: admob ?? null,
     admobConfigured: admobConfigured(),
+    sources,
     latestPurchases: latestPurchases.map((p) => ({
       amountSEK: p.amountTotal / 100,
       currency: p.currency,

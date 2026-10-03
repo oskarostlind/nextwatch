@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { signUid, verifyUid } from "@/lib/session";
 import { LANG_COOKIE, localeFromAcceptLanguage } from "@/lib/i18nConfig";
+import { ACQ_COOKIE, ACQ_COOKIE_MAX_AGE, ACQ_NEW_FLAG, classifyVisit, encodeAcquisition } from "@/lib/acquisition";
 
 function makeUid(): string {
   const c = crypto as Crypto & { randomUUID?: () => string };
@@ -118,6 +119,32 @@ export async function middleware(req: NextRequest) {
   }
   if (mustSetLang && !isPrefetch) {
     res.cookies.set(LANG_COOKIE, uiLang, FLAG_COOKIE);
+  }
+
+  // Källa (första beröring): bara på riktiga sidvisningar — inte API-anrop,
+  // prefetch eller RSC-hämtningar, där varken URL-parametrar eller referrer
+  // speglar varifrån besökaren kom. Se lib/acquisition.ts.
+  const isPageView =
+    req.method === "GET" &&
+    !pathname.startsWith("/api/") &&
+    !isPrefetch &&
+    !req.headers.get("rsc") &&
+    !req.nextUrl.searchParams.has("_rsc");
+  if (isPageView && !req.cookies.get(ACQ_COOKIE)) {
+    const acq = classifyVisit({
+      url: req.nextUrl,
+      referrer: req.headers.get("referer"),
+      userAgent: req.headers.get("user-agent") ?? "",
+    });
+    res.cookies.set(ACQ_COOKIE, encodeAcquisition(acq), {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: true,
+      maxAge: ACQ_COOKIE_MAX_AGE,
+    });
+    // Läsbar för AcquisitionBeacon, som registrerar besöket och sedan tar bort den.
+    res.cookies.set(ACQ_NEW_FLAG, "1", { path: "/", httpOnly: false, sameSite: "lax", secure: true, maxAge: 60 * 60 * 24 });
   }
 
   return res;

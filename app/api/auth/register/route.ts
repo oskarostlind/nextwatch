@@ -10,6 +10,7 @@ import nodemailer from "nodemailer";
 import { getTranslations } from "next-intl/server";
 import { uiLocaleFromCookies } from "@/lib/serverLocale";
 import { apiMsg } from "@/lib/apiMessages";
+import { stampAcquisition } from "@/lib/acquisitionServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,6 +131,7 @@ export async function POST(req: NextRequest) {
       }),
       prisma.verification.create({ data: { token, userId: uid, email, name: null, expiresAt } }),
     ]);
+    await stampAcquisition(uid);
 
     const origin = computeOrigin(req);
     const link = `${origin}/auth/verify?token=${token}${fromApp ? "&from=app" : ""}`;

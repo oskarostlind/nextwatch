@@ -49,6 +49,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       appleSub: true,
       passwordHash: true,
       termsAcceptedAt: true,
+      acqSource: true,
+      acqMedium: true,
+      acqCampaign: true,
+      acqContent: true,
+      acqReferrer: true,
+      acqLanding: true,
+      acqAt: true,
       profile: {
         select: {
           displayName: true,
@@ -164,6 +171,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
       loginMethods: [user.appleSub ? "Apple" : null, user.passwordHash ? "E-post" : null].filter(Boolean),
       termsAccepted: Boolean(user.termsAcceptedAt),
+      acquisition: user.acqSource
+        ? {
+            source: user.acqSource,
+            medium: user.acqMedium,
+            campaign: user.acqCampaign,
+            content: user.acqContent,
+            referrer: user.acqReferrer,
+            landing: user.acqLanding,
+            at: user.acqAt?.toISOString() ?? null,
+          }
+        : null,
       hasProfile: Boolean(p),
       age,
       uiLanguage: p?.uiLanguage ?? null,

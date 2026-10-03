@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { apiMsg } from "@/lib/apiMessages";
+import { stampAcquisition } from "@/lib/acquisitionServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export async function POST() {
 
     // Säkerställ användarrad (middleware sätter bara cookie).
     await prisma.user.upsert({ where: { id: uid }, update: {}, create: { id: uid } });
+    await stampAcquisition(uid);
 
     // Har redan en profil (gäst eller riktig)? Rör den inte — bara fortsätt.
     const existing = await prisma.profile.findUnique({

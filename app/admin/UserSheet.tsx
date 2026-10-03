@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
+import { acquisitionLabel } from "@/lib/acquisition";
 
 type Relation = "self" | "friends" | "outgoing" | "incoming" | "blocked" | "none";
 
@@ -29,6 +30,15 @@ type Detail = {
     lastActiveAt: string | null;
     loginMethods: string[];
     termsAccepted: boolean;
+    acquisition: {
+      source: string;
+      medium: string | null;
+      campaign: string | null;
+      content: string | null;
+      referrer: string | null;
+      landing: string | null;
+      at: string | null;
+    } | null;
     hasProfile: boolean;
     age: number | null;
     uiLanguage: string | null;
@@ -330,6 +340,24 @@ export default function UserSheet({
                 </Row>
                 <Row label="Inloggning">{u.loginMethods.join(" + ") || "—"}</Row>
                 <Row label="Registrerad">{fmtDate(u.createdAt)}</Row>
+                <Row label="Källa">
+                  {u.acquisition ? (
+                    <>
+                      {acquisitionLabel(u.acquisition.source)}
+                      {u.acquisition.medium && u.acquisition.medium !== "none" ? ` · ${u.acquisition.medium}` : ""}
+                      {(u.acquisition.campaign || u.acquisition.content) && (
+                        <span className="block text-xs text-white/40">
+                          {[u.acquisition.campaign, u.acquisition.content].filter(Boolean).join(" / ")}
+                        </span>
+                      )}
+                      <span className="block text-xs text-white/40">
+                        {[u.acquisition.referrer, u.acquisition.landing].filter(Boolean).join(" → ")}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-white/40">Okänd (före spårningen)</span>
+                  )}
+                </Row>
                 <Row label="Senast aktiv">{ago(u.lastActiveAt)}</Row>
                 <Row label="Senast inloggad">{ago(u.lastLoginAt)}</Row>
                 {u.plan !== "free" && (

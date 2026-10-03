@@ -70,6 +70,17 @@ model User {
   /// låter användare godkänna regler mot stötande innehåll).
   termsAcceptedAt DateTime? @map("terms_accepted_at")
 
+  /// Källa (första beröring) — se lib/acquisition.ts. Stämplas när kontot
+  /// skapas/identifieras och skrivs aldrig över. null = okänd (konton från
+  /// före 2026-10-03 eller besökare utan källcookie).
+  acqSource   String?   @map("acq_source")
+  acqMedium   String?   @map("acq_medium")
+  acqCampaign String?   @map("acq_campaign")
+  acqContent  String?   @map("acq_content")
+  acqReferrer String?   @map("acq_referrer")
+  acqLanding  String?   @map("acq_landing")
+  acqAt       DateTime? @map("acq_at")
+
   profile        Profile?
   ratings        Rating[]
   sharesSent     SharedTitle[] @relation("sharesSent")
@@ -514,4 +525,25 @@ model GroupMatch {
   @@id([groupCode, tmdbId, tmdbType])
   @@index([groupCode, matchedAt], map: "idx_group_matches_group_matched_at")
   @@map("group_matches")
+}
+
+/// Ett första besök per webbläsare/app-installation, med källa (lib/acquisition.ts).
+/// Skrivs av /api/track/visit när middleware just satt källcookien. Ingen
+/// relation till users med flit: besökaren har oftast inget konto än, och
+/// raderingen av ett konto ska inte ändra besöksstatistiken. visitorId är
+/// nw_uid vid besöket, så besök och konton går att para ihop i efterhand.
+model AcquisitionVisit {
+  id        String   @id @default(cuid())
+  visitorId String   @map("visitor_id")
+  source    String
+  medium    String
+  campaign  String?
+  content   String?
+  referrer  String?
+  landing   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt], map: "idx_acq_visits_created_at")
+  @@index([source, createdAt], map: "idx_acq_visits_source_created_at")
+  @@map("acquisition_visits")
 }

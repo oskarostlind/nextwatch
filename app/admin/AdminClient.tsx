@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
 import { DailyChart, type Point } from "./charts";
 import UserSheet from "./UserSheet";
+import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
   totalUsers: number;
@@ -58,7 +59,12 @@ type AdminUser = {
   createdAt: string;
   lastActiveAt: string | null;
   ratings: number;
+  source: string | null;
+  campaign: string | null;
+  hasLogin: boolean;
 };
+
+type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
 type Tab = "overview" | "users";
 type Sort = "newest" | "active" | "ratings";
@@ -117,6 +123,7 @@ export default function AdminClient() {
   const [admob, setAdmob] = useState<AdmobEarnings | null>(null);
   const [admobConfigured, setAdmobConfigured] = useState(true);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+  const [sources, setSources] = useState<SourceRow[] | null>(null);
 
   const [series, setSeries] = useState<SeriesRow[] | null>(null);
   const [usersBefore, setUsersBefore] = useState(0);
@@ -138,6 +145,7 @@ export default function AdminClient() {
           setPurchases(j.latestPurchases as PurchaseRow[]);
           setAdmob((j.admob as AdmobEarnings | null) ?? null);
           setAdmobConfigured(Boolean(j.admobConfigured));
+          setSources((j.sources as SourceRow[] | undefined) ?? []);
         }
       })
       .catch(() => {});
@@ -322,6 +330,38 @@ export default function AdminClient() {
               </div>
             )}
 
+            {/* ══ Källor ══ */}
+            <SectionTitle sub="Senaste 30 d, första beröring. Besök = första besöket per webbläsare/app. Konton = e-post eller Apple. Spåras sedan 3 okt 2026.">
+              Källor
+            </SectionTitle>
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">
+                <span>Källa</span>
+                <span className="text-right">Besök</span>
+                <span className="text-right">Nya</span>
+                <span className="text-right">Konton</span>
+              </div>
+              {!sources ? (
+                <div className="h-24 animate-pulse bg-white/[0.03]" />
+              ) : sources.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-white/40">Ingen data än.</p>
+              ) : (
+                sources.map((r) => (
+                  <div
+                    key={r.source ?? "__unknown"}
+                    className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/5 px-4 py-2.5 text-sm tabular-nums last:border-0"
+                  >
+                    <span className={r.source === "meta" ? "font-semibold text-sky-300" : "text-white/85"}>
+                      {acquisitionLabel(r.source)}
+                    </span>
+                    <span className="text-right text-white/70">{r.visits}</span>
+                    <span className="text-right text-white/70">{r.users}</span>
+                    <span className="text-right font-semibold text-white">{r.accounts}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
             {/* ══ Intäkter ══ */}
             <SectionTitle sub="Apples exakta utbetalningar finns i App Store Connect.">Intäkter</SectionTitle>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -493,6 +533,9 @@ export default function AdminClient() {
                     <div className="shrink-0 text-right text-[11px] leading-tight tabular-nums text-white/45">
                       <div>{u.ratings} swipes</div>
                       <div className="text-white/30">aktiv {ago(u.lastActiveAt)}</div>
+                      <div className={u.source === "meta" ? "text-sky-300/80" : "text-white/30"}>
+                        {acquisitionLabel(u.source)}
+                      </div>
                     </div>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-white/25">
                       <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />

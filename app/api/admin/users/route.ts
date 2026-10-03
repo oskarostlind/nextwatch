@@ -51,6 +51,9 @@ export async function GET(req: NextRequest) {
         emailVerified: true,
         createdAt: true,
         lastActiveAt: true,
+        acqSource: true,
+        acqCampaign: true,
+        appleSub: true,
         profile: { select: { displayName: true, avatarId: true } },
         _count: { select: { ratings: true } },
       },
@@ -73,6 +76,9 @@ export async function GET(req: NextRequest) {
       createdAt: u.createdAt.toISOString(),
       lastActiveAt: u.lastActiveAt ? u.lastActiveAt.toISOString() : null,
       ratings: u._count.ratings,
+      source: u.acqSource,
+      campaign: u.acqCampaign,
+      hasLogin: Boolean(u.email || u.appleSub),
     })),
   });
 }

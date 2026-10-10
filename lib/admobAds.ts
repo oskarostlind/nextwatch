@@ -93,20 +93,74 @@ const INTERSTITIAL_MIN_GAP_MS = (() => {
  * att användaren ska behöva swipa 15 gånger till.
  */
 const RETRY_AFTER_FAILED_SWIPES = 5;
+/**
+ * Förladda annonsen så här många swipes INNAN den ska visas — inte vid
+ * appstart. Förr laddades en annons direkt vid init; slutade användaren innan
+ * 15 swipes (vanligt) brann den inne. 2026-10-10: 363 matchade förfrågningar
+ * men bara 118 visningar på 30 d. En laddad interstitial gäller dessutom bara
+ * ~1 h, så den förnyas om den blivit för gammal.
+ */
+const PRELOAD_AHEAD_SWIPES = 5;
+const PRELOADED_TTL_MS = 55 * 60 * 1000;
+
+/**
+ * Räknaren och senaste visningen sparas i localStorage så att de överlever en
+ * omstart av appen. Tidigare nollades räknaren vid varje start: en användare
+ * som swipar 10 + 10 + 10 i tre sessioner nådde aldrig 15 och såg aldrig en
+ * annons. Per enhet, best effort — localStorage kan saknas eller kasta.
+ */
+const COUNTER_KEY = "nw_ad_swipes";
+const LAST_AD_KEY = "nw_ad_last";
+
+function loadNumber(key: string): number {
+  try {
+    return Number(window.localStorage.getItem(key)) || 0;
+  } catch {
+    return 0;
+  }
+}
+function saveNumber(key: string, value: number): void {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    /* privat läge o.dyl. — räknaren lever då bara i minnet */
+  }
+}
 
 let initialized = false;
 let initInFlight: Promise<boolean> | null = null;
 let eligible = false; // native + ej premium — 24h-fönstret kollas per visning
 let npa = false;
 let interstitialReady = false;
+let interstitialPreparedAt = 0;
+let prepareInFlight: Promise<void> | null = null;
 let swipesSinceAd = 0;
 let lastInterstitialAt = 0;
+
+function setSwipesSinceAd(n: number): void {
+  swipesSinceAd = n;
+  saveNumber(COUNTER_KEY, n);
+}
 /** Hindrar att flera snabba swipes startar parallella visningsförsök. */
 let attemptInFlight = false;
 
 /** Backa räknaren så nästa försök sker om RETRY_AFTER_FAILED_SWIPES swipes. */
 function retryLater(): void {
-  swipesSinceAd = Math.max(0, INTERSTITIAL_EVERY - RETRY_AFTER_FAILED_SWIPES);
+  // En under förladdningströskeln, så att nästa swipe förladdar igen och
+  // visningen kommer RETRY_AFTER_FAILED_SWIPES swipes senare.
+  const preloadAt = INTERSTITIAL_EVERY - Math.min(PRELOAD_AHEAD_SWIPES, RETRY_AFTER_FAILED_SWIPES);
+  setSwipesSinceAd(Math.max(0, preloadAt - 1));
+}
+
+/** Är det dags att förladda? Nära nästa visning, och tidsgolvet nästan passerat. */
+function shouldPreload(): boolean {
+  if (swipesSinceAd < INTERSTITIAL_EVERY - PRELOAD_AHEAD_SWIPES) return false;
+  const untilGapOk = INTERSTITIAL_MIN_GAP_MS - (Date.now() - lastInterstitialAt);
+  return untilGapOk < 60_000;
+}
+
+function preparedIsFresh(): boolean {
+  return interstitialReady && Date.now() - interstitialPreparedAt < PRELOADED_TTL_MS;
 }
 
 /**
@@ -189,9 +243,13 @@ export async function initAdMobIfEligible(): Promise<boolean> {
         npa = true;
       }
 
+      swipesSinceAd = loadNumber(COUNTER_KEY);
+      lastInterstitialAt = loadNumber(LAST_AD_KEY);
       eligible = true;
       initialized = true;
-      void prepareInterstitial();
+      // Ingen förladdning här längre — bara om räknaren (sparad från förra
+      // sessionen) redan står nära nästa visning.
+      if (shouldPreload()) void prepareInterstitial();
       return true;
     } catch {
       eligible = false;
@@ -233,12 +291,25 @@ async function ensureDismissListener(): Promise<void> {
   }
 }
 
-async function prepareInterstitial(): Promise<void> {
-  if (!eligible || interstitialReady) return;
+function prepareInterstitial(): Promise<void> {
+  if (!eligible || preparedIsFresh()) return Promise.resolve();
+  // Delad inflight: förladdningen (swipe ~10) och visningsförsöket (swipe 15)
+  // får aldrig skicka två parallella förfrågningar till AdMob.
+  if (!prepareInFlight) {
+    prepareInFlight = doPrepareInterstitial().finally(() => {
+      prepareInFlight = null;
+    });
+  }
+  return prepareInFlight;
+}
+
+async function doPrepareInterstitial(): Promise<void> {
+  interstitialReady = false;
   try {
     const { AdMob } = await plugin();
     await AdMob.prepareInterstitial({ adId: adId("interstitial"), npa });
     interstitialReady = true;
+    interstitialPreparedAt = Date.now();
   } catch (err) {
     // Tyst för användaren, men ALDRIG tyst i konsolen: det här är enda stället
     // man ser skillnad på "no fill" (nytt konto/opublicerad app — går över av
@@ -257,9 +328,15 @@ async function prepareInterstitial(): Promise<void> {
  */
 export function registerSwipeForAds(): void {
   if (!initialized || !eligible || adFreeActive()) return;
-  swipesSinceAd += 1;
-  if (swipesSinceAd < INTERSTITIAL_EVERY) return;
-  if (Date.now() - lastInterstitialAt < INTERSTITIAL_MIN_GAP_MS) return;
+  setSwipesSinceAd(swipesSinceAd + 1);
+  if (swipesSinceAd < INTERSTITIAL_EVERY) {
+    if (shouldPreload()) void prepareInterstitial();
+    return;
+  }
+  if (Date.now() - lastInterstitialAt < INTERSTITIAL_MIN_GAP_MS) {
+    if (shouldPreload()) void prepareInterstitial();
+    return;
+  }
 
   if (attemptInFlight) return;
 
@@ -270,9 +347,9 @@ export function registerSwipeForAds(): void {
   attemptInFlight = true;
   void (async () => {
     try {
-      if (!interstitialReady) {
+      if (!preparedIsFresh()) {
         await prepareInterstitial();
-        if (!interstitialReady) {
+        if (!preparedIsFresh()) {
           retryLater();
           return;
         }
@@ -281,10 +358,11 @@ export function registerSwipeForAds(): void {
       await ensureDismissListener();
       await AdMob.showInterstitial();
       funnel("ad_interstitial");
-      swipesSinceAd = 0;
+      setSwipesSinceAd(0);
       lastInterstitialAt = Date.now();
+      saveNumber(LAST_AD_KEY, lastInterstitialAt);
       interstitialReady = false;
-      void prepareInterstitial();
+      // Ingen direkt omladdning — nästa förladdas vid swipe ~10 (shouldPreload).
     } catch (err) {
       interstitialReady = false;
       console.warn("[admob] showInterstitial misslyckades", err);

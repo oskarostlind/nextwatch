@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 export default function AppleSignInButton({ disabled = false }: { disabled?: boolean } = {}) {
   const t = useTranslations("auth");
@@ -67,6 +68,7 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
         return;
       }
 
+      funnel("signup_apple");
       window.location.href = data.redirect ?? "/swipe";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Apple-inloggning misslyckades";

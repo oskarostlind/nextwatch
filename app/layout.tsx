@@ -11,6 +11,7 @@ import MetaAppEvents from "./components/client/MetaAppEvents";
 import IphoneAppBar from "./components/client/IphoneAppBar";
 import AcquisitionBeacon from "./components/client/AcquisitionBeacon";
 import ActivityBeacon from "./components/client/ActivityBeacon";
+import FunnelTracker from "./components/client/FunnelTracker";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
 import { APP_STORE_ID, SITE_URL } from "@/lib/seo";
@@ -112,6 +113,8 @@ export default async function RootLayout({
           <AcquisitionBeacon />
           {/* "Appen är öppen" — retention + online nu i /admin. */}
           <ActivityBeacon />
+          {/* Första-besöks-tratten — var nya användare tappar. Se lib/funnel.ts. */}
+          <FunnelTracker />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

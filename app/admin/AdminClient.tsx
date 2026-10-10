@@ -17,6 +17,8 @@
 //   - Ny flik Retention (RetentionPanel, /api/admin/retention): kommer nya
 //     användare tillbaka? Dag 1/7/30, veckokohorter, per källa.
 //   - Allt annat uppdateras tyst var 60:e s medan fliken syns.
+//   - Flik Tratt (FunnelPanel, /api/admin/funnel): första besöket steg för
+//     steg och var de som aldrig kom tillbaka lämnade (lib/funnel.ts).
 //   - "← Appen" i toppen — /admin har ingen app-chrome (AppShell) att gå
 //     tillbaka med.
 
@@ -26,6 +28,7 @@ import { DailyChart, type Point } from "./charts";
 import UserSheet from "./UserSheet";
 import LivePanel, { type LiveData } from "./LivePanel";
 import RetentionPanel, { pct, type RetentionData } from "./RetentionPanel";
+import FunnelPanel, { type FunnelData } from "./FunnelPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -78,7 +81,7 @@ type AdminUser = {
 
 type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
-type Tab = "overview" | "retention" | "users";
+type Tab = "overview" | "funnel" | "retention" | "users";
 type Sort = "newest" | "active" | "ratings";
 
 const RANGES = [7, 30, 90, 365] as const;
@@ -175,6 +178,10 @@ export default function AdminClient() {
   const [retAll, setRetAll] = useState<RetentionData["total"] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
+  const [funnelData, setFunnelData] = useState<FunnelData | null>(null);
+  const [funnelDays, setFunnelDays] = useState(7);
+  const [funnelPlatform, setFunnelPlatform] = useState<"all" | "ios" | "web">("all");
+
   const loadOverview = useCallback(() => {
     void fetch("/api/admin/overview", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -245,13 +252,28 @@ export default function AdminClient() {
     loadRetention();
   }, [loadRetention]);
 
+  const loadFunnel = useCallback(() => {
+    void fetch(`/api/admin/funnel?days=${funnelDays}&platform=${funnelPlatform}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.ok) setFunnelData(j as FunnelData);
+      })
+      .catch(() => {});
+  }, [funnelDays, funnelPlatform]);
+
+  useEffect(() => {
+    setFunnelData(null);
+    loadFunnel();
+  }, [loadFunnel]);
+
   // Realtid: "just nu" ofta, resten tyst en gång i minuten.
   usePoll(loadLive, LIVE_MS);
   const refreshAll = useCallback(() => {
     loadOverview();
     loadSeries();
     loadRetention();
-  }, [loadOverview, loadSeries, loadRetention]);
+    loadFunnel();
+  }, [loadOverview, loadSeries, loadRetention, loadFunnel]);
   usePoll(refreshAll, REFRESH_MS);
 
   const loadUsers = useCallback((query: string, pageNum: number, s: Sort) => {
@@ -330,10 +352,11 @@ export default function AdminClient() {
             Appen
           </a>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-white/[0.06] p-1">
+        <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-white/[0.06] p-1">
           {(
             [
               ["overview", "Översikt"],
+              ["funnel", "Tratt"],
               ["retention", "Retention"],
               ["users", "Användare"],
             ] as const
@@ -586,6 +609,16 @@ export default function AdminClient() {
               <Kpi label="Swipes" value={stats?.ratingsTotal.toLocaleString("sv-SE") ?? "…"} sub={`${stats?.groupsActive ?? "…"} aktiva grupper`} />
             </div>
           </>
+        )}
+
+        {tab === "funnel" && (
+          <FunnelPanel
+            data={funnelData}
+            days={funnelDays}
+            onDays={setFunnelDays}
+            platform={funnelPlatform}
+            onPlatform={setFunnelPlatform}
+          />
         )}
 
         {tab === "retention" && (

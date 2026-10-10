@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { replayAnonLikes } from "@/lib/anonLikes";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 /**
  * Ett klick in i gästläge: skapar en minimal profil (utan onboarding) och
@@ -23,12 +24,14 @@ export default function GuestEntryButton({
   const [error, setError] = useState<string | null>(null);
 
   async function start() {
+    funnel("cta_guest");
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/profile/guest", { method: "POST", cache: "no-store" });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       if (res.ok && j.ok) {
+        funnel("guest_created");
         // Startsidans hero lovar att swipesen "följer med". Gästen får en riktig
         // profil här, så löftet infrias direkt — best-effort, precis som i
         // onboardingen.

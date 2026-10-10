@@ -18,6 +18,7 @@ import {
   type NudgeTrigger,
   type SignupNudgeDetail,
 } from "@/lib/signupNudge";
+import { funnel } from "@/lib/funnel";
 
 export default function SignupNudge() {
   const t = useTranslations("guestConvert");
@@ -48,6 +49,7 @@ export default function SignupNudge() {
         openRef.current = true;
         resolveRef.current = onResolve;
         markNudgeShown(tr);
+        funnel(`signup_nudge_${tr}`);
         setTrigger(tr);
       });
     }

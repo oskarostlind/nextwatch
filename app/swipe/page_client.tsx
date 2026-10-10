@@ -36,6 +36,7 @@ import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/Mat
 import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useLocale, useTranslations } from "next-intl";
+import { funnel, funnelSwipe } from "@/lib/funnel";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -366,6 +367,19 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
   const feedLoading = cards.length === 0 && (loading || !ready);
   const feedError = cards.length === 0 ? error : null;
 
+  // Tratt (lib/funnel.ts): kom fram till swipen → första kortet syns (och hur
+  // lång tid det tog) / leken tom / fel. Bara solo — grupp har egen klient.
+  const swipeMountAt = useRef(Date.now());
+  useEffect(() => funnel("swipe_view"), []);
+  const hasCards = cards.length > 0;
+  useEffect(() => {
+    if (hasCards) funnel("deck_ready", { ms: Date.now() - swipeMountAt.current });
+  }, [hasCards]);
+  useEffect(() => {
+    if (feedError) funnel("deck_error");
+    else if (!hasCards && ready && !loading) funnel("deck_empty");
+  }, [feedError, hasCards, ready, loading]);
+
   const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
@@ -470,6 +484,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
 
   /** Annonskortet är avklarat: räkna visningen och låt frekvensspärren avgöra. */
   function dismissAdCard(c: Card): void {
+    funnel("ad_card");
     if (!countedAds.current.has(c.id)) {
       countedAds.current.add(c.id);
       // Utan AdSense-klient ÄR annonskortet redan en premium-CTA — ett
@@ -538,6 +553,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
 
   function handleDislike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
+    funnelSwipe("dislike");
     recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -550,6 +566,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
 
   function handleLike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
+    funnelSwipe("like");
     recordUndo(c, "like");
     markSeen(c.id);
     saveRating(c, "like");
@@ -584,6 +601,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
 
   function handleSeen(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
+    funnelSwipe("seen");
     recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);

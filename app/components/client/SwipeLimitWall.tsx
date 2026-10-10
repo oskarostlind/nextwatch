@@ -24,6 +24,7 @@ import { watchRewardedForSwipes } from "@/lib/admobAds";
 // varför den inte får ligga i den här (lat-laddade) filen.
 import { SWIPE_LIMIT_EVENT } from "@/lib/swipeLimitEvent";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 type LimitDTO = {
   ok?: boolean;
@@ -70,6 +71,7 @@ export default function SwipeLimitWall() {
 
   useEffect(() => {
     const onLimit = () => {
+      funnel("limit_wall");
       setReached(true);
       // Hämta om allowancen så rewarded-erbjudandet speglar serverns läge.
       refresh(false);

@@ -17,6 +17,7 @@ import type { HeroCard } from "@/lib/curatedHero";
 import LoginSheet from "../auth/LoginSheet";
 import GuestEntryButton from "../auth/GuestEntryButton";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 const VISIBLE_BEHIND = 4;
 
@@ -44,6 +45,13 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
   const swipes = index;
   const hardGate = swipes >= HARD_GATE_AT;
+
+  // Tratt: startsidan visad / spelad / gate-kortet nått (lib/funnel.ts).
+  React.useEffect(() => funnel("landing_view"), []);
+  React.useEffect(() => {
+    if (swipes >= 1) funnel("hero_swipe");
+    if (hardGate) funnel("hero_gate");
+  }, [swipes, hardGate]);
 
   // Drag-läget som en motion value: allt bakom leken härleds ur den utan
   // att någonsin trigga en React-render under draget.
@@ -514,6 +522,7 @@ function GateCard({
         <div className="grid w-full shrink-0 gap-2">
           <a
             href="/onboarding"
+            onClick={() => funnel("cta_signup")}
             className="relative w-full rounded-xl py-3 text-center text-[15px] font-semibold text-black transition-transform active:scale-[0.98]"
             style={{
               background: `linear-gradient(180deg, ${accent} 0%, ${accent}D9 100%)`,

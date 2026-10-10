@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
 import AppleSignInButton from "@/app/components/auth/AppleSignInButton";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 export default function RegisterClient() {
   const t = useTranslations("auth");
@@ -43,6 +44,7 @@ export default function RegisterClient() {
       setErr(data?.message || t("genericErrorShort"));
       return;
     }
+    funnel("signup_email");
     setOkMsg(data.message || t("verifyLinkSent"));
     router.replace("/auth/verify/sent");
   }

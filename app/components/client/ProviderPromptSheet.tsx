@@ -26,6 +26,7 @@ import { providerLogoUrl } from "@/lib/providerLogos";
 import { retrySoloDeck } from "@/lib/swipeDeckStore";
 import { tourLockHeldBy } from "@/lib/tours/lock";
 import { notify } from "@/app/components/lib/notify";
+import { funnel } from "@/lib/funnel";
 
 /** Samma tjänster, i samma ordning, som onboardingens tjänstesteg. */
 const PROVIDERS = [
@@ -86,6 +87,7 @@ export default function ProviderPromptSheet() {
       done.current = true;
       markSeen();
       window.setTimeout(() => setOpen(true), 350);
+      funnel("provider_prompt");
     };
     window.addEventListener(SOLO_SWIPED_EVENT, onSwipe);
     return () => window.removeEventListener(SOLO_SWIPED_EVENT, onSwipe);
@@ -113,6 +115,7 @@ export default function ProviderPromptSheet() {
         return;
       }
       setOpen(false);
+      funnel("provider_saved", { count: selected.length });
       notify(t("saved"));
       // Den cachade leken byggdes utan providerfilter — bygg om den.
       void retrySoloDeck();
@@ -124,7 +127,9 @@ export default function ProviderPromptSheet() {
   }
 
   const close = () => {
-    if (!saving) setOpen(false);
+    if (saving) return;
+    funnel("provider_dismissed");
+    setOpen(false);
   };
 
   return (

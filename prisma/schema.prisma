@@ -566,3 +566,25 @@ model UserActivityDay {
   @@index([day], map: "idx_user_activity_days_day")
   @@map("user_activity_days")
 }
+
+/// Första-besöks-tratten (lib/funnel.ts): en rad per enhet och steg, bara
+/// FÖRSTA gången steget nås — "kom enheten hit?", inte hur ofta. Nyckeln är ett
+/// enhets-id i localStorage (inte nw_uid), eftersom uid kan bytas mitt i
+/// flödet (gäst → konto, Sign in with Apple). user_id är uid när steget nåddes.
+/// Bara nya enheter spåras: /api/track/funnel svarar track=false för befintliga
+/// användare på en ny enhet eller efter en uppdatering, så de inte ser ut som
+/// nya. Ingen relation till users med flit (samma skäl som acquisition_visits).
+model FunnelEvent {
+  deviceId  String   @map("device_id")
+  name      String
+  userId    String?  @map("user_id")
+  platform  String
+  source    String?
+  path      String?
+  props     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([deviceId, name])
+  @@index([name, createdAt], map: "idx_funnel_events_name_created_at")
+  @@map("funnel_events")
+}

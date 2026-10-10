@@ -21,6 +21,7 @@
 
 import { isNativeIos } from "@/lib/premiumPurchase";
 import { adEveryFromEnv } from "@/lib/ads";
+import { funnel } from "@/lib/funnel";
 
 const TEST_IDS = {
   interstitial: "ca-app-pub-3940256099942544/4411468910",
@@ -166,7 +167,9 @@ export async function initAdMobIfEligible(): Promise<boolean> {
       try {
         const consent = await AdMob.requestConsentInfo();
         if (consent.isConsentFormAvailable && consent.status === "REQUIRED") {
+          funnel("consent_form");
           await AdMob.showConsentForm();
+          funnel("consent_done");
         }
       } catch {
         npa = true;
@@ -176,8 +179,10 @@ export async function initAdMobIfEligible(): Promise<boolean> {
       try {
         let att = await AdMob.trackingAuthorizationStatus();
         if (att.status === "notDetermined") {
+          funnel("att_prompt");
           await AdMob.requestTrackingAuthorization();
           att = await AdMob.trackingAuthorizationStatus();
+          funnel(att.status === "authorized" ? "att_allowed" : "att_denied");
         }
         npa = att.status !== "authorized";
       } catch {
@@ -275,6 +280,7 @@ export function registerSwipeForAds(): void {
       const { AdMob } = await plugin();
       await ensureDismissListener();
       await AdMob.showInterstitial();
+      funnel("ad_interstitial");
       swipesSinceAd = 0;
       lastInterstitialAt = Date.now();
       interstitialReady = false;

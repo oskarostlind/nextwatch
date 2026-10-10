@@ -16,6 +16,7 @@ import { toggleKeywordGroup } from "@/lib/subgenres";
 import { useLocale, useTranslations } from "next-intl";
 import { LOCALES, tmdbLanguage, type AppLocale } from "@/lib/i18nConfig";
 import { writeUiLanguageCookie } from "@/lib/uiLanguage";
+import { funnel } from "@/lib/funnel";
 
 // ---------- typer ----------
 type Fav = { id: number; title: string; year?: string; poster?: string | null };
@@ -183,6 +184,10 @@ export default function Client({
   const activeLocale = useLocale() as AppLocale;
 
   const [step, setStep] = useState(0);
+  // Tratt: vilket onboarding-steg nådde man? (lib/funnel.ts)
+  useEffect(() => {
+    funnel(`onboarding_step_${step + 1}`);
+  }, [step]);
   const [displayName, setDisplayName] = useState(initialName);
   const [username, setUsername] = useState("");
   const [usernameBlockedChars, setUsernameBlockedChars] = useState(false);
@@ -362,6 +367,7 @@ export default function Client({
       // titel får aldrig blockera onboardingen.
       await replayAnonLikes().catch(() => 0);
 
+      funnel("onboarding_done");
       router.replace(redirect);
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("errGeneric"));

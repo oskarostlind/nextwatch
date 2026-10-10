@@ -46,6 +46,7 @@ import { useTourGate } from "@/lib/tours/useTourGate";
 import type { GestureType } from "@/lib/tours/types";
 import GestureHint from "./GestureHint";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 const TOUR_ID = "swipe-gestures" as const;
 
@@ -114,6 +115,9 @@ export default function SwipeGestureTour() {
   const seenRotate = useTransform(y, [-120, -36], [-6, 0]);
 
   useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (state === "show") funnel("tour_shown");
+  }, [state]);
 
   useEffect(() => {
     if (state !== "show") return;
@@ -159,6 +163,7 @@ export default function SwipeGestureTour() {
   }
 
   function finishTour(status: "completed" | "skipped") {
+    funnel(status === "completed" ? "tour_completed" : "tour_skipped");
     if (status === "completed") complete();
     else skip();
   }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
+import { funnel } from "@/lib/funnel";
 
 /**
  * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
@@ -125,7 +126,10 @@ export default function PushRegistration() {
           try {
             const perm = await PushNotifications.checkPermissions();
             if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
-              if (!softAskSnoozed()) setSoftAskOpen(true);
+              if (!softAskSnoozed()) {
+                setSoftAskOpen(true);
+                funnel("push_softask");
+              }
               return;
             }
             if (perm.receive !== "granted") return;
@@ -139,6 +143,7 @@ export default function PushRegistration() {
         requestAndRegister.current = async () => {
           try {
             const perm = await PushNotifications.requestPermissions();
+            funnel(perm.receive === "granted" ? "push_granted" : "push_denied");
             if (perm.receive === "granted") await PushNotifications.register();
           } catch {
             /* ignorera */
@@ -204,6 +209,7 @@ export default function PushRegistration() {
             onClick={() => {
               setSoftAskOpen(false);
               snoozeSoftAsk();
+              funnel("push_softask_yes");
               void requestAndRegister.current?.();
             }}
             className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
@@ -215,6 +221,7 @@ export default function PushRegistration() {
             onClick={() => {
               setSoftAskOpen(false);
               snoozeSoftAsk();
+              funnel("push_softask_later");
             }}
             className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/5"
           >

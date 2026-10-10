@@ -34,7 +34,7 @@ There is **no test suite** in this project — no test script and no test files.
 Despite a `NEXTAUTH_SECRET` env var, there is **no NextAuth**. Sessions are a plain httpOnly cookie:
 - `nw_uid` is the identity cookie (1 year, or 30 days if `remember === false`), set/cleared via helpers in `lib/auth.ts` (`attachSessionCookies`, `sessionRedirect`, `clearAuthCookies`). Cookie options come from `lib/cookies.ts` (kept import-free to dodge a Turbopack export issue).
 - `middleware.ts` stamps `nw_uid`, `nw_region`, `nw_locale` on **every** request (including anonymous visitors) — region from `x-vercel-ip-country`, locale from `accept-language` (defaults `SE` / `sv-SE`). It also rewrites `/api/profile/get → /api/profile` for back-compat. Route protection is NOT done here — pages/layouts check the session themselves.
-- Real credential flows live under `app/api/auth/*`: `register`, `login`, `logout`, `verify` + `request-verify` (email verification), `forgot` + `reset` (password reset), `apple` (Sign in with Apple, verified in `lib/appleAuth.ts`). Passwords hashed in `lib/hash.ts` (bcryptjs), email via `lib/email.ts` (nodemailer/SMTP).
+- Real credential flows live under `app/api/auth/*`: `register`, `login`, `logout`, `verify` + `request-verify` (email verification), `forgot` + `reset` (password reset), `apple` (Sign in with Apple, verified in `lib/appleAuth.ts`). Passwords hashed in `lib/hash.ts` (bcryptjs), email via `lib/email.ts` (Resend — see *E-post* below).
 
 Most API routes read `const uid = (await cookies()).get("nw_uid")?.value` and return 401 if missing — there is no shared `getSession()` helper, so follow the existing inline pattern.
 
@@ -108,6 +108,14 @@ Three behaviours exist because App Review demanded them — see `.cursor/skills/
 The Next.js app is deployed to the web (`www.nextwatch.se`) and loaded inside a native iOS shell via Capacitor — `capacitor.config.ts` sets `server.url` to the live site, so **iOS is a WebView wrapper, not a static bundle** (the app can't be statically exported; it needs API routes/middleware/cookies). `www/index.html` is only a required local fallback for Capacitor's copy step. Push tokens are registered client-side (`app/components/client/PushRegistration.tsx`) and stored via `app/api/push/register` in `PushToken`; server sending logic in `lib/push.ts`.
 
 **iOS build numbers are auto-bumped by Appflow** (Trapeze reads `CI_BUILD_NUMBER` in `appflow:build`) — do NOT manually bump before every build. `npm run bump:ios` is only for local, non-Appflow testing. Full details in `.cursor/skills/ios-appflow-build/SKILL.md`. Key iOS files: `ios/App/App/App.entitlements` (Sign in with Apple), `appflow.yml`, `patches/@capacitor-community+apple-sign-in+7.1.0.patch`. App ID: `com.nextwatch.app`.
+
+### E-post (Resend — sedan 2026-10-10)
+All e-post går genom **`lib/email.ts`** via Resends REST-API (fetch, inget SDK). Strato SMTP/nodemailer används inte längre — lägg aldrig till en egen transport i en route igen (det fanns fyra kopior innan).
+- **Utskick:** `sendVerificationEmail`, `sendPasswordResetEmail`, `sendPremiumWelcomeEmail` (Stripe-webhook + `apple/iap/verify`, idempotent per köp, bara när användaren inte redan var premium), `sendReportMail`. Allt renderas med `renderEmail()` → html + textversion, på mottagarens språk (`email.*` i `messages/*.json`). `sendEmail` kastar aldrig.
+- **DNS (Strato):** DKIM `resend._domainkey`, SPF/bounce på `send.`, CNAME `rsend`, och **rotdomänens MX pekar på Resend inbound** — all post till @nextwatch.se landar i Resend, inte i Stratos brevlådor.
+- **Inkorg i /admin → Mejl** (`app/admin/MailPanel.tsx`, `lib/adminMail.ts`, `app/api/admin/mail/*`): läser mottaget/skickat ur Resend, filtrerat på `nextwatch.se` (kontot delas med andra projekt). Skicka/svara går från `ADMIN_FROM` (support@) med In-Reply-To. Ingen DB-tabell.
+- **Push vid nytt mejl:** Resend-webhook `email.received` → `app/api/email/inbound` (Svix-signatur, `RESEND_WEBHOOK_SECRET`) → push `type: admin_mail` till `ADMIN_EMAIL`-användaren.
+- Env: `RESEND_API_KEY` (full access), `RESEND_WEBHOOK_SECRET`, valfria `EMAIL_FROM`, `ADMIN_EMAIL_FROM`, `SUPPORT_EMAIL`.
 
 ### Rate limiting
 `lib/rateLimit.ts` is an **in-memory, per-instance** limiter (not Redis/KV) — fine for single-instance but does not hold across serverless instances. Used on heavy endpoints (`recs`, `group/match`). Constants: `RECS_LIMIT`, `MATCH_LIMIT`, `AUTH_LIMIT`. Key is `nw_uid`, falling back to IP.

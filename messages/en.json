@@ -162,6 +162,18 @@
       "intro": "Click the button to verify your email address.",
       "subject": "Confirm your email",
       "validity": "Valid for 24 hours."
+    },
+    "common": {
+      "footer": "You're getting this email because you have a NextWatch account."
+    },
+    "premium": {
+      "subject": "Welcome to NextWatch Premium",
+      "heading": "Premium is active",
+      "intro": "Thanks for supporting NextWatch! Your Premium is active now and works on every device you're signed in on.",
+      "perks": "You get unlimited swipes, no ads, groups of up to 20 people and your full taste profile.",
+      "cta": "Start swiping",
+      "manageStripe": "Your subscription renews automatically every month. Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
+      "manageApple": "Your subscription renews automatically every month. Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions."
     }
   },
   "filmChat": {

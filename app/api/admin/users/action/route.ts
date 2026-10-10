@@ -7,9 +7,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
-import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/adminAuth";
+import { sendVerificationEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,29 +23,6 @@ function computeOrigin(req: NextRequest): string {
   return `${u.protocol}//${u.host}`;
 }
 
-async function sendVerifyEmail(to: string, link: string): Promise<boolean> {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return false;
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const secure = ["true", "1", "yes", "on"].includes(String(process.env.SMTP_SECURE).toLowerCase()) || port === 465;
-  const from = process.env.SMTP_FROM || `NextWatch <${user}>`;
-  const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-  await transporter.sendMail({
-    from,
-    to,
-    subject: "Bekräfta din e-post",
-    html: `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-        <h2>Bekräfta din e-post</h2>
-        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">Verifiera e-post</a></p>
-        <p>Giltig i 24 timmar.</p>
-      </div>
-    `,
-  });
-  return true;
-}
 
 export async function POST(req: NextRequest) {
   const jar = await cookies();
@@ -99,7 +76,9 @@ export async function POST(req: NextRequest) {
         data: { token, userId, email: target.email, name: null, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
       });
       const link = `${computeOrigin(req)}/auth/verify?token=${token}`;
-      const sent = await sendVerifyEmail(target.email, link).catch(() => false);
+      // Mottagarens språk, inte adminens — samma regel som i forgot.
+      const prof = await prisma.profile.findUnique({ where: { userId }, select: { uiLanguage: true } });
+      const sent = (await sendVerificationEmail(target.email, link, prof?.uiLanguage)).sent;
       return NextResponse.json({
         ok: true,
         message: sent ? "Verifieringsmail skickat." : "Länk skapad men mailet kunde inte skickas.",

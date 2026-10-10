@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
 
     let mailed = false;
     try {
-      await sendReportMail({
+      const res = await sendReportMail({
         reporterId: reporter?.id ?? me,
         reporterUsername: reporter?.username ?? null,
         reporterEmail: reporter?.email ?? null,
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         details,
         blocked: alsoBlock,
       });
-      mailed = true;
+      mailed = res.sent;
     } catch (e) {
       // Rapporten är ändå registrerad i loggen och blockeringen är gjord.
       console.error("[report] kunde inte maila supporten:", e instanceof Error ? e.message : e);

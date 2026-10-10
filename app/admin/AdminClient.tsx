@@ -29,6 +29,7 @@ import UserSheet from "./UserSheet";
 import LivePanel, { type LiveData } from "./LivePanel";
 import RetentionPanel, { pct, type RetentionData } from "./RetentionPanel";
 import FunnelPanel, { type FunnelData } from "./FunnelPanel";
+import MailPanel, { MailComposer, type ComposeDraft } from "./MailPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -81,7 +82,7 @@ type AdminUser = {
 
 type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
-type Tab = "overview" | "funnel" | "retention" | "users";
+type Tab = "overview" | "funnel" | "retention" | "users" | "mail";
 type Sort = "newest" | "active" | "ratings";
 
 const RANGES = [7, 30, 90, 365] as const;
@@ -150,6 +151,13 @@ function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: stri
 
 export default function AdminClient() {
   const [tab, setTab] = useState<Tab>("overview");
+  const [mailDraft, setMailDraft] = useState<ComposeDraft | null>(null);
+
+  // Djuplänk från push ("Mejl från …") → /admin?tab=mail
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "mail" || t === "users" || t === "funnel" || t === "retention") setTab(t);
+  }, []);
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
 
   const [stats, setStats] = useState<Stats | null>(null);
@@ -352,20 +360,21 @@ export default function AdminClient() {
             Appen
           </a>
         </div>
-        <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-white/[0.06] p-1">
+        <div className="mt-3 grid grid-cols-5 gap-1 rounded-xl bg-white/[0.06] p-1">
           {(
             [
               ["overview", "Översikt"],
               ["funnel", "Tratt"],
               ["retention", "Retention"],
               ["users", "Användare"],
+              ["mail", "Mejl"],
             ] as const
           ).map(([k, label]) => (
             <button
               key={k}
               type="button"
               onClick={() => setTab(k)}
-              className={`truncate rounded-lg px-1 py-2 text-sm font-semibold transition ${
+              className={`truncate rounded-lg px-0.5 py-2 text-[13px] font-semibold transition sm:text-sm ${
                 tab === k ? "bg-white text-neutral-950" : "text-white/60 hover:text-white"
               }`}
             >
@@ -757,9 +766,18 @@ export default function AdminClient() {
             )}
           </>
         )}
+        {tab === "mail" && <MailPanel />}
       </div>
 
-      {openUser && <UserSheet userId={openUser} onClose={closeSheet} onChanged={refreshAfterAction} />}
+      {openUser && (
+        <UserSheet
+          userId={openUser}
+          onClose={closeSheet}
+          onChanged={refreshAfterAction}
+          onEmail={(email) => setMailDraft({ to: email, subject: "", body: "" })}
+        />
+      )}
+      {mailDraft && <MailComposer initial={mailDraft} onClose={() => setMailDraft(null)} />}
     </main>
   );
 }

@@ -162,6 +162,18 @@
       "intro": "Klicka på knappen för att verifiera din e-postadress.",
       "subject": "Bekräfta din e-post",
       "validity": "Giltig i 24 timmar."
+    },
+    "common": {
+      "footer": "Du får det här mejlet för att du har ett konto på NextWatch."
+    },
+    "premium": {
+      "subject": "Välkommen till NextWatch Premium",
+      "heading": "Premium är aktiverat",
+      "intro": "Tack för att du stöttar NextWatch! Ditt Premium är aktivt nu och gäller på alla enheter där du är inloggad.",
+      "perks": "Du har obegränsat antal swipes, inga annonser, grupper med upp till 20 personer och hela din smakprofil.",
+      "cta": "Börja swipea",
+      "manageStripe": "Prenumerationen förnyas automatiskt varje månad. Kvittot kommer i ett separat mejl från Stripe. Du kan säga upp när som helst i profilen under Inställningar → Hantera prenumeration.",
+      "manageApple": "Prenumerationen förnyas automatiskt varje månad. Apple skickar kvittot. Du säger upp i iPhone-inställningarna → ditt namn → Prenumerationer."
     }
   },
   "filmChat": {

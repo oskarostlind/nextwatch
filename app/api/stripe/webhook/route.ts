@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { sendPremiumWelcomeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,6 +72,25 @@ async function applySubscription(uid: string, sub: SubLike): Promise<void> {
   void isActiveish;
 }
 
+/**
+ * "Välkommen till Premium"-mejlet efter ett lyckat prenumerationsköp.
+ * Mottagare = kontots e-post (fallback: den Stripe fick i checkout), på
+ * kontots språk. Idempotent per checkout-session — Stripe gör om webhooks.
+ * Kastar aldrig: ett mejlfel ska inte ge 500 och få Stripe att försöka igen.
+ */
+async function sendStripeWelcome(uid: string, session: Stripe.Checkout.Session): Promise<void> {
+  const u = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { email: true, profile: { select: { uiLanguage: true } } },
+  });
+  const to = u?.email ?? session.customer_details?.email ?? null;
+  if (!to) return;
+  await sendPremiumWelcomeEmail(to, u?.profile?.uiLanguage, {
+    provider: "stripe",
+    idempotencyKey: `premium-welcome/stripe/${session.id}`,
+  });
+}
+
 export async function POST(req: NextRequest) {
   const key = process.env.STRIPE_SECRET_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -122,6 +142,7 @@ export async function POST(req: NextRequest) {
               create: { id: uid, plan: "premium", planSince: new Date(), subProvider: "stripe" },
             });
           }
+          await sendStripeWelcome(uid, session).catch((e) => console.error("[stripe/webhook] welcome mail", e));
         } else if (session.payment_status === "paid" || session.status === "complete") {
           // Lifetime (engångsköp) – oförändrat beteende.
           const now = new Date();

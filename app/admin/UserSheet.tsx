@@ -128,11 +128,14 @@ export default function UserSheet({
   userId,
   onClose,
   onChanged,
+  onEmail,
 }: {
   userId: string;
   onClose: () => void;
   /** Anropas efter plan-/raderingsåtgärd så listan kan laddas om. */
   onChanged: () => void;
+  /** Öppnar skriv-mejl (AdminClient → MailComposer) med användarens adress ifylld. */
+  onEmail?: (email: string) => void;
 }) {
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -473,6 +476,15 @@ export default function UserSheet({
                     <option value="lifetime">lifetime</option>
                   </select>
                 </label>
+                {u.email && onEmail && (
+                  <button
+                    type="button"
+                    onClick={() => onEmail(u.email as string)}
+                    className="w-full rounded-lg border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/5"
+                  >
+                    Skicka mejl
+                  </button>
+                )}
                 {!u.verified && u.email && (
                   <button
                     type="button"

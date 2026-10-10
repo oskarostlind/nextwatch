@@ -15,6 +15,9 @@ import {
   isKnownIapProduct,
 } from "@/lib/appleIap";
 import { apiMsg } from "@/lib/apiMessages";
+import { getEntitlement } from "@/lib/entitlements";
+import { sendPremiumWelcomeEmail } from "@/lib/email";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +59,10 @@ export async function POST(req: NextRequest) {
     const purchasedAt = transaction.purchaseDate ? new Date(transaction.purchaseDate) : new Date();
     const expiresAt = transaction.expiresDate ? new Date(transaction.expiresDate) : null;
 
+    // Var användaren redan premium? Då är det en förnyelse/återställning, inte
+    // ett nytt köp, och välkomstmejlet ska inte gå ut igen.
+    const wasPremium = (await getEntitlement(uid).catch(() => null))?.isPremium ?? false;
+
     const result = await grantPremiumFromIap({
       uid,
       transactionId: transaction.transactionId,
@@ -70,6 +77,19 @@ export async function POST(req: NextRequest) {
         { ok: false, message: await apiMsg("iapOtherAccount") },
         { status: 409 }
       );
+    }
+
+    if (result.granted && !wasPremium) {
+      const u = await prisma.user.findUnique({
+        where: { id: uid },
+        select: { email: true, profile: { select: { uiLanguage: true } } },
+      });
+      if (u?.email) {
+        await sendPremiumWelcomeEmail(u.email, u.profile?.uiLanguage, {
+          provider: "apple",
+          idempotencyKey: `premium-welcome/apple/${transaction.transactionId}`,
+        });
+      }
     }
 
     return NextResponse.json({

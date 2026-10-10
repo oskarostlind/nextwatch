@@ -103,6 +103,9 @@ export default function PushRegistration() {
             } else if (type === "share_received") {
               // Filmtips: inboxen överst i watchlisten öppnar tråden.
               window.location.href = "/watchlist";
+            } else if (type === "admin_mail") {
+              // Inkommande mejl till nextwatch.se (app/api/email/inbound) — bara admin får den.
+              window.location.href = "/admin?tab=mail";
             } else if (type === "group_match" || type === "group_invite_accepted") {
               const code = data?.groupCode;
               window.location.href = code

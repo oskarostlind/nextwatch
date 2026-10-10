@@ -6,8 +6,7 @@ import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "../../../../lib/rat
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import nodemailer from "nodemailer";
-import { getTranslations } from "next-intl/server";
+import { sendVerificationEmail } from "@/lib/email";
 import { uiLocaleFromCookies } from "@/lib/serverLocale";
 import { apiMsg } from "@/lib/apiMessages";
 import { stampAcquisition } from "@/lib/acquisitionServer";
@@ -28,38 +27,7 @@ function computeOrigin(req: NextRequest): string {
   return `${u.protocol}//${u.host}`;
 }
 
-function asBool(v?: string | null, def = false) {
-  if (!v) return def;
-  return ["true", "1", "yes", "on"].includes(String(v).toLowerCase());
-}
-function asNum(v?: string | null, def = 587) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : def;
-}
 
-async function sendEmailSMTP(to: string, subject: string, html: string) {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const port = asNum(process.env.SMTP_PORT, 587);
-  const secure = asBool(process.env.SMTP_SECURE, port === 465);
-  const from = process.env.SMTP_FROM || `NextWatch <${user ?? "noreply@localhost"}>`;
-
-  if (!host || !user || !pass) {
-    return { sent: false as const, reason: "missing_smtp_env" as const, detail: { host, user, pass } };
-  }
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure, // true = 465 (SMTPS), false = STARTTLS 587
-    auth: { user, pass },
-  });
-
-  const info = await transporter.sendMail({ from, to, subject, html });
-  // nodemailer ger id/response
-  return { sent: true as const, provider: { messageId: info.messageId, response: info.response } };
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -138,18 +106,7 @@ export async function POST(req: NextRequest) {
 
     // Registreringen sker i webbläsaren, så nw_lang-cookien speglar det språk
     // användaren just fyllde i formuläret på.
-    const t = await getTranslations({ locale: await uiLocaleFromCookies(), namespace: "email.verify" });
-    const html = `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-        <h2>${t("heading")}</h2>
-        <p>${t("intro")}</p>
-        <p><a href="${link}" style="display:inline-block;padding:10px 14px;background:#0ea5e9;color:#fff;border-radius:8px;text-decoration:none">${t("cta")}</a></p>
-        <p>${t("fallback")}</p>
-        <p><code>${link}</code></p>
-        <p>${t("validity")}</p>
-      </div>
-    `;
-    const mailRes = await sendEmailSMTP(email, t("subject"), html);
+    const mailRes = await sendVerificationEmail(email, link, await uiLocaleFromCookies());
 
     return NextResponse.json({
       ok: true,
@@ -158,7 +115,7 @@ export async function POST(req: NextRequest) {
         : await apiMsg("accountUpdatedMailFailed"),
       verifyUrl: link,
       emailSent: mailRes.sent,
-      emailProvider: mailRes.provider ?? mailRes.reason ?? null,
+      emailProvider: mailRes.sent ? mailRes.id : mailRes.reason,
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

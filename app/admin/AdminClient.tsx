@@ -10,11 +10,22 @@
 //     7/30/90/365 dagar.
 //   - Användarprofilen (UserSheet) öppnas som helskärmsark på mobil och
 //     sidopanel på desktop, med "Lägg till som vän" och adminåtgärderna.
+//
+// 2026-10-10: retention + realtid.
+//   - "Just nu" överst (LivePanel, /api/admin/live, pollas var 15:e s):
+//     online nu, aktiva/återkommande idag, vem som kom tillbaka.
+//   - Ny flik Retention (RetentionPanel, /api/admin/retention): kommer nya
+//     användare tillbaka? Dag 1/7/30, veckokohorter, per källa.
+//   - Allt annat uppdateras tyst var 60:e s medan fliken syns.
+//   - "← Appen" i toppen — /admin har ingen app-chrome (AppShell) att gå
+//     tillbaka med.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
 import { DailyChart, type Point } from "./charts";
 import UserSheet from "./UserSheet";
+import LivePanel, { type LiveData } from "./LivePanel";
+import RetentionPanel, { pct, type RetentionData } from "./RetentionPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -42,6 +53,7 @@ type SeriesRow = {
   day: string;
   signups: number;
   active: number;
+  returning: number;
   swipes: number;
   watchlist: number;
   purchases: number;
@@ -66,10 +78,28 @@ type AdminUser = {
 
 type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
-type Tab = "overview" | "users";
+type Tab = "overview" | "retention" | "users";
 type Sort = "newest" | "active" | "ratings";
 
 const RANGES = [7, 30, 90, 365] as const;
+
+const LIVE_MS = 15_000;
+const REFRESH_MS = 60_000;
+
+/** Kör fn med jämna mellanrum medan sidan syns, och direkt när den syns igen. */
+function usePoll(fn: () => void, ms: number) {
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === "visible") fn();
+    };
+    const t = setInterval(tick, ms);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [fn, ms]);
+}
 
 function fmtKr(n: number): string {
   return `${n.toLocaleString("sv-SE", { maximumFractionDigits: n < 100 ? 2 : 0 })} kr`;
@@ -136,6 +166,15 @@ export default function AdminClient() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [openUser, setOpenUser] = useState<string | null>(null);
 
+  const [live, setLive] = useState<LiveData | null>(null);
+  const [retention, setRetention] = useState<RetentionData | null>(null);
+  const [retSource, setRetSource] = useState("all");
+  const [retLogin, setRetLogin] = useState(false);
+  const [sourceOptions, setSourceOptions] = useState<(string | null)[]>([]);
+  // Ofiltrerad total till sammanfattningen i Översikt (oberoende av filtret i Retention-fliken).
+  const [retAll, setRetAll] = useState<RetentionData["total"] | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+
   const loadOverview = useCallback(() => {
     void fetch("/api/admin/overview", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -153,8 +192,7 @@ export default function AdminClient() {
 
   useEffect(loadOverview, [loadOverview]);
 
-  useEffect(() => {
-    setSeries(null);
+  const loadSeries = useCallback(() => {
     void fetch(`/api/admin/timeseries?days=${range}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
@@ -165,6 +203,56 @@ export default function AdminClient() {
       })
       .catch(() => {});
   }, [range]);
+
+  useEffect(() => {
+    setSeries(null);
+    loadSeries();
+  }, [loadSeries]);
+
+  const loadLive = useCallback(() => {
+    void fetch("/api/admin/live", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.ok) {
+          setLive(j as LiveData);
+          setUpdatedAt(new Date());
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(loadLive, [loadLive]);
+
+  const loadRetention = useCallback(() => {
+    const usp = new URLSearchParams({ source: retSource });
+    if (retLogin) usp.set("login", "1");
+    void fetch(`/api/admin/retention?${usp.toString()}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.ok) {
+          const d = j as RetentionData;
+          setRetention(d);
+          // Källchippen hämtas från den ofiltrerade vyn — filtrerad innehåller bara en källa.
+          if (d.source === "all") setSourceOptions(d.sources.map((x) => x.source));
+          if (d.source === "all" && !d.loginOnly) setRetAll(d.total);
+        }
+      })
+      .catch(() => {});
+  }, [retSource, retLogin]);
+
+  useEffect(() => {
+    setRetention(null);
+    loadRetention();
+  }, [loadRetention]);
+
+  // Realtid: "just nu" ofta, resten tyst en gång i minuten.
+  usePoll(loadLive, LIVE_MS);
+  const refreshAll = useCallback(() => {
+    loadOverview();
+    loadSeries();
+    loadRetention();
+  }, [loadOverview, loadSeries, loadRetention]);
+  usePoll(refreshAll, REFRESH_MS);
 
   const loadUsers = useCallback((query: string, pageNum: number, s: Sort) => {
     const usp = new URLSearchParams();
@@ -219,24 +307,42 @@ export default function AdminClient() {
         className="sticky top-0 z-20 border-b border-white/10 bg-neutral-950/90 px-4 pb-3 backdrop-blur"
         style={{ paddingTop: "max(env(safe-area-inset-top), 16px)" }}
       >
-        <div>
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-widest text-cyan-400/80">Endast du ser detta</p>
             <h1 className="text-2xl font-bold tracking-tight">Admin</h1>
+            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/40">
+              <span className={`h-1.5 w-1.5 rounded-full ${updatedAt ? "bg-emerald-400" : "bg-white/25"}`} />
+              {updatedAt
+                ? `Live · ${updatedAt.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Ansluter…"}
+            </p>
           </div>
+          {/* Vanlig <a> (inte router-Link): appen har egen chrome som /admin saknar,
+              så en full navigering bygger upp den rätt. */}
+          <a
+            href="/swipe"
+            className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.12] active:scale-[0.98]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Appen
+          </a>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.06] p-1">
+        <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-white/[0.06] p-1">
           {(
             [
               ["overview", "Översikt"],
-              ["users", `Användare${stats ? ` · ${stats.totalUsers}` : ""}`],
+              ["retention", "Retention"],
+              ["users", "Användare"],
             ] as const
           ).map(([k, label]) => (
             <button
               key={k}
               type="button"
               onClick={() => setTab(k)}
-              className={`rounded-lg py-2 text-sm font-semibold transition ${
+              className={`truncate rounded-lg px-1 py-2 text-sm font-semibold transition ${
                 tab === k ? "bg-white text-neutral-950" : "text-white/60 hover:text-white"
               }`}
             >
@@ -249,8 +355,38 @@ export default function AdminClient() {
       <div className="px-4 pb-[max(env(safe-area-inset-bottom),96px)] pt-5">
         {tab === "overview" && (
           <>
+            {/* ══ Just nu ══ */}
+            <SectionTitle sub="Uppdateras var 15:e sekund. Tryck på en person för profilen.">Just nu</SectionTitle>
+            <LivePanel data={live} onOpenUser={setOpenUser} />
+
+            {/* ══ Kommer de tillbaka? (sammanfattning — detaljer i Retention-fliken) ══ */}
+            <div className="mb-3 mt-8 flex items-end justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-white">Kommer de tillbaka?</h2>
+                <p className="text-xs text-white/40">Nya användare senaste 90 dagarna.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("retention")}
+                className="shrink-0 text-xs font-semibold text-cyan-300 hover:text-cyan-200"
+              >
+                Mer →
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["Dag 1", retAll ? pct(retAll.d1, retAll.d1Base) : undefined],
+                  ["Tillbaka", retAll ? pct(retAll.back, retAll.backBase) : undefined],
+                  ["Kvar 7 d+", retAll ? pct(retAll.d7, retAll.d7Base) : undefined],
+                ] as const
+              ).map(([label, p]) => (
+                <Kpi key={label} label={label} value={p === undefined ? "…" : p === null ? "—" : `${p} %`} />
+              ))}
+            </div>
+
             {/* ══ Idag ══ */}
-            <SectionTitle sub="Svensk kalenderdag. Aktiva = unika användare som swipat.">Idag</SectionTitle>
+            <SectionTitle sub="Svensk kalenderdag. Aktiva = öppnade appen eller swipade.">Idag</SectionTitle>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Kpi
                 label="Nya användare"
@@ -308,10 +444,17 @@ export default function AdminClient() {
                 />
                 <DailyChart
                   title="Aktiva användare"
-                  hint="Unika användare som swipat minst en gång den dagen."
+                  hint="Unika användare som öppnat appen eller swipat den dagen."
                   data={pick("active")}
                   summary="avg"
                   color="#a78bfa"
+                />
+                <DailyChart
+                  title="Återkommande användare"
+                  hint="Aktiva som började en tidigare dag — de som kom tillbaka."
+                  data={pick("returning")}
+                  summary="avg"
+                  color="#34d399"
                 />
                 <DailyChart title="Swipes" hint="Alla gilla/nej/sett/betyg." data={pick("swipes")} color="#a78bfa" />
                 <DailyChart title="Till bevakningslistan" data={pick("watchlist")} color="#f472b6" />
@@ -443,6 +586,17 @@ export default function AdminClient() {
               <Kpi label="Swipes" value={stats?.ratingsTotal.toLocaleString("sv-SE") ?? "…"} sub={`${stats?.groupsActive ?? "…"} aktiva grupper`} />
             </div>
           </>
+        )}
+
+        {tab === "retention" && (
+          <RetentionPanel
+            data={retention}
+            sourceOptions={sourceOptions}
+            source={retSource}
+            onSource={setRetSource}
+            loginOnly={retLogin}
+            onLoginOnly={setRetLogin}
+          />
         )}
 
         {tab === "users" && (

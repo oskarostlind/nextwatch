@@ -2,9 +2,10 @@
 //
 // En rad per dygn (svensk tid) för de senaste `days` dagarna:
 //   signups   — nya konton (users.created_at)
-//   active    — unika användare som swipat/betygsatt den dagen (ratings).
-//               lastActiveAt sparar bara SENASTE tillfället, så historisk DAU
-//               måste härledas ur betygen — det är den bästa proxyn som finns.
+//   active    — unika användare som var aktiva den dagen (lib/activitySql.ts:
+//               öppnade appen, swipade, listade, röstade). Före 2026-10-10
+//               fanns bara swipes m.m. att gå på, så äldre dagar är en undre gräns.
+//   returning — av dem: användare som skapades en TIDIGARE dag, dvs. kom tillbaka
 //   swipes    — antal betyg/swipes
 //   watchlist — tillägg i bevakningslistan
 //   purchases — Stripe-köp + Apple-transaktioner
@@ -17,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/adminAuth";
+import { activityDaysSql, activityTableExists } from "@/lib/activitySql";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ type Row = {
   day: string;
   signups: number;
   active: number;
+  returning: number;
   swipes: number;
   watchlist: number;
   purchases: number;
@@ -43,6 +46,8 @@ export async function GET(req: NextRequest) {
   const requested = Number(req.nextUrl.searchParams.get("days"));
   const days = ALLOWED_DAYS.has(requested) ? requested : 30;
 
+  const hasTable = await activityTableExists();
+
   // Svensk kalenderdag: en registrering 00:30 svensk tid hör till den dagen,
   // inte gårdagen som i UTC.
   const rows = await prisma.$queryRaw<
@@ -50,6 +55,7 @@ export async function GET(req: NextRequest) {
       day: Date;
       signups: bigint;
       active: bigint;
+      ret_users: bigint;
       swipes: bigint;
       watchlist: bigint;
       purchases: bigint;
@@ -74,9 +80,18 @@ export async function GET(req: NextRequest) {
       FROM users, since WHERE created_at >= since.ts GROUP BY 1
     ),
     r AS (
-      SELECT (decided_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Stockholm')::date AS day,
-             count(*) AS n, count(DISTINCT user_id) AS a
+      SELECT (decided_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Stockholm')::date AS day, count(*) AS n
       FROM ratings, since WHERE decided_at >= since.ts GROUP BY 1
+    ),
+    act AS (${activityDaysSql(days + 1, hasTable)}),
+    ac AS (
+      SELECT act.d AS day,
+             count(DISTINCT act.user_id) AS a,
+             count(DISTINCT act.user_id) FILTER (
+               WHERE (us.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Stockholm')::date < act.d
+             ) AS ret
+      FROM act JOIN users us ON us.id = act.user_id
+      GROUP BY act.d
     ),
     w AS (
       SELECT (added_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Stockholm')::date AS day, count(*) AS n
@@ -97,7 +112,8 @@ export async function GET(req: NextRequest) {
     )
     SELECT d.day,
            COALESCE(u.n, 0) AS signups,
-           COALESCE(r.a, 0) AS active,
+           COALESCE(ac.a, 0) AS active,
+           COALESCE(ac.ret, 0) AS ret_users,
            COALESCE(r.n, 0) AS swipes,
            COALESCE(w.n, 0) AS watchlist,
            COALESCE(p.n, 0) AS purchases,
@@ -105,6 +121,7 @@ export async function GET(req: NextRequest) {
     FROM d
     LEFT JOIN u ON u.day = d.day
     LEFT JOIN r ON r.day = d.day
+    LEFT JOIN ac ON ac.day = d.day
     LEFT JOIN w ON w.day = d.day
     LEFT JOIN p ON p.day = d.day
     LEFT JOIN g ON g.day = d.day
@@ -123,11 +140,12 @@ export async function GET(req: NextRequest) {
     day: new Date(r.day).toISOString().slice(0, 10),
     signups: Number(r.signups),
     active: Number(r.active),
+    returning: Number(r.ret_users),
     swipes: Number(r.swipes),
     watchlist: Number(r.watchlist),
     purchases: Number(r.purchases),
     groups: Number(r.groups),
   }));
 
-  return NextResponse.json({ ok: true, days, usersBefore, series });
+  return NextResponse.json({ ok: true, days, usersBefore, trackingEnabled: hasTable, series });
 }

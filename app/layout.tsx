@@ -10,6 +10,7 @@ import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
 import MetaAppEvents from "./components/client/MetaAppEvents";
 import IphoneAppBar from "./components/client/IphoneAppBar";
 import AcquisitionBeacon from "./components/client/AcquisitionBeacon";
+import ActivityBeacon from "./components/client/ActivityBeacon";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
 import { APP_STORE_ID, SITE_URL } from "@/lib/seo";
@@ -109,6 +110,8 @@ export default async function RootLayout({
           <IphoneAppBar />
           {/* Källspårning (första besöket) — se lib/acquisition.ts. */}
           <AcquisitionBeacon />
+          {/* "Appen är öppen" — retention + online nu i /admin. */}
+          <ActivityBeacon />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

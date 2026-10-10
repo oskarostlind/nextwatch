@@ -110,6 +110,7 @@ model User {
   onboardingTours OnboardingTour[]
   swipeBonuses    SwipeBonus[]
   releaseFollows  ReleaseFollow[]
+  activityDays    UserActivityDay[]
 
   @@map("users")
 }
@@ -546,4 +547,22 @@ model AcquisitionVisit {
   @@index([createdAt], map: "idx_acq_visits_created_at")
   @@index([source, createdAt], map: "idx_acq_visits_source_created_at")
   @@map("acquisition_visits")
+}
+
+/// En rad per användare och svensk kalenderdag då appen användes — underlaget
+/// för retention i /admin ("kommer nya användare tillbaka?"). lastActiveAt
+/// sparar bara SENASTE tillfället, så utan den här tabellen går det inte att se
+/// att någon var inne t.ex. dag 1 och dag 7 utan att swipa. Skrivs av
+/// /api/track/active (ActivityBeacon) — som mest en rad per användare och dygn.
+/// Historik före 2026-10-10 härleds i stället ur ratings/watchlist/group_votes
+/// (lib/activitySql.ts), så statistiken fungerar bakåt i tiden också.
+model UserActivityDay {
+  userId String   @map("user_id")
+  day    DateTime @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, day])
+  @@index([day], map: "idx_user_activity_days_day")
+  @@map("user_activity_days")
 }

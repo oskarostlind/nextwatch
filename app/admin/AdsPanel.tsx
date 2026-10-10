@@ -153,7 +153,7 @@ export default function AdsPanel() {
             ) : (
               stats.perFormat.map((f) => (
                 <div key={f.format} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/5 px-4 py-2.5 text-sm tabular-nums last:border-0">
-                  <span className="truncate text-white/80">{FORMAT_LABEL[f.format] ?? f.format}</span>
+                  <span className="truncate text-white/80">{FORMAT_LABEL[f.format.toUpperCase()] ?? f.format}</span>
                   <span className="text-right text-white/70">{n0(f.impressions)}</span>
                   <span className="text-right text-white/70">{n2(f.ecpm)}</span>
                   <span className="text-right font-semibold text-emerald-300">{n2(f.earnings)}</span>

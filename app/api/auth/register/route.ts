@@ -107,15 +107,18 @@ export async function POST(req: NextRequest) {
     // Registreringen sker i webbläsaren, så nw_lang-cookien speglar det språk
     // användaren just fyllde i formuläret på.
     const mailRes = await sendVerificationEmail(email, link, await uiLocaleFromCookies());
+    // Verifieringslänken skickas ALDRIG tillbaka i svaret — den är beviset på
+    // att man äger adressen och får bara finnas i mejlet. (Innan 2026-10-10
+    // låg den i JSON:en som verifyUrl, så vem som helst kunde "bekräfta" en
+    // adress de inte äger genom att läsa svaret.) Mejlfel loggas server-side.
+    if (!mailRes.sent) console.error("[auth/register] verifieringsmejl misslyckades:", mailRes.reason);
 
     return NextResponse.json({
       ok: true,
       message: mailRes.sent
         ? await apiMsg("accountUpdatedLinkSent")
         : await apiMsg("accountUpdatedMailFailed"),
-      verifyUrl: link,
       emailSent: mailRes.sent,
-      emailProvider: mailRes.sent ? mailRes.id : mailRes.reason,
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {

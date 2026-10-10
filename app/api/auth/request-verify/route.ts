@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import { sendVerificationEmail } from "@/lib/email";
 import { uiLocaleFromCookies } from "@/lib/serverLocale";
 import { apiMsg } from "@/lib/apiMessages";
+import { rateLimitAllow, getRateLimitKey, AUTH_LIMIT } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,12 @@ export async function POST(req: NextRequest) {
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) return NextResponse.json({ ok: false, message: await apiMsg("noSession") }, { status: 401 });
 
+    // Varje anrop skickar ett mejl — utan gräns kan sessionen användas för att
+    // spamma en adress och bränna Resend-kvoten.
+    if (!rateLimitAllow(getRateLimitKey(req, uid), "auth-request-verify", { limit: AUTH_LIMIT })) {
+      return NextResponse.json({ ok: false, message: await apiMsg("tooManyRequests") }, { status: 429 });
+    }
+
     const u = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, email: true } });
     if (!u?.email) return NextResponse.json({ ok: false, message: await apiMsg("noEmailRegistered") }, { status: 400 });
 
@@ -39,13 +46,16 @@ export async function POST(req: NextRequest) {
     const origin = computeOrigin(req);
     const link = `${origin}/auth/verify?token=${token}`;
     const mailRes = await sendVerificationEmail(u.email, link, await uiLocaleFromCookies());
+    // Verifieringslänken skickas ALDRIG tillbaka i svaret — den är beviset på
+    // att man äger adressen och får bara finnas i mejlet. (Innan 2026-10-10
+    // låg den i JSON:en som verifyUrl, så vem som helst kunde "bekräfta" en
+    // adress de inte äger genom att läsa svaret.) Mejlfel loggas server-side.
+    if (!mailRes.sent) console.error("[auth/request-verify] verifieringsmejl misslyckades:", mailRes.reason);
 
     return NextResponse.json({
       ok: true,
       message: mailRes.sent ? await apiMsg("verifyLinkSent") : await apiMsg("verifyLinkMailFailed"),
-      verifyUrl: link,
       emailSent: mailRes.sent,
-      emailProvider: mailRes.sent ? mailRes.id : mailRes.reason,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : await apiMsg("internalError");

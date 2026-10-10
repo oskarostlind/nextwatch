@@ -1,7 +1,8 @@
 # AdMob-intäkter i admin-dashboarden — engångssetup
 
-Admin-dashboarden (`/admin`) kan visa uppskattade annonsintäkter från AdMob
-(idag / 7 dagar / 30 dagar). Koden finns i `lib/admobReport.ts` och aktiveras
+Admin-dashboarden (`/admin`) visar AdMob-statistik: intäkt idag/7 d/30 d i
+intäktsrutan, och under **Annonser** intäkt, visningar, eCPM, fill rate och
+klick dag för dag och per annonsformat (7/30/90 d). Koden finns i `lib/admobReport.ts` och aktiveras
 av fyra env-varar i Vercel. Saknas de visar dashboarden "Inte uppkopplat" —
 inget går sönder.
 
@@ -18,9 +19,13 @@ länge den används (Google återkallar oanvända tokens efter 6 månader).
 
 ## Steg 2 — OAuth-klient
 
-1. **APIs & Services → OAuth consent screen**: typ **External**, fyll i namn +
-   din e-post. Lägg till dig själv under **Test users** (räcker — appen behöver
-   aldrig publiceras/verifieras när bara du använder den).
+1. **Google Auth Platform** (förr "OAuth consent screen"): typ **External**,
+   fyll i namn + din e-post. Under **Branding**: hemsida, integritetspolicy
+   (`/legal/privacy`), villkor (`/legal/terms`) och auktoriserad domän
+   `nextwatch.se`. Under **Audience**: **Publish app → In production**.
+   ⚠️ Lämnas appen i "Testing" går refresh token ut efter **7 dagar** och
+   siffrorna slutar komma. Ingen Google-granskning krävs för eget bruk — du
+   klickar bara förbi "Google hasn't verified this app" vid godkännandet.
 2. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**
    - Authorized redirect URIs: `https://developers.google.com/oauthplayground`
@@ -60,5 +65,13 @@ serverinstans, så siffran uppdateras inte oftare än så).
   efter `[admob]`-varningar. Vanligast: fel scope vid steg 3 (måste vara
   `admob.readonly`), eller att refresh token genererades med Playgrounds egna
   credentials i stället för dina (kugghjulet i steg 3.2 missades).
+- **`AdMob OAuth 400` efter ungefär en vecka** — OAuth-appen står kvar i
+  "Testing". Publicera den (steg 2.1) och gör om steg 3.
 - **`AdMob OAuth 400`** — refresh token återkallad (t.ex. lösenordsbyte med
   "logga ut överallt", eller 6 månaders oanvändning). Gör om steg 3.
+
+## Uppsatt 2026-10-10
+
+Google Cloud-projekt **Nextwatch** (`nextwatch-20fb2`), OAuth-klient "NextWatch
+admin (AdMob-rapporter)", appen publicerad (In production). Publisher-id
+`pub-2616665688666431`.

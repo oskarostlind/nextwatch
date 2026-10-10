@@ -30,6 +30,7 @@ import LivePanel, { type LiveData } from "./LivePanel";
 import RetentionPanel, { pct, type RetentionData } from "./RetentionPanel";
 import FunnelPanel, { type FunnelData } from "./FunnelPanel";
 import MailPanel, { MailComposer, type ComposeDraft } from "./MailPanel";
+import AdsPanel from "./AdsPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -566,7 +567,7 @@ export default function AdminClient() {
                     ? `7 d ${admob.last7d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} · 30 d ${admob.last30d.toLocaleString("sv-SE", { maximumFractionDigits: 0 })}`
                     : admobConfigured
                       ? "Hämtar…"
-                      : "Inte uppkopplat (docs/admob-setup.md)"
+                      : "Inte uppkopplat — se Annonser nedan"
                 }
                 tone={admob ? "money" : undefined}
               />
@@ -588,6 +589,9 @@ export default function AdminClient() {
                 </div>
               </div>
             )}
+
+            {/* ══ Annonser (AdMob) ══ */}
+            <AdsPanel />
 
             {/* ══ Totalt ══ */}
             <SectionTitle sub="Sedan start.">Totalt</SectionTitle>

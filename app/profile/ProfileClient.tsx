@@ -16,6 +16,7 @@ import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClien
 import { AVATARS } from "@/lib/avatars";
 import Avatar from "@/app/components/ui/Avatar";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
+import { adPrivacyOptionsRequired, showAdPrivacyOptions } from "@/lib/admobAds";
 import { getBillingStatus } from "@/lib/billingStore";
 import { clearClientCache, getCached, removeCached, setCached } from "@/lib/clientCache";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
@@ -1035,6 +1036,15 @@ function SettingsTab() {
   }
 
   const ios = isNativeIOS();
+  const [adPrivacyNeeded, setAdPrivacyNeeded] = useState(false);
+  useEffect(() => {
+    if (!ios) return;
+    let alive = true;
+    void adPrivacyOptionsRequired().then((v) => alive && setAdPrivacyNeeded(v));
+    return () => {
+      alive = false;
+    };
+  }, [ios]);
 
   return (
     <div className="grid gap-8">
@@ -1116,6 +1126,21 @@ function SettingsTab() {
           </div>
         )}
       </section>
+
+      {/* Annonssamtycke (GDPR) — Google kräver att EES-användare kan ändra
+          eller återkalla samtycket i appen. Visas bara när UMP säger att det
+          krävs (iOS, EES). */}
+      {adPrivacyNeeded && (
+        <section className="grid gap-3">
+          <h3 className="text-sm font-semibold text-white/80">{t("adPrivacyTitle")}</h3>
+          <div className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+            <p className="text-xs text-white/50">{t("adPrivacyHint")}</p>
+            <Button variant="secondary" onClick={() => void showAdPrivacyOptions()}>
+              {t("adPrivacyButton")}
+            </Button>
+          </div>
+        </section>
+      )}
 
       {/* Förslag — styr vad swipen visar. Film/serie-valet bor numera som en
           pill direkt på /swipe (där man ser effekten); här finns bara det som

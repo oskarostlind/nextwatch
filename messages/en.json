@@ -853,7 +853,10 @@
     "usernameLabel": "Username",
     "usernamePlaceholder": "e.g. film_ninja.42",
     "usernameTooShort": "Enter at least 3 characters or leave it empty.",
-    "validationRequired": "Enter your name and date of birth. Username must be empty or 3–20 characters (a–z, 0–9, _, .)."
+    "validationRequired": "Enter your name and date of birth. Username must be empty or 3–20 characters (a–z, 0–9, _, .).",
+    "adPrivacyTitle": "Ads and privacy",
+    "adPrivacyHint": "Change or withdraw your consent for how ad partners may use your data.",
+    "adPrivacyButton": "Change ad consent"
   },
   "push": {
     "dailyRec": {

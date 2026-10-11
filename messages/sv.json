@@ -853,7 +853,10 @@
     "usernameLabel": "Användarnamn",
     "usernamePlaceholder": "t.ex. film_ninja.42",
     "usernameTooShort": "Ange minst 3 tecken eller lämna tomt.",
-    "validationRequired": "Fyll i namn och födelsedatum. Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .)."
+    "validationRequired": "Fyll i namn och födelsedatum. Användarnamn måste vara tomt eller 3–20 tecken (a–z, 0–9, _, .).",
+    "adPrivacyTitle": "Annonser och integritet",
+    "adPrivacyHint": "Ändra eller återkalla ditt samtycke till hur annonspartners får använda dina uppgifter.",
+    "adPrivacyButton": "Ändra annonssamtycke"
   },
   "push": {
     "dailyRec": {

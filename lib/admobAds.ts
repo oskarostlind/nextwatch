@@ -128,6 +128,8 @@ function saveNumber(key: string, value: number): void {
 }
 
 let initialized = false;
+/** Kräver UMP en "ändra samtycke"-ingång i appen? (Sätts vid init.) */
+let privacyOptionsRequired = false;
 let initInFlight: Promise<boolean> | null = null;
 let eligible = false; // native + ej premium — 24h-fönstret kollas per visning
 let npa = false;
@@ -219,7 +221,13 @@ export async function initAdMobIfEligible(): Promise<boolean> {
       // UMP (GDPR): visa formuläret när det krävs. Fel här får aldrig stoppa
       // appen — vi faller tillbaka på npa.
       try {
+        // Formuläret kommer från GDPR-meddelandet i AdMob (Integritet och
+        // meddelanden → Europeiska förordningar, publicerat 2026-10-10). Innan
+        // det fanns var isConsentFormAvailable alltid false, inget TCF-samtycke
+        // sparades och Google fick bara visa "begränsade annonser" i EES —
+        // fill rate låg runt 30–40 %.
         const consent = await AdMob.requestConsentInfo();
+        privacyOptionsRequired = consent.privacyOptionsRequirementStatus === "REQUIRED";
         if (consent.isConsentFormAvailable && consent.status === "REQUIRED") {
           funnel("consent_form");
           await AdMob.showConsentForm();
@@ -435,6 +443,38 @@ export async function watchRewardedForSwipes(): Promise<boolean> {
     const j = (await res.json()) as { ok?: boolean };
     return Boolean(j?.ok);
   } catch {
+    return false;
+  }
+}
+
+/* ---------- Samtycke: ändra/återkalla (GDPR) ---------- */
+
+/**
+ * Google kräver att användare i EES kan ändra eller återkalla sitt
+ * annonssamtycke inifrån appen ("privacy options entry point"). Profilen visar
+ * en knapp när det här är true. Frågar UMP direkt om init inte hunnit köras.
+ */
+export async function adPrivacyOptionsRequired(): Promise<boolean> {
+  if (!isNativeIos()) return false;
+  if (privacyOptionsRequired) return true;
+  try {
+    const { AdMob } = await plugin();
+    const info = await AdMob.requestConsentInfo();
+    privacyOptionsRequired = info.privacyOptionsRequirementStatus === "REQUIRED";
+    return privacyOptionsRequired;
+  } catch {
+    return false;
+  }
+}
+
+/** Öppnar Googles formulär för att ändra annonssamtycket. */
+export async function showAdPrivacyOptions(): Promise<boolean> {
+  try {
+    const { AdMob } = await plugin();
+    await AdMob.showPrivacyOptionsForm();
+    return true;
+  } catch (err) {
+    console.warn("[admob] showPrivacyOptionsForm misslyckades", err);
     return false;
   }
 }

@@ -47,19 +47,18 @@ export default async function HomePage() {
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
 
-  // Redan inloggad med verifierat konto + profil → hoppa över heron (viktigt för iOS/Capacitor).
+  // Har redan en profil → rakt till swipen, hoppa över heron (viktigt för
+  // iOS/Capacitor). Gäller ALLA med profil: konto, gäst och konto med
+  // overifierad e-post. Förr krävdes verifierat konto, så en gäst som öppnade
+  // appen igen nästa dag landade på startsidan med "Logga in" och demokorten —
+  // det såg ut som att allt var borta, fast profilen och watchlisten fanns kvar
+  // (tratten 2026-10-12: ~hälften av nya användare väljer gäst).
   if (uid) {
     const user = await prisma.user.findUnique({
       where: { id: uid },
-      select: {
-        emailVerified: true,
-        passwordHash: true,
-        appleSub: true,
-        profile: { select: { userId: true } },
-      },
+      select: { profile: { select: { userId: true } } },
     });
-    const hasAuth = Boolean(user?.passwordHash || user?.appleSub);
-    if (user?.emailVerified && hasAuth && user?.profile) {
+    if (user?.profile) {
       redirect("/swipe");
     }
   }

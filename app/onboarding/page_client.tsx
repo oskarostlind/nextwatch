@@ -173,11 +173,18 @@ const STEPS = [
 export default function Client({
   initialName = "",
   hasAccount = false,
+  intentAccount = false,
 }: {
   /** Förifyllt visningsnamn (t.ex. namnet Apple gav vid Sign in with Apple). */
   initialName?: string;
   /** true = användaren är redan inloggad (Apple/lösenord) → inget kontosteg. */
   hasAccount?: boolean;
+  /**
+   * true = kom via "Skapa gratis konto" (?intent=account). Då hoppar vi över
+   * steg 4 ("gäst eller konto?") — valet är redan gjort — och "Nästa" på
+   * smaksteget sparar profilen och går direkt till registreringen.
+   */
+  intentAccount?: boolean;
 } = {}) {
   const router = useRouter();
   const t = useTranslations("onboarding");
@@ -721,13 +728,24 @@ export default function Client({
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={goNext}
-                className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
-              >
-                {t("next")}
-              </button>
+              {step === 2 && intentAccount && !hasAccount ? (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void saveAndContinue("/auth/register?from=onboarding")}
+                  className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400 disabled:opacity-50"
+                >
+                  {loading ? t("savingProfile") : t("nextCreateAccount")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="rounded-xl bg-cyan-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400"
+                >
+                  {t("next")}
+                </button>
+              )}
             </div>
           )}
 

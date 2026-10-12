@@ -279,6 +279,31 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         )}
       </div>
 
+      {hardGate ? (
+        // Gatens knappar ligger UNDER kortet, där ✕/♥ satt. Fram till
+        // 2026-10-12 låg de inne i kortet: innehållet var högre än kortet på
+        // alla iPhone-storlekar, så ✕/♥-raden hamnade ovanpå "Skapa gratis
+        // konto" och ett tryck på knappen träffade ✕ eller ♥ i stället.
+        <div className="relative z-20 mt-9 flex w-full max-w-[330px] flex-col items-stretch gap-2 px-6">
+          <a
+            href="/onboarding?intent=account"
+            onClick={() => funnel("cta_signup")}
+            className="relative w-full rounded-xl py-3 text-center text-[15px] font-semibold text-black transition-transform active:scale-[0.98]"
+            style={{
+              background: `linear-gradient(180deg, ${top?.accent ?? "#fff"} 0%, ${top?.accent ?? "#fff"}D9 100%)`,
+              boxShadow: `0 8px 24px -8px ${top?.accent ?? "#fff"}`,
+            }}
+          >
+            {t("createFreeAccount")}
+          </a>
+          {/* Gästvägen infriar samma löfte som kontot — likesen spelas upp mot
+              gästprofilen (se GuestEntryButton) — men utan onboarding. */}
+          <GuestEntryButton
+            label={t("continueAsGuest")}
+            className="w-full rounded-xl border border-white/15 bg-white/5 py-2.5 text-[14px] font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-60"
+          />
+        </div>
+      ) : (
       <div className="relative z-20 mt-9 flex flex-col items-center gap-3">
         <div className="flex items-center gap-4">
           <button
@@ -308,6 +333,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           className="text-[13px] font-medium text-white/45 underline decoration-white/25 underline-offset-4 transition hover:text-white/80 disabled:opacity-60"
         />
       </div>
+      )}
       </div>
 
       <Pile liked={liked} reduce={reduce} />
@@ -468,12 +494,12 @@ function GateCard({
       dragElastic={0.2}
     >
       <div
-        className="flex h-full w-full flex-col items-center justify-between rounded-[10px] bg-[#121212] px-5 py-6 text-center"
+        className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[10px] bg-[#121212] px-4 py-5 text-center"
         style={{ border: `3px solid ${accent}`, boxShadow: "0 18px 40px -12px rgba(0,0,0,0.9)" }}
       >
         {/* Investeringen som föremål, inte som räknetal: högen du byggt reser
             sig ur det hopfällda kortet. */}
-        <div className="relative h-[104px] w-full shrink-0">
+        <div className="relative h-[92px] w-full shrink-0">
           {fan.map((card, i) => {
             const mid = (fan.length - 1) / 2;
             const d = i - mid;
@@ -482,19 +508,19 @@ function GateCard({
                 key={card.id}
                 // x/rotate måste ligga i motion-props, inte i en transform-sträng
                 // i style: framer skriver sin egen transform och kör över den.
-                initial={reduce ? false : { y: 26, x: d * 40, rotate: d * 7, opacity: 0 }}
-                animate={{ y: 0, x: d * 40, rotate: d * 7, opacity: 1 }}
+                initial={reduce ? false : { y: 26, x: d * 34, rotate: d * 7, opacity: 0 }}
+                animate={{ y: 0, x: d * 34, rotate: d * 7, opacity: 1 }}
                 transition={{ delay: reduce ? 0 : 0.08 * i, type: "spring", stiffness: 300, damping: 24 }}
-                className="absolute left-1/2 top-0 h-[104px] w-[70px] overflow-hidden rounded-[5px] border-2 border-white/85"
+                className="absolute left-1/2 top-0 h-[92px] w-[62px] overflow-hidden rounded-[5px] border-2 border-white/85"
                 style={{
-                  marginLeft: -35,
+                  marginLeft: -31,
                   transformOrigin: "bottom center",
                   boxShadow: "0 8px 18px -6px rgba(0,0,0,0.9)",
                   zIndex: 10 - Math.abs(d),
                 }}
               >
                 {card.poster ? (
-                  <Image src={card.poster} alt="" fill sizes="70px" className="object-cover" />
+                  <Image src={card.poster} alt="" fill sizes="62px" className="object-cover" />
                 ) : null}
               </motion.div>
             );
@@ -506,7 +532,7 @@ function GateCard({
             {t("filmsWaiting", { count: liked.length })}
           </p>
           {/* Tre löften — och varje löfte är något besökaren precis bevisat själv. */}
-          <ul className="mt-1 space-y-1.5 text-left text-[13px] leading-snug text-white/65">
+          <ul className="mt-1 space-y-1 text-left text-[12.5px] leading-snug text-white/65 [@media(max-height:740px)]:hidden">
             <li className="flex gap-2">
               <span style={{ color: accent }}>—</span> {t("promiseTaste")}
             </li>
@@ -519,25 +545,6 @@ function GateCard({
           </ul>
         </div>
 
-        <div className="grid w-full shrink-0 gap-2">
-          <a
-            href="/onboarding"
-            onClick={() => funnel("cta_signup")}
-            className="relative w-full rounded-xl py-3 text-center text-[15px] font-semibold text-black transition-transform active:scale-[0.98]"
-            style={{
-              background: `linear-gradient(180deg, ${accent} 0%, ${accent}D9 100%)`,
-              boxShadow: `0 8px 24px -8px ${accent}`,
-            }}
-          >
-            {t("createFreeAccount")}
-          </a>
-          {/* Gästvägen infriar samma löfte som kontot — likesen spelas upp mot
-              gästprofilen (se GuestEntryButton) — men utan onboarding. */}
-          <GuestEntryButton
-            label={t("continueAsGuest")}
-            className="w-full rounded-xl border border-white/15 bg-white/5 py-2.5 text-[14px] font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-60"
-          />
-        </div>
       </div>
     </motion.div>
   );

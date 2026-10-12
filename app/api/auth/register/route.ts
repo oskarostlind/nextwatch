@@ -53,8 +53,13 @@ export async function POST(req: NextRequest) {
     if (!email || !password) return jsonRes(400, await apiMsg("emailPasswordRequired"));
     // Guideline 1.2: kontot får inte skapas utan godkända villkor. Kryssrutan
     // i UI:t är gaten, men servern litar inte på klienten.
+    // Godkända i onboardingen räcker (User.termsAcceptedAt) — registreringen
+    // visar då ingen kryssruta. Annars krävs den här.
     if (body.termsAccepted !== true) {
-      return jsonRes(400, await apiMsg("termsRequired"));
+      const prior = await prisma.user
+        .findUnique({ where: { id: uid }, select: { termsAcceptedAt: true } })
+        .catch(() => null);
+      if (!prior?.termsAcceptedAt) return jsonRes(400, await apiMsg("termsRequired"));
     }
 
     // Preflight: kontrollera att nödvändiga kolumner finns

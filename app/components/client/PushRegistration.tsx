@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
+import { LIKED_EVENT, PUSH_ASK_AFTER_LIKES, blockingSheetOpen, likeCount } from "@/lib/engagement";
 
 /**
  * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
@@ -129,7 +130,9 @@ export default function PushRegistration() {
           try {
             const perm = await PushNotifications.checkPermissions();
             if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
-              if (!softAskSnoozed()) {
+              // Först efter några "gilla" — då vet användaren vad appen är och
+              // varför notiser kan vara värda något. Aldrig ovanpå ett annat ark.
+              if (!softAskSnoozed() && likeCount() >= PUSH_ASK_AFTER_LIKES && !blockingSheetOpen()) {
                 setSoftAskOpen(true);
                 funnel("push_softask");
               }
@@ -154,6 +157,14 @@ export default function PushRegistration() {
         };
 
         await ensureRegistered();
+
+        // Varje "gilla" kan vara det som gör att frågan blir aktuell. Liten
+        // paus så den inte krockar med kortet som flyger ut.
+        const onLiked = () => {
+          window.setTimeout(() => void ensureRegistered(), 1200);
+        };
+        window.addEventListener(LIKED_EVENT, onLiked);
+        cleanupFns.push(() => window.removeEventListener(LIKED_EVENT, onLiked));
 
         // Kör om när appen kommer i förgrunden — täcker fallet "nekade först,
         // slog på i Inställningar sen". Capacitor App-plugin finns redan i appen.

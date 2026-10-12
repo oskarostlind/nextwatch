@@ -27,6 +27,7 @@ import { retrySoloDeck } from "@/lib/swipeDeckStore";
 import { tourLockHeldBy } from "@/lib/tours/lock";
 import { notify } from "@/app/components/lib/notify";
 import { funnel } from "@/lib/funnel";
+import { blockingSheetOpen } from "@/lib/engagement";
 
 /** Samma tjänster, i samma ordning, som onboardingens tjänstesteg. */
 const PROVIDERS = [
@@ -81,13 +82,23 @@ export default function ProviderPromptSheet() {
       if (done.current) return;
       swipes.current += 1;
       if (swipes.current < TRIGGER_AFTER_SWIPES) return;
-      // En genomgång kör — försök igen vid nästa swipe.
-      if (tourLockHeldBy()) return;
-      // Låt swipe-animationen landa innan arket glider upp.
+      // En genomgång kör, eller ett annat ark är öppet (t.ex. "Spara din
+      // watchlist") — försök igen vid nästa swipe i stället för att lägga sig
+      // ovanpå. Två ark i rad på samma swipe var det som syntes i testet
+      // 2026-10-12.
+      if (tourLockHeldBy() || blockingSheetOpen()) return;
+      // Låt swipe-animationen landa innan arket glider upp — och kolla igen
+      // då, eftersom "skapa konto"-arket kan öppnas av samma swipe.
       done.current = true;
-      markSeen();
-      window.setTimeout(() => setOpen(true), 350);
-      funnel("provider_prompt");
+      window.setTimeout(() => {
+        if (blockingSheetOpen()) {
+          done.current = false;
+          return;
+        }
+        markSeen();
+        setOpen(true);
+        funnel("provider_prompt");
+      }, 350);
     };
     window.addEventListener(SOLO_SWIPED_EVENT, onSwipe);
     return () => window.removeEventListener(SOLO_SWIPED_EVENT, onSwipe);

@@ -148,15 +148,30 @@ export function funnelInit(): Promise<State | null> {
 
 // Senaste "riktiga" steget som nåtts — skickas med vid stängning så det syns
 // vad som hände precis innan någon lämnade (t.ex. att ATT-frågan just visats).
+// Sparas i localStorage så att steget följer med över sidbyten (gäst → swipe
+// är en full sidladdning) — annars nollades det precis när det behövdes.
+const LAST_KEY = "nw_fx_last";
 let last: string | null = null;
 export function lastStep(): string | null {
-  return last;
+  if (last) return last;
+  try {
+    return localStorage.getItem(LAST_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /** Registrera att enheten nått ett steg (en gång per enhet). */
 export function funnel(name: string, props?: FunnelProps): void {
   if (typeof window === "undefined") return;
-  if (!name.startsWith("view:") && name !== "return_visit") last = name;
+  if (!name.startsWith("view:") && name !== "return_visit" && !name.endsWith("_exit")) {
+    last = name;
+    try {
+      localStorage.setItem(LAST_KEY, name);
+    } catch {
+      /* privat läge */
+    }
+  }
   try {
     if (state) {
       if (active(state)) send(state, name, props, Date.now());
@@ -208,4 +223,15 @@ export function funnelSwipe(kind: "like" | "dislike" | "seen"): void {
 
 export function funnelSessionSwipes(): number {
   return sessionSwipes;
+}
+
+/** Riktiga swipes totalt på enheten (alla sessioner). */
+export function funnelTotalSwipes(): number {
+  if (totalSwipes >= 0) return totalSwipes;
+  try {
+    totalSwipes = Number(localStorage.getItem("nw_fx_swipes") ?? 0);
+  } catch {
+    totalSwipes = sessionSwipes;
+  }
+  return totalSwipes;
 }

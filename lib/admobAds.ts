@@ -3,7 +3,10 @@
 // AdMob för iOS-appen (webben har inga native-annonser; AdSense nekade sajten
 // och webbens annonskort visar bara premium-CTA). Två format:
 //   - interstitial var NEXT_PUBLIC_AD_EVERY:e swipe (default 15), aldrig
-//     tätare än NEXT_PUBLIC_AD_MIN_GAP_SEC (default 180 s, 0 = av)
+//     tätare än NEXT_PUBLIC_AD_MIN_GAP_SEC (default 180 s, 0 = av) — men den
+//     FÖRSTA annonsen kommer tidigast efter NEXT_PUBLIC_AD_FIRST_AFTER swipes
+//     totalt på enheten (default 50). Tratten 2026-10-12: hälften av dem som
+//     såg en annons vid swipe ~15 swipade aldrig vidare till 25.
 //   - rewarded: titta klart på en video → +swipes på dagsgränsen
 //     (/api/swipe/bonus). Tidigare gav den 24h annonsfritt — borttaget
 //     2026-09-25 (Oskars beslut): att köpa sig fri från annonser med EN annons
@@ -15,6 +18,12 @@
 // aktivt 24h-fönster. Samtycke före första annonsen: UMP-formuläret (GDPR)
 // när det krävs, sedan ATT — nekad spårning ger icke-personaliserade annonser
 // (npa), aldrig en blockerad app.
+//
+// NÄR samtycket frågas: först strax före första annonsen (CONSENT_LEAD_SWIPES
+// innan AD_FIRST_AFTER), inte när swipen öppnas. Förr kom GDPR-rutan och
+// ATT-frågan inom 3 s efter att en ny användare öppnat swipen — innan hen sett
+// ett enda kort. initAdMobIfEligible() på mount är därför en no-op för nya
+// enheter; registerSwipeForAds() startar init när det är dags.
 //
 // Annonsenhets-id:n via env med Googles officiella TEST-id:n som fallback, så
 // en build utan env aldrig visar skarpa annonser av misstag.
@@ -103,6 +112,15 @@ const RETRY_AFTER_FAILED_SWIPES = 5;
 const PRELOAD_AHEAD_SWIPES = 5;
 const PRELOADED_TTL_MS = 55 * 60 * 1000;
 
+/** Första annonsen tidigast efter så här många swipes totalt på enheten. */
+export const AD_FIRST_AFTER = (() => {
+  const raw = process.env.NEXT_PUBLIC_AD_FIRST_AFTER;
+  const n = raw === undefined || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 50;
+})();
+/** Samtycke + ATT frågas så här många swipes före första annonsen. */
+const CONSENT_LEAD_SWIPES = PRELOAD_AHEAD_SWIPES;
+
 /**
  * Räknaren och senaste visningen sparas i localStorage så att de överlever en
  * omstart av appen. Tidigare nollades räknaren vid varje start: en användare
@@ -111,6 +129,8 @@ const PRELOADED_TTL_MS = 55 * 60 * 1000;
  */
 const COUNTER_KEY = "nw_ad_swipes";
 const LAST_AD_KEY = "nw_ad_last";
+/** Swipes totalt på enheten — styr AD_FIRST_AFTER. */
+const LIFETIME_KEY = "nw_ad_lifetime";
 
 function loadNumber(key: string): number {
   try {
@@ -138,6 +158,37 @@ let interstitialPreparedAt = 0;
 let prepareInFlight: Promise<void> | null = null;
 let swipesSinceAd = 0;
 let lastInterstitialAt = 0;
+let lifetimeSwipes = -1;
+
+/**
+ * Swipes totalt på enheten. Enheter som redan sett annonser före den här
+ * ändringen (räknaren eller senaste visning finns sparad) räknas som klara med
+ * startsträckan — annars hade befintliga användare fått 50 annonsfria swipes
+ * efter deployen.
+ */
+function lifetime(): number {
+  if (lifetimeSwipes >= 0) return lifetimeSwipes;
+  if (typeof window === "undefined") return 0;
+  let n = loadNumber(LIFETIME_KEY);
+  if (n === 0) {
+    try {
+      const seenAds = window.localStorage.getItem(COUNTER_KEY) !== null || window.localStorage.getItem(LAST_AD_KEY) !== null;
+      if (seenAds) {
+        n = AD_FIRST_AFTER;
+        saveNumber(LIFETIME_KEY, n);
+      }
+    } catch {
+      /* privat läge */
+    }
+  }
+  lifetimeSwipes = n;
+  return n;
+}
+
+/** Har enheten swipat klart startsträckan (eller är nära nog för samtycke)? */
+function pastStartStretch(lead = 0): boolean {
+  return lifetime() >= AD_FIRST_AFTER - lead;
+}
 
 function setSwipesSinceAd(n: number): void {
   swipesSinceAd = n;
@@ -156,9 +207,15 @@ function retryLater(): void {
 
 /** Är det dags att förladda? Nära nästa visning, och tidsgolvet nästan passerat. */
 function shouldPreload(): boolean {
-  if (swipesSinceAd < INTERSTITIAL_EVERY - PRELOAD_AHEAD_SWIPES) return false;
+  if (!pastStartStretch(PRELOAD_AHEAD_SWIPES)) return false;
+  if (swipesSinceAd < INTERSTITIAL_EVERY - PRELOAD_AHEAD_SWIPES && !firstAdDue(PRELOAD_AHEAD_SWIPES)) return false;
   const untilGapOk = INTERSTITIAL_MIN_GAP_MS - (Date.now() - lastInterstitialAt);
   return untilGapOk < 60_000;
+}
+
+/** Första annonsen på enheten: dags (inom `lead` swipes) oavsett räknaren. */
+function firstAdDue(lead = 0): boolean {
+  return lastInterstitialAt === 0 && pastStartStretch(lead);
 }
 
 function preparedIsFresh(): boolean {
@@ -198,10 +255,16 @@ async function fetchIsPremium(): Promise<boolean> {
 /**
  * Initierar AdMob + samtycke. Idempotent och billig att anropa flera gånger.
  * Returnerar om annonser alls är aktuella (native + ej premium).
+ *
+ * Utan `force` händer ingenting förrän enheten är nära första annonsen
+ * (registerSwipeForAds anropar igen då) — så att GDPR-rutan och ATT-frågan
+ * inte möter en ny användare innan första kortet. `force` används när en
+ * annons behövs direkt (belöningsvideon i dagsgränsväggen).
  */
-export async function initAdMobIfEligible(): Promise<boolean> {
+export async function initAdMobIfEligible(force = false): Promise<boolean> {
   if (!isNativeIos()) return false;
   if (initialized) return eligible;
+  if (!force && !pastStartStretch(CONSENT_LEAD_SWIPES)) return false;
   if (initInFlight) return initInFlight;
 
   initInFlight = (async () => {
@@ -335,9 +398,19 @@ async function doPrepareInterstitial(): Promise<void> {
  * INTERSTITIAL_EVERY:e swipe med tidsgolv. Fire-and-forget — får aldrig blockera swipeflödet.
  */
 export function registerSwipeForAds(): void {
+  if (typeof window !== "undefined" && isNativeIos()) {
+    lifetimeSwipes = lifetime() + 1;
+    saveNumber(LIFETIME_KEY, lifetimeSwipes);
+    // Nära första annonsen: dags för samtycke + ATT (init frågar dem).
+    if (!initialized && pastStartStretch(CONSENT_LEAD_SWIPES)) void initAdMobIfEligible();
+  }
   if (!initialized || !eligible || adFreeActive()) return;
   setSwipesSinceAd(swipesSinceAd + 1);
-  if (swipesSinceAd < INTERSTITIAL_EVERY) {
+  if (!pastStartStretch()) {
+    if (shouldPreload()) void prepareInterstitial();
+    return;
+  }
+  if (swipesSinceAd < INTERSTITIAL_EVERY && !firstAdDue()) {
     if (shouldPreload()) void prepareInterstitial();
     return;
   }
@@ -390,7 +463,7 @@ export function registerSwipeForAds(): void {
  * erbjuds i dagsgränsväggen och i premium-CTA:n efter en annons.
  */
 async function showRewardedVideo(): Promise<boolean> {
-  if (!(await initAdMobIfEligible())) return false;
+  if (!(await initAdMobIfEligible(true))) return false;
   try {
     const { AdMob, RewardAdPluginEvents } = await plugin();
 

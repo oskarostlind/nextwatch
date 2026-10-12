@@ -42,6 +42,8 @@ export default function CoachMarkTour({
   forceAliases,
   /** Paus innan hinten tänds — låter sidan lägga sig till ro först. */
   delayMs,
+  /** Bara via ?tour=<id> (Profil → Genomgång), aldrig automatiskt. */
+  manualOnly,
 }: {
   tourId: TourId;
   steps: CoachTourStep[];
@@ -49,8 +51,9 @@ export default function CoachMarkTour({
   requires?: TourId[];
   forceAliases?: string[];
   delayMs?: number;
+  manualOnly?: boolean;
 }) {
-  const { state, complete, skip, defer } = useTourGate(tourId, { enabled, requires, forceAliases, delayMs });
+  const { state, complete, skip, defer } = useTourGate(tourId, { enabled, requires, forceAliases, delayMs, manualOnly });
   const [runSteps, setRunSteps] = useState<CoachTourStep[] | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
 

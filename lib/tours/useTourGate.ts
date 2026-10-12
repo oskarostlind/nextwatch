@@ -36,6 +36,12 @@ export type TourGateOptions = {
    * redan är med i en grupp.
    */
   forceAliases?: string[];
+  /**
+   * Visas BARA när den tvingas fram via ?tour=<id> (Profil → Genomgång), aldrig
+   * automatiskt. Används för swipe-genomgången och navigeringsarket sedan
+   * 2026-10-12: de stod mellan en ny användare och första riktiga kortet.
+   */
+  manualOnly?: boolean;
 };
 
 function readForceParam(tourId: string, aliases: string[]): boolean {
@@ -68,7 +74,7 @@ function legacySeen(tourId: TourId): boolean {
 }
 
 export function useTourGate(tourId: TourId, options: TourGateOptions = {}) {
-  const { enabled = true, requires, delayMs = 400, forceAliases } = options;
+  const { enabled = true, requires, delayMs = 400, forceAliases, manualOnly = false } = options;
   const aliasKey = forceAliases ? forceAliases.join(",") : "";
   const version = TOUR_VERSIONS[tourId];
   const [state, setState] = useState<TourGateState>("loading");
@@ -106,6 +112,11 @@ export function useTourGate(tourId: TourId, options: TourGateOptions = {}) {
     if (readForceParam(tourId, aliasKey ? aliasKey.split(",") : [])) {
       if (tryAcquireTour(tourId)) setState("show");
       return () => releaseTour(tourId);
+    }
+
+    if (manualOnly) {
+      setState("hidden");
+      return;
     }
 
     if (!enabled) {
@@ -157,7 +168,7 @@ export function useTourGate(tourId: TourId, options: TourGateOptions = {}) {
       if (timer) window.clearTimeout(timer);
       releaseTour(tourId);
     };
-  }, [tourId, version, enabled, requiresKey, delayMs, aliasKey, revision]);
+  }, [tourId, version, enabled, requiresKey, delayMs, aliasKey, revision, manualOnly]);
 
   const complete = useCallback(() => {
     finishedRef.current = true;

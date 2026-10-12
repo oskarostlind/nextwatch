@@ -9,14 +9,15 @@ import AppleSignInButton from "@/app/components/auth/AppleSignInButton";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
-export default function RegisterClient() {
+export default function RegisterClient({ termsAlreadyAccepted = false }: { termsAlreadyAccepted?: boolean }) {
   const t = useTranslations("auth");
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [err, setErr] = useState<string | null>(null);
   // Guideline 1.2: villkoren måste godkännas innan konto skapas — gäller både
   // Apple-knappen och e-postformuläret.
-  const [terms, setTerms] = useState(false);
+  // Redan godkända i onboardingen → förvalda och kryssrutan visas inte alls.
+  const [terms, setTerms] = useState(termsAlreadyAccepted);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const router = useRouter();
 
@@ -58,6 +59,7 @@ export default function RegisterClient() {
       {err && <div className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-300">{err}</div>}
       {okMsg && <div className="rounded-xl bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{okMsg}</div>}
 
+      {!termsAlreadyAccepted && (
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-neutral-300">
         <input
           type="checkbox"
@@ -80,6 +82,7 @@ export default function RegisterClient() {
           })}
         </span>
       </label>
+      )}
 
       <AppleSignInButton disabled={!terms} />
 

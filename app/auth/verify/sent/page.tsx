@@ -3,6 +3,11 @@ import VerifySentClient from "./client";
 
 export const dynamic = "force-dynamic";
 
+// Efter e-postregistrering. Fram till 2026-10-12 var det här en
+// återvändsgränd: bara "Öppna Gmail" (iOS-användare har oftast Apple Mail) och
+// en "Skicka igen"-länk som bara laddade om sidan — ingen väg tillbaka till
+// swipen. Nu kan man swipa vidare direkt; kontot blir verifierat när länken
+// klickas, oavsett var man är i appen.
 export default async function VerifySentPage() {
   const t = await getTranslations("auth");
   return (
@@ -10,23 +15,6 @@ export default async function VerifySentPage() {
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
         <h1 className="mb-2 text-2xl font-semibold">{t("checkEmail")}</h1>
         <VerifySentClient />
-        <div className="mt-6 grid gap-3 sm:flex">
-          <a
-            href="https://mail.google.com"
-            className="rounded-xl bg-white/15 px-4 py-2 text-center hover:bg-white/25"
-          >
-            Öppna Gmail
-          </a>
-          <a
-            href="/api/auth/request-verify"
-            className="rounded-xl border border-white/15 px-4 py-2 text-center hover:bg-white/10"
-          >
-            Skicka igen
-          </a>
-        </div>
-        <p className="mt-4 text-sm text-white/50">
-          Fick du inget mejl? Kolla skräpposten eller skicka igen.
-        </p>
       </div>
     </main>
   );

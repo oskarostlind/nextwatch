@@ -19,6 +19,7 @@ import {
   type SignupNudgeDetail,
 } from "@/lib/signupNudge";
 import { funnel } from "@/lib/funnel";
+import { blockingSheetOpen } from "@/lib/engagement";
 
 export default function SignupNudge() {
   const t = useTranslations("guestConvert");
@@ -38,6 +39,13 @@ export default function SignupNudge() {
     function onNudge(e: Event) {
       const { trigger: tr, onResolve } = (e as CustomEvent<SignupNudgeDetail>).detail;
       if (openRef.current || !nudgeAllowed(tr)) {
+        onResolve?.(true);
+        return;
+      }
+      // Ligger redan ett ark öppet (tjänstefrågan, premiumarket, …)? Lägg inte
+      // ett till ovanpå — "watchlist" frågar igen vid nästa like. Premium-köpet
+      // väntar på svaret och får aldrig hoppas över.
+      if (tr !== "premium" && blockingSheetOpen()) {
         onResolve?.(true);
         return;
       }

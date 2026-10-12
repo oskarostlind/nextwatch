@@ -6,11 +6,13 @@
 // från samma fil hade dragit in hela komponenten (framer-motion, lucide,
 // admobAds) i förstaladdningens bundle igen — då blir dynamic() en ren no-op.
 //
-// Frekvens: CTA:n visas efter VARJE annons (Oskars beslut 2026-09-25 — målet är
-// premiumköp, inte att skona användaren från erbjudandet). Justerbart utan
-// kodändring via NEXT_PUBLIC_UPSELL_EVERY_N_ADS i Vercel (osatt = 1, 2 = var
-// annan annons osv.; kräver redeploy, ingen ny iOS-build). Tidigare spärrar
-// (max 1/session, 20h karens) är borttagna.
+// Frekvens: CTA:n visas efter var TREDJE annons (Oskars beslut 2026-10-12 —
+// förut efter varje annons, vilket gav en helskärmsannons + ett premiumark i
+// rad var 15:e swipe). Justerbart utan kodändring via
+// NEXT_PUBLIC_UPSELL_EVERY_N_ADS i Vercel (osatt = 3, 1 = varje annons osv.;
+// kräver redeploy, ingen ny iOS-build). Räknaren ligger i localStorage så att
+// den räknar över sessioner — med sessionStorage hade den som ser 1–2 annonser
+// per session aldrig fått erbjudandet.
 // Undantag: aldrig direkt efter att användaren tittat klart på en belönad
 // video — den triggar ingen interstitial och därmed ingen CTA.
 
@@ -22,7 +24,7 @@ const AD_COUNT_KEY = "nw_ad_impressions";
 export const UPSELL_EVERY_N_ADS = (() => {
   const raw = process.env.NEXT_PUBLIC_UPSELL_EVERY_N_ADS;
   const n = raw === undefined || raw === "" ? NaN : Number(raw);
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 3;
 })();
 
 /**
@@ -33,10 +35,10 @@ export const UPSELL_EVERY_N_ADS = (() => {
 export function maybeTriggerAdUpsell(): void {
   let count = 1;
   try {
-    count = Number(sessionStorage.getItem(AD_COUNT_KEY) ?? "0") + 1;
-    sessionStorage.setItem(AD_COUNT_KEY, String(count));
+    count = Number(localStorage.getItem(AD_COUNT_KEY) ?? "0") + 1;
+    localStorage.setItem(AD_COUNT_KEY, String(count));
   } catch {
-    /* sessionStorage otillgänglig (privat läge) — räkna varje annons */
+    /* localStorage otillgänglig (privat läge) — räkna varje annons */
   }
   if (count % UPSELL_EVERY_N_ADS !== 0) return;
   try {
@@ -52,7 +54,7 @@ export function maybeTriggerAdUpsell(): void {
  */
 export function markUpsellSatisfied(): void {
   try {
-    sessionStorage.setItem(AD_COUNT_KEY, "0");
+    localStorage.setItem(AD_COUNT_KEY, "0");
   } catch {
     /* no-op */
   }

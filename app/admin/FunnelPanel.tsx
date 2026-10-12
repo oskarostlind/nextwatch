@@ -222,7 +222,9 @@ export default function FunnelPanel({
           <p className="mt-6 text-[11px] leading-relaxed text-white/35">
             Bara nya enheter räknas (befintliga användare som uppdaterar appen eller loggar in på en ny enhet filtreras
             bort). Varje steg räknas en gång per enhet. Swipes = riktiga kort, inte gestguidens demokort. Mätningen
-            startade 10 okt 2026.
+            startade 10 okt 2026. Stängningar och återbesök mäts rätt först från 12 okt 2026: innan dess räknades
+            sidbyten (t.ex. gäst → swipen) som att appen stängdes, och en iOS-app som väcktes ur bakgrunden en senare
+            dag räknades inte som återbesök.
           </p>
         </>
       )}

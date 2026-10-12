@@ -104,7 +104,7 @@ export default function SwipeLimitWall() {
   return (
     <AnimatePresence>
       {reached ? (
-        <div key="swipe-limit" className="absolute inset-0 z-40 flex items-center justify-center p-6">
+        <div key="swipe-limit" data-blocking-sheet className="absolute inset-0 z-40 flex items-center justify-center p-6">
           <motion.div
             className="absolute inset-0 bg-neutral-950/95 backdrop-blur-sm"
             initial={{ opacity: 0 }}

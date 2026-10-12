@@ -6,7 +6,15 @@ import Client from "./page_client";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ intent?: string | string[] }>;
+}) {
+  // ?intent=account = kom via "Skapa gratis konto". Då ska sista steget inte
+  // fråga "gäst eller konto?" en gång till — vi går direkt till registreringen.
+  const sp = await searchParams;
+  const intentAccount = (Array.isArray(sp.intent) ? sp.intent[0] : sp.intent) === "account";
   // Regler: alltid await cookies() i App Router (server)
   const jar = await cookies();
   const uid = jar.get("nw_uid")?.value ?? null;
@@ -34,5 +42,5 @@ export default async function OnboardingPage() {
   }
 
   // Ingen extra rubrik här – klienten står för UI:t.
-  return <Client initialName={dbName ?? cookieName ?? ""} hasAccount={hasAccount} />;
+  return <Client initialName={dbName ?? cookieName ?? ""} hasAccount={hasAccount} intentAccount={intentAccount} />;
 }

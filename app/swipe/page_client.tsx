@@ -37,6 +37,8 @@ import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useLocale, useTranslations } from "next-intl";
 import { funnel, funnelSwipe } from "@/lib/funnel";
+import { recordLike } from "@/lib/engagement";
+import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -383,6 +385,11 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
   const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
+  // Gesttipset på första riktiga kortet (ersätter den automatiska guiden).
+  const [firstHint, setFirstHint] = useState(false);
+  useEffect(() => {
+    setFirstHint(shouldShowFirstCardHint());
+  }, []);
 
   // Betygs-popup efter swipe upp ("Sett"). Kortet är redan sparat som "seen"
   // — popupen är valfri och lägger bara till ett 1–10-betyg ovanpå.
@@ -463,9 +470,10 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
   // AdMob måste initieras innan registerSwipeForAds() gör något — utan det här
   // anropet returnerade den direkt (initialized=false) och iOS-appen visade
   // aldrig en enda annons, trots att hela AdMob-lagret fanns färdigt.
-  // Idempotent och no-op på webben; init (UMP-samtycke + ATT-prompt) sker här
-  // på swipe-sidan i stället för vid appstart så första prompten kommer i ett
-  // sammanhang användaren förstår.
+  // Idempotent och no-op på webben. För en NY enhet gör anropet ingenting:
+  // samtycke + ATT frågas först strax före första annonsen (registerSwipeForAds
+  // startar init då, se lib/admobAds.ts). För enheter som redan swipat förbi
+  // startsträckan initieras allt här som förut.
   useEffect(() => {
     void initAdMobIfEligible();
   }, []);
@@ -567,6 +575,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
   function handleLike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("like");
+    recordLike();
     recordUndo(c, "like");
     markSeen(c.id);
     saveRating(c, "like");
@@ -679,6 +688,10 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
    * knapptryck. Kortet känns kastat i stället för uppspelat.
    */
   async function swipeOut(dir: "left" | "right" | "up", releaseVelocity = 0) {
+    if (firstHint) {
+      setFirstHint(false);
+      markFirstCardHintDone();
+    }
     const c = cards[0];
     if (!c) return;
     const target =
@@ -890,6 +903,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
                     seenScale={seenScale}
                     seenRotate={seenRotate}
                   />
+                  <FirstCardHint visible={firstHint && mode === "individual" && flippedId !== card.id} />
                 </motion.div>
               );
             }

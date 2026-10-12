@@ -71,7 +71,7 @@ export default function PremiumUpsellModal() {
   return (
     <AnimatePresence>
       {open ? (
-        <div key="premium-upsell" className="fixed inset-0 z-[65] flex items-end justify-center">
+        <div key="premium-upsell" data-blocking-sheet className="fixed inset-0 z-[65] flex items-end justify-center">
           <motion.button
             type="button"
             aria-label={t("close")}

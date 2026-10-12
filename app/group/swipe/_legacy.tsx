@@ -27,6 +27,7 @@ import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { initAdMobIfEligible, registerSwipeForAds } from "@/lib/admobAds";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useTranslations } from "next-intl";
+import { recordLike } from "@/lib/engagement";
 
 type MediaType = "movie" | "tv";
 
@@ -279,6 +280,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
   }
 
   function handleLike(c: Card): void {
+    recordLike();
     recordUndo(c, "like");
     markSeen(c.id);
     popTop();

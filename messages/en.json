@@ -73,7 +73,15 @@
     "verifyLinkSent": "Verification link sent.",
     "verifySentBody": "We've sent a link to confirm your email. Open the email and click the link.",
     "verifying": "Verifying…",
-    "verifyingEmail": "Verifying email…"
+    "verifyingEmail": "Verifying email…",
+    "continueSwipingWhileWaiting": "Keep swiping while you wait",
+    "openMail": "Open Mail",
+    "openGmail": "Open Gmail",
+    "resendEmail": "Send the email again",
+    "resendSent": "New email sent.",
+    "resendFailed": "Couldn't send right now – try again in a moment.",
+    "noMailHint": "No email? Check your spam folder or send it again.",
+    "verifyLater": "You can keep swiping in the meantime – your account is ready once you click the link."
   },
   "avatars": {
     "alien": "Alien",
@@ -700,7 +708,8 @@
     "usernameInvalid": "Invalid format",
     "usernameLabel": "Username",
     "usernameTaken": "Taken – pick another one",
-    "welcome": "Welcome to NextWatch"
+    "welcome": "Welcome to NextWatch",
+    "nextCreateAccount": "Create account →"
   },
   "overlay": {
     "didntSee": "Didn't watch it / skip",
@@ -1129,7 +1138,13 @@
       "premiere": "Premieres {date}"
     },
     "upgradeCta": "Upgrade to Premium",
-    "whyThis": "Why this one?"
+    "whyThis": "Why this one?",
+    "firstHint": {
+      "nope": "Nope",
+      "like": "Like",
+      "title": "Drag right if you want to watch it, left if not.",
+      "more": "Drag up if you've already seen it. Tap the card for the plot and where to stream it."
+    }
   },
   "swipeLimit": {
     "body": "{limit} swipes a day are included for free. Come back tomorrow – or get Premium for unlimited swiping.",

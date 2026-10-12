@@ -109,10 +109,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Toast />
         </div>
 
-        {/* Nav-hinten: EN ruta som listar alla fem flikar, och först efter att
-            swipe-genomgången är avklarad — inte fem modaler direkt vid start. */}
+        {/* Nav-hinten: EN ruta som listar alla fem flikar. Sedan 2026-10-12 bara
+            via Profil → Genomgång (manualOnly): den lades ovanpå nya användares
+            första riktiga kort, även för dem som hoppat över swipe-guiden. */}
         {signedIn ? (
-          <CoachMarkTour tourId="nav-tour" steps={NAV_TOUR_STEPS} requires={["swipe-gestures"]} delayMs={1400} />
+          <CoachMarkTour tourId="nav-tour" steps={NAV_TOUR_STEPS} delayMs={1400} manualOnly />
         ) : null}
       </div>
     </AuthGateProvider>

@@ -77,13 +77,15 @@ function bump(key: string): number {
 }
 
 /**
- * Räkna en swipe i solo-/gruppsvepet. Triggar "watchlist" vid tredje liken och
+ * Räkna en swipe i solo-/gruppsvepet. Triggar "watchlist" från tredje liken och
  * "swipes" vid den 25:e swipen. Räknaren nollställs aldrig — varje trigger
- * visas ändå bara en gång.
+ * visas ändå bara en gång (nudgeAllowed). ">=" i stället för "===": om ett
+ * annat ark låg öppet vid tredje liken väntar prompten till nästa like i
+ * stället för att försvinna för gott.
  */
 export function trackSwipeForNudge(kind: "like" | "dislike" | "seen"): void {
   const swipes = bump(K_SWIPES);
-  if (kind === "like" && bump(K_LIKES) === LIKES_THRESHOLD) {
+  if (kind === "like" && bump(K_LIKES) >= LIKES_THRESHOLD && nudgeAllowed("watchlist")) {
     nudgeSignup("watchlist");
     return;
   }

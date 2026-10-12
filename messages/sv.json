@@ -73,7 +73,15 @@
     "verifyLinkSent": "Verifieringslänk skickad.",
     "verifySentBody": "Vi har skickat en länk för att bekräfta din e-post. Öppna mejlet och klicka på länken.",
     "verifying": "Verifierar…",
-    "verifyingEmail": "Verifierar e-post…"
+    "verifyingEmail": "Verifierar e-post…",
+    "continueSwipingWhileWaiting": "Fortsätt swipa medan du väntar",
+    "openMail": "Öppna Mail",
+    "openGmail": "Öppna Gmail",
+    "resendEmail": "Skicka mejlet igen",
+    "resendSent": "Nytt mejl skickat.",
+    "resendFailed": "Kunde inte skicka just nu – försök igen om en stund.",
+    "noMailHint": "Fick du inget mejl? Kolla skräpposten eller skicka igen.",
+    "verifyLater": "Du kan swipa som vanligt under tiden – kontot blir klart när du klickat på länken."
   },
   "avatars": {
     "alien": "Alien",
@@ -700,7 +708,8 @@
     "usernameInvalid": "Ogiltigt format",
     "usernameLabel": "Användarnamn",
     "usernameTaken": "Upptaget – välj ett annat",
-    "welcome": "Välkommen till NextWatch"
+    "welcome": "Välkommen till NextWatch",
+    "nextCreateAccount": "Skapa konto →"
   },
   "overlay": {
     "didntSee": "Såg den inte / hoppa över",
@@ -1129,7 +1138,13 @@
       "premiere": "Premiär {date}"
     },
     "upgradeCta": "Uppgradera till Premium",
-    "whyThis": "Varför det här?"
+    "whyThis": "Varför det här?",
+    "firstHint": {
+      "nope": "Nej",
+      "like": "Gilla",
+      "title": "Dra kortet åt höger om du vill se den, vänster om inte.",
+      "more": "Dra uppåt om du redan sett den. Tryck på kortet för handling och var den streamas."
+    }
   },
   "swipeLimit": {
     "body": "{limit} swipes per dag ingår gratis. Kom igen imorgon – eller bli Premium för obegränsat swipande.",

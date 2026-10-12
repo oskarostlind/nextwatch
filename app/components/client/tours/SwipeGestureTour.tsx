@@ -90,7 +90,9 @@ const VELOCITY_THRESHOLD = 700;
 
 export default function SwipeGestureTour() {
   const t = useTranslations("gestureTour");
-  const { state, complete, skip } = useTourGate(TOUR_ID, { delayMs: 200 });
+  // Bara via Profil → Genomgång sedan 2026-10-12 — nya användare får ett
+  // gesttips direkt på första riktiga kortet i stället (FirstCardHint).
+  const { state, complete, skip } = useTourGate(TOUR_ID, { delayMs: 200, manualOnly: true });
   const [mounted, setMounted] = useState(false);
   const [demoCard, setDemoCard] = useState<Card | null>(null);
   const [stepIndex, setStepIndex] = useState(0);

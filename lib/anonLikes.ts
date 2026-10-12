@@ -97,3 +97,31 @@ export async function replayAnonLikes(): Promise<number> {
   clearAnonLikes();
   return results.filter((r) => r.status === "fulfilled").length;
 }
+
+/**
+ * Som replayAnonLikes, men utan att vänta: betyg och watchlist skickas
+ * parallellt med keepalive, så anropen överlever att sidan byts direkt efter.
+ * Används av "Hoppa in som gäst": förr väntade knappen på två anrop i rad per
+ * gillad titel innan swipen öppnades — "Startar…" i flera sekunder.
+ */
+export function replayAnonLikesInBackground(): void {
+  const likes = readAnonLikes();
+  if (likes.length === 0) return;
+  clearAnonLikes();
+  for (const l of likes) {
+    void fetch("/api/rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      keepalive: true,
+      body: JSON.stringify({ tmdbId: l.tmdbId, mediaType: l.mediaType, decision: "like" }),
+    }).catch(() => {});
+    void fetch("/api/watchlist/like", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      keepalive: true,
+      body: JSON.stringify({ tmdbId: l.tmdbId, mediaType: l.mediaType, title: l.title, year: l.year, poster: l.poster }),
+    }).catch(() => {});
+  }
+}

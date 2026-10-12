@@ -1,11 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { CalendarClock, ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
-import { motion, useAnimation, useMotionValue, useTransform, type MotionValue } from "framer-motion";
+import {
+  animate,
+  motion,
+  motionValue,
+  useAnimation,
+  useMotionValue,
+  useTransform,
+  type AnimationPlaybackControls,
+  type LegacyAnimationControls,
+  type MotionValue,
+} from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
@@ -116,7 +127,22 @@ function formatPremiereDate(iso: string, locale: string): string {
   }).format(d);
 }
 
+/**
+ * Kör `fn` direkt efter nästa ritade bildruta. Nätverksanropen för en swipe
+ * (betyg, watchlist, gruppröst) startades förr i samma synkrona block som
+ * själva kortbytet — att bara STARTA fetch kostar märkbart på en telefon, och
+ * det sköt upp bildrutan där nästa kort tar över. Nu ritas kortbytet först.
+ */
+function afterPaint(fn: () => void): void {
+  if (typeof window === "undefined") return fn();
+  window.requestAnimationFrame(() => window.setTimeout(fn, 0));
+}
+
 function saveRating(c: Card, decision: "like" | "dislike" | "seen") {
+  afterPaint(() => postRating(c, decision));
+}
+
+function postRating(c: Card, decision: "like" | "dislike" | "seen") {
   void fetch("/api/rate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -222,6 +248,17 @@ type ProvidersResp = {
 };
 
 /** Hämtar providers för titeln. Länken byggs vid rendering, se lib/watchLinks.ts. */
+/**
+ * Kör `fn` när huvudtråden är ledig (efter pågående swipe-animation), med
+ * tak så att det aldrig dröjer mer än ~600 ms. iOS WKWebView saknar
+ * requestIdleCallback — där räcker en kort timeout förbi ut-animationen.
+ */
+function whenIdle(fn: () => void): void {
+  const w = window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+  if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(fn, { timeout: 600 });
+  else window.setTimeout(fn, 320);
+}
+
 export async function fetchWatchProviders(
   type: MediaType,
   id: number
@@ -425,42 +462,55 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
     if (third && third.kind !== "ad" && !fetched.current.has(third.id))
       toFetch.push({ id: third.id, mediaType: third.mediaType, tmdbId: third.tmdbId });
     if (toFetch.length === 0) return;
-
-    toFetch.forEach((t) => fetched.current.add(t.id));
-    Promise.all(
-      toFetch.map((t) => fetchDetailsWithFallback(t.mediaType, t.tmdbId).then((det) => ({ id: t.id, det })))
-    ).then((results) => {
-      results.forEach(({ id, det }) => {
-        if (!det) return;
-        updateSoloCards((prev) =>
-          prev.map((c) =>
-            c.id === id
-              ? {
-                  ...c,
-                  overview: c.overview ?? det.overview,
-                  rating: typeof c.rating === "number" ? c.rating : det.rating ?? null,
-                  poster: c.poster ?? det.poster,
-                  title: c.title || det.title,
-                  year: c.year ?? det.year,
-                  genres: c.genres?.length ? c.genres : det.genres,
-                  backdrop: c.backdrop ?? det.backdrop,
-                  trailer: c.trailer ?? det.trailer,
-                }
-              : c
+    // Starta hämtningen först när kortbytet är ritat (se afterPaint): effekten
+    // körs annars synkront i samma block som swipen.
+    let cancelled = false;
+    afterPaint(() => {
+      if (cancelled) return;
+      toFetch.forEach((t) => fetched.current.add(t.id));
+      // Details + providers hämtas parallellt men skrivs in i leken i EN
+      // uppdatering, och först när huvudtråden är ledig. Förr kom upp till sex
+      // separata uppdateringar per swipe (två per kort), ofta mitt i ut-
+      // animationen — varje uppdatering renderade om hela swipevyn och gav ett
+      // hack. Korten det gäller ligger bakom toppkortet, så det är ingen brådska.
+      void Promise.all(
+        toFetch.map((t) =>
+          Promise.all([
+            fetchDetailsWithFallback(t.mediaType, t.tmdbId),
+            fetchWatchProviders(t.mediaType, t.tmdbId),
+          ]).then(([det, providers]) => ({ id: t.id, det, providers }))
+        )
+      ).then((results) => {
+        const byId = new Map(results.map((r) => [r.id, r]));
+        whenIdle(() =>
+          updateSoloCards((prev) =>
+            prev.map((c) => {
+              const r = byId.get(c.id);
+              if (!r) return c;
+              const det = r.det;
+              const next = det
+                ? {
+                    ...c,
+                    overview: c.overview ?? det.overview,
+                    rating: typeof c.rating === "number" ? c.rating : det.rating ?? null,
+                    poster: c.poster ?? det.poster,
+                    title: c.title || det.title,
+                    year: c.year ?? det.year,
+                    genres: c.genres?.length ? c.genres : det.genres,
+                    backdrop: c.backdrop ?? det.backdrop,
+                    trailer: c.trailer ?? det.trailer,
+                  }
+                : { ...c };
+              if (next.providers === undefined) next.providers = r.providers;
+              return next;
+            })
           )
         );
       });
     });
-    // Providers hämtas parallellt med details (separat endpoint).
-    toFetch.forEach((t) => {
-      void fetchWatchProviders(t.mediaType, t.tmdbId).then((providers) => {
-        updateSoloCards((prev) =>
-          prev.map((c) =>
-            c.id === t.id && c.providers === undefined ? { ...c, providers } : c
-          )
-        );
-      });
-    });
+    return () => {
+      cancelled = true;
+    };
   }, [cards, updateSoloCards]);
 
   // Den passiva swipe-guiden som låg här togs bort 2026-08-21: den förklarade
@@ -512,6 +562,10 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
   function sendGroupVoteBackground(c: Card, vote: "LIKE" | "DISLIKE") {
     if (mode !== "group" || !group?.code) return;
     const code = group.code;
+    afterPaint(() => sendGroupVote(c, vote, code));
+  }
+
+  function sendGroupVote(c: Card, vote: "LIKE" | "DISLIKE", code: string) {
     void fetch("/api/group/vote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -580,7 +634,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
     markSeen(c.id);
     saveRating(c, "like");
     popTop();
-    void fetch("/api/watchlist/like", {
+    afterPaint(() => void fetch("/api/watchlist/like", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
@@ -599,7 +653,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
       }),
     }).catch(() => {
       /* best-effort */
-    });
+    }));
     sendGroupVoteBackground(c, "LIKE");
     // Gäst-konverteringen räknar bara solo — en gruppkväll ska inte avbrytas.
     if (mode !== "group") trackSwipeForNudge("like");
@@ -654,6 +708,8 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
     }
     undoStackRef.current = undoStackRef.current.slice(1);
     setRatePrompt(null);
+    // Ångrat medan kortet fortfarande flyger ut: ta tillbaka det direkt.
+    setLeaving((prev) => prev.filter((l) => l.card.id !== entry.card.id));
     unmarkSeen(entry.card.id);
     if (entry.action === "dislike" || entry.action === "seen") {
       unhide(entry.card.tmdbId);
@@ -687,54 +743,88 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
    * fjädern ärver den, så en snabb flick lämnar skärmen fortare än ett
    * knapptryck. Kortet känns kastat i stället för uppspelat.
    */
-  async function swipeOut(dir: "left" | "right" | "up", releaseVelocity = 0) {
+  // Kort som är på väg ut. Fram till 2026-10-12 väntade swipeOut på att
+  // utfjädern landat (~0,5 s, längre på en långsam telefon) INNAN leken gick
+  // vidare: under tiden gick nästa kort inte att swipa, och sedan monterades
+  // hela kortstacken om på en gång — det var hacket mitt i varje swipe. Nu
+  // flyger det utswipade kortet ut i ett eget lager medan leken går vidare
+  // direkt, och korten behåller sina DOM-noder (samma nyckel och elementtyp)
+  // när de flyttar upp i stacken.
+  const [leaving, setLeaving] = useState<LeavingCard[]>([]);
+
+  /**
+   * Kastar ut toppkortet. `releaseVelocity` är fingrets hastighet vid släpp —
+   * fjädern ärver den, så en snabb flick lämnar skärmen fortare än ett
+   * knapptryck. Kortet känns kastat i stället för uppspelat.
+   */
+  function swipeOut(dir: "left" | "right" | "up", releaseVelocity = 0) {
     if (firstHint) {
       setFirstHint(false);
       markFirstCardHintDone();
     }
     const c = cards[0];
     if (!c) return;
-    const target =
-      dir === "right"
-        ? { x: 560, opacity: 0 }
-        : dir === "left"
-        ? { x: -560, opacity: 0 }
-        : { y: -760, opacity: 0 };
-    await controls.start({
-      ...target,
-      transition: {
-        x: {
-          type: "spring",
-          stiffness: 200,
-          damping: 26,
-          velocity: releaseVelocity,
-          restDelta: 1,
-          restSpeed: 10,
-        },
-        y: {
-          type: "spring",
-          stiffness: 200,
-          damping: 26,
-          velocity: releaseVelocity,
-          restDelta: 1,
-          restSpeed: 10,
-        },
-        opacity: { duration: 0.18, ease: "easeOut" },
-      },
+
+    // Kortets egna rörelsevärden, startade där fingret släppte. Skapas FÖRE
+    // renderingen så att kortet aldrig ritas en bildruta i mitten.
+    const leave: LeavingCard = {
+      card: c,
+      dir,
+      x: motionValue(x.get()),
+      y: motionValue(y.get()),
+      rotate: motionValue(rotate.get()),
+      opacity: motionValue(1),
+      like: motionValue(dir === "right" ? 1 : 0),
+      nope: motionValue(dir === "left" ? 1 : 0),
+      seen: motionValue(dir === "up" ? 1 : 0),
+    };
+    // Toppkortets delade värden nollas innan nästa kort tar över dem.
+    x.set(0);
+    y.set(0);
+    controls.set({ x: 0, y: 0, opacity: 1 });
+
+    // Synkront: leken går vidare och kortet byter lager i SAMMA commit, så
+    // ingenting hinner ritas emellan (onDragEnd körs i framers postRender).
+    flushSync(() => {
+      setLeaving((prev) => [...prev.filter((l) => l.card.id !== c.id).slice(-2), leave]);
+      if (dir === "right") handleLike(c);
+      else if (dir === "left") handleDislike(c);
+      else handleSeen(c);
     });
-    if (dir === "right") handleLike(c);
-    else if (dir === "left") handleDislike(c);
-    else handleSeen(c);
-    // AdMob-interstitial var 15:e swipe (endast native iOS + gratis, no-op annars).
+
+    const spring = {
+      type: "spring" as const,
+      stiffness: 200,
+      damping: 26,
+      velocity: releaseVelocity,
+      restDelta: 1,
+      restSpeed: 10,
+    };
+    const anims: AnimationPlaybackControls[] = [];
+    if (dir === "up") {
+      anims.push(animate(leave.y, -760, spring));
+    } else {
+      anims.push(
+        animate(leave.x, dir === "right" ? 560 : -560, {
+          ...spring,
+          onUpdate: (v) => leave.rotate.set(Math.max(-16, Math.min(16, (v / 260) * 16))),
+        })
+      );
+    }
+    anims.push(animate(leave.opacity, 0, { duration: 0.18, ease: "easeOut" }));
+    // Osynligt efter 0,18 s — ta bort lagret strax efter i stället för att
+    // låta fjädern rinna ut i en halv sekund till.
+    window.setTimeout(() => {
+      anims.forEach((a) => a.stop());
+      setLeaving((prev) => prev.filter((l) => l !== leave));
+    }, 240);
+
+    // AdMob-interstitial (endast native iOS + gratis, no-op annars).
     registerSwipeForAds();
     // ProviderPromptSheet räknar swipes via det här eventet (sträng i stället
     // för import av SOLO_SWIPED_EVENT — importen hade dragit in arket i
     // förstaladdningens bundle).
     if (needsProviders) window.dispatchEvent(new Event("nw:solo-swiped"));
-    // Återställ direkt (utan animation) så nästa kort inte glider in från sidan.
-    x.set(0);
-    y.set(0);
-    controls.set({ x: 0, y: 0, opacity: 1 });
   }
 
   const stackIndices: number[] = [];
@@ -803,7 +893,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
         onSkip={() => setRatePrompt(null)}
       />
       {mode === "group" && group?.code && (
-        <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-600/15 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur">
+        <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-950/85 px-3 py-1 text-xs font-medium text-emerald-200">
           {t("groupLabel")} <span className="font-mono tracking-wider">{group.code}</span>
         </div>
       )}
@@ -825,115 +915,61 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
             {t("retry")}
           </Button>
         </div>
-      ) : cards[0] ? (
+      ) : cards[0] || leaving.length > 0 ? (
           <div
             className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden"
           >
+          {/* Bakifrån och fram: kort 3, 2, toppkortet, och överst de som är på
+              väg ut. ALLA ritas av DeckCard med kortets id som nyckel, så ett
+              kort som flyttar upp (eller kastas ut) behåller sin DOM-nod och
+              sin redan avkodade bild i stället för att monteras om. */}
           {stackIndices.map((idx) => {
             const card = cards[idx];
-            if (!card) return null;
+            if (!card || leaving.some((l) => l.card.id === card.id)) return null;
             const isTop = idx === 0;
-            if (isTop) {
-              return (
-                <motion.div
-                  key={card.id}
-                  className="absolute inset-0 z-10 flex touch-none items-center justify-center p-0.5"
-                  style={{ x, y, rotate }}
-                  animate={controls}
-                  drag
-                  // INGA dragConstraints och ingen momentum. Med nollstora constraints startade
-                  // framer-motion en EGEN inertia-animation mot (0,0) i samma ögonblick fingret
-                  // släpptes (VisualElementDragControls.stop -> startAnimation, min/max = 0 och
-                  // velocity = fingrets fart), medan vårt eget onDragEnd med flit körs en
-                  // bildruta senare (frame.postRender). De två animationerna skrev till samma
-                  // motion values: kortet ryckte tillbaka till mitten innan swipeOut hann ta
-                  // över, och på en långsam enhet — där postRender dröjer flera bildrutor — blev
-                  // det synligt som ett kort som stod stilla mitt på skärmen och sedan hoppade
-                  // vidare. Utan constraints finns inget att fjädra tillbaka till, och utan
-                  // momentum startas ingen inertia alls: onDragEnd äger hela släppet (antingen
-                  // swipeOut eller en uttrycklig fjäder till 0). Kortet följer fingret 1:1 av
-                  // sig självt, vilket är precis det dragElastic-hacket försökte åstadkomma.
-                  dragMomentum={false}
-                  onDragEnd={(_, info) => {
-                    const { offset, velocity } = info;
-                    const up =
-                      (offset.y < -DIST_THRESHOLD || velocity.y < -VELOCITY_THRESHOLD) &&
-                      Math.abs(offset.y) > Math.abs(offset.x);
-                    if (up) {
-                      void swipeOut("up", velocity.y);
-                      return;
-                    }
-                    if (offset.x > DIST_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
-                      void swipeOut("right", velocity.x);
-                      return;
-                    }
-                    if (offset.x < -DIST_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
-                      void swipeOut("left", velocity.x);
-                      return;
-                    }
-                    void controls.start({
-                      x: 0,
-                      y: 0,
-                      transition: { type: "spring", stiffness: 320, damping: 28 },
-                    });
-                  }}
-                >
-                  {/* Nya toppkortet växer från exakt den skala/position det hade
-                      som kort #2 i stacken, i stället för att snäppa till full
-                      storlek på en bildruta. Bara transform — ingen layoutkostnad. */}
-                  <motion.div
-                    className="h-full max-h-full w-full min-h-0"
-                    initial={{ scale: 0.95, y: 10 }}
-                    animate={{ scale: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                  >
-                    <StaticCard
-                      card={card}
-                      flipped={flippedId === card.id}
-                      interactive
-                      onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
-                      onShare={shareCard}
-                    />
-                  </motion.div>
-
-                  <SwipeStampOverlays
-                    likeOpacity={likeOpacity}
-                    nopeOpacity={nopeOpacity}
-                    seenOpacity={seenOpacity}
-                    seenScale={seenScale}
-                    seenRotate={seenRotate}
-                  />
-                  <FirstCardHint visible={firstHint && mode === "individual" && flippedId !== card.id} />
-                </motion.div>
-              );
-            }
-            const depth = idx;
-            const scale = depth === 1 ? 0.95 : 0.9;
-            const translateY = depth === 1 ? 10 : 20;
-            const z = depth === 1 ? 9 : 8;
             return (
-              <div
+              <DeckCard
                 key={card.id}
-                // Ingen opacity här. Wrappern hade opacity-[0.92], vilket gör HELA
-                // subträdet 92 % ogenomskinligt som grupp — även det svarta
-                // kortet under. De 8 % som släpptes igenom visade kortet TVÅ steg
-                // bort, och eftersom dess titel är vit text på nästan svart
-                // gradient syntes den tydligt genom det inkommande kortets
-                // titelyta när toppkortet tonade ut. Dämpningen ska komma från
-                // filter: brightness() ensam — den gör inget genomskinligt.
-                // transition-transform: när toppkortet försvinner flyttas #3 upp
-                // till #2:s plats — utan detta hoppar den ett steg på en bildruta.
-                className="pointer-events-none absolute inset-0 flex items-center justify-center p-0.5 transition-transform duration-200 ease-out"
-                style={{
-                  zIndex: z,
-                  transform: `translateY(${translateY}px) scale(${scale})`,
-                  filter: "brightness(0.88)",
-                }}
-              >
-                <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
-              </div>
+                card={card}
+                depth={idx}
+                top={
+                  isTop
+                    ? {
+                        x,
+                        y,
+                        rotate,
+                        controls,
+                        likeOpacity,
+                        nopeOpacity,
+                        seenOpacity,
+                        seenScale,
+                        seenRotate,
+                        flipped: flippedId === card.id,
+                        onFlip: () => setFlippedId((p) => (p === card.id ? null : card.id)),
+                        onShare: shareCard,
+                        onRelease: (offsetX, offsetY, vx, vy) => {
+                          const up =
+                            (offsetY < -DIST_THRESHOLD || vy < -VELOCITY_THRESHOLD) &&
+                            Math.abs(offsetY) > Math.abs(offsetX);
+                          if (up) return swipeOut("up", vy);
+                          if (offsetX > DIST_THRESHOLD || vx > VELOCITY_THRESHOLD) return swipeOut("right", vx);
+                          if (offsetX < -DIST_THRESHOLD || vx < -VELOCITY_THRESHOLD) return swipeOut("left", vx);
+                          void controls.start({
+                            x: 0,
+                            y: 0,
+                            transition: { type: "spring", stiffness: 320, damping: 28 },
+                          });
+                        },
+                        hint: firstHint && mode === "individual" && flippedId !== card.id,
+                      }
+                    : undefined
+                }
+              />
             );
           })}
+          {leaving.map((l) => (
+            <DeckCard key={l.card.id} card={l.card} depth={0} leaving={l} />
+          ))}
           </div>
       ) : (
         <div className="absolute inset-0 flex items-center justify-center px-4 text-center opacity-70">
@@ -947,13 +983,13 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
           // så knappen känns som ett bestämt kast i stället för en avspelning.
-          onNope={() => void swipeOut("left", -900)}
+          onNope={() => swipeOut("left", -900)}
           onInfo={() => {
             const c = cards[0];
             if (c) setFlippedId((p) => (p === c.id ? null : c.id));
           }}
           onUndo={handleUndo}
-          onLike={() => void swipeOut("right", 900)}
+          onLike={() => swipeOut("right", 900)}
         />
       </div>
 
@@ -962,6 +998,134 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
     </div>
   );
 }
+
+
+/* ---------- Kortstacken ---------- */
+
+/** Ett kort på väg ut ur leken, med egna rörelsevärden (se swipeOut). */
+type LeavingCard = {
+  card: Card;
+  dir: "left" | "right" | "up";
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  rotate: MotionValue<number>;
+  opacity: MotionValue<number>;
+  like: MotionValue<number>;
+  nope: MotionValue<number>;
+  seen: MotionValue<number>;
+};
+
+type TopCardProps = {
+  x: MotionValue<number>;
+  y: MotionValue<number>;
+  rotate: MotionValue<number>;
+  controls: LegacyAnimationControls;
+  likeOpacity: MotionValue<number>;
+  nopeOpacity: MotionValue<number>;
+  seenOpacity: MotionValue<number>;
+  seenScale: MotionValue<number>;
+  seenRotate: MotionValue<number>;
+  flipped: boolean;
+  onFlip: () => void;
+  onShare: (card: Card) => void;
+  onRelease: (offsetX: number, offsetY: number, velocityX: number, velocityY: number) => void;
+  hint: boolean;
+};
+
+// Konstanta värden för "sett"-stämpeln på ett kort som redan är på väg ut.
+const STAMP_SCALE_DONE = motionValue(1);
+const STAMP_ROTATE_DONE = motionValue(0);
+const noop = () => {};
+
+/**
+ * Ett kort i stacken — bakom, överst eller på väg ut. SAMMA komponent och
+ * samma elementträd i alla tre lägen, med kortets id som nyckel, så React
+ * flyttar DOM-noden i stället för att montera om kortet (och dess bild) när
+ * det byter läge. Djupet (skala/förskjutning) animeras på ett inre lager.
+ *
+ * Inga filter, ingen backdrop-blur: bakomliggande kort mörkas med ett
+ * svart lager i stället för filter: brightness(), som tvingade WKWebView att
+ * rita om hela kortet varje bildruta medan toppkortet drogs.
+ */
+const DeckCard = memo(function DeckCard({
+  card,
+  depth,
+  top,
+  leaving,
+}: {
+  card: Card;
+  depth: number;
+  top?: TopCardProps;
+  leaving?: LeavingCard;
+}) {
+  const d = leaving || top ? 0 : depth;
+  const scale = d === 0 ? 1 : d === 1 ? 0.95 : 0.9;
+  const shiftY = d === 0 ? 0 : d === 1 ? 10 : 20;
+  const z = leaving ? 20 : d === 0 ? 10 : d === 1 ? 9 : 8;
+  const style = top
+    ? { x: top.x, y: top.y, rotate: top.rotate, zIndex: z }
+    : leaving
+    ? { x: leaving.x, y: leaving.y, rotate: leaving.rotate, opacity: leaving.opacity, zIndex: z }
+    : { zIndex: z };
+
+  return (
+    <motion.div
+      className={`absolute inset-0 flex items-center justify-center p-0.5 ${top ? "z-10 touch-none" : "pointer-events-none"}`}
+      style={style}
+      animate={top ? top.controls : undefined}
+      drag={Boolean(top)}
+      // INGA dragConstraints och ingen momentum. Med nollstora constraints startade
+      // framer-motion en EGEN inertia-animation mot (0,0) i samma ögonblick fingret
+      // släpptes, medan vårt onDragEnd körs en bildruta senare (frame.postRender) —
+      // de två skrev till samma motion values och kortet ryckte tillbaka innan
+      // utkastet tog över. Utan constraints och momentum äger onDragEnd hela släppet.
+      dragMomentum={false}
+      onDragEnd={
+        top
+          ? (_, info) => top.onRelease(info.offset.x, info.offset.y, info.velocity.x, info.velocity.y)
+          : undefined
+      }
+    >
+      <motion.div
+        className="relative h-full max-h-full w-full min-h-0"
+        initial={false}
+        animate={{ scale, y: shiftY }}
+        transition={{ type: "spring", stiffness: 380, damping: 32 }}
+      >
+        <StaticCard
+          card={card}
+          flipped={top?.flipped ?? false}
+          interactive={Boolean(top)}
+          onFlip={top?.onFlip ?? noop}
+          onShare={top?.onShare}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl bg-black transition-opacity duration-200"
+          style={{ opacity: d === 0 ? 0 : 0.12 }}
+        />
+      </motion.div>
+      {top ? (
+        <SwipeStampOverlays
+          likeOpacity={top.likeOpacity}
+          nopeOpacity={top.nopeOpacity}
+          seenOpacity={top.seenOpacity}
+          seenScale={top.seenScale}
+          seenRotate={top.seenRotate}
+        />
+      ) : leaving ? (
+        <SwipeStampOverlays
+          likeOpacity={leaving.like}
+          nopeOpacity={leaving.nope}
+          seenOpacity={leaving.seen}
+          seenScale={STAMP_SCALE_DONE}
+          seenRotate={STAMP_ROTATE_DONE}
+        />
+      ) : null}
+      {top ? <FirstCardHint visible={top.hint} /> : null}
+    </motion.div>
+  );
+});
 
 /* ---------- Tinder-stil swipe-stämplar ---------- */
 
@@ -1027,6 +1191,18 @@ export function StaticCard({
   /** Öppnar "Tipsa en vän" för kortet. Bara meningsfullt på toppkortet. */
   onShare?: (card: Card) => void;
 }) {
+  // Baksidan (backdrop-bild, tjänster, knappar) byggs bara för toppkortet, och
+  // först när det legat still en stund — eller direkt om kortet vänds. Förr
+  // renderades den för alla tre korten i stacken vid varje swipe, med en
+  // extra bild att avkoda per kort.
+  const [backReady, setBackReady] = useState(false);
+  useEffect(() => {
+    if (!interactive || backReady) return;
+    const t = window.setTimeout(() => setBackReady(true), 450);
+    return () => window.clearTimeout(t);
+  }, [interactive, backReady]);
+  const showBack = backReady || flipped;
+
   // Annonskort: ingen flip, ingen poster – renderar AdCard (AdSense/AdMob).
   if (card.kind === "ad") {
     return (
@@ -1043,15 +1219,17 @@ export function StaticCard({
       <div
         // Egen easing + will-change: rotateY:n ska ligga kvar på kompositören hela
         // 3D-rotationen (se WKWebView-kommentaren om preserve-3d längre ned).
-        className="relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-transform [transform-style:preserve-3d]"
+        className={`relative h-full max-h-full w-full min-h-0 rounded-2xl border border-white/15 bg-black shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] [transform-style:preserve-3d] ${interactive ? "will-change-transform" : ""}`}
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
           <Front card={card} flipped={flipped} />
         </div>
-        <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-          <Back card={card} onShare={onShare} />
-        </div>
+        {showBack ? (
+          <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+            <Back card={card} onShare={onShare} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1123,7 +1301,7 @@ function UpcomingBadge({ className = "" }: { className?: string }) {
   const t = useTranslations("swipe");
   return (
     <div
-      className={`inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-black/55 px-2 py-1 backdrop-blur-sm ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-black/75 px-2 py-1 ${className}`}
     >
       <CalendarClock className="h-3.5 w-3.5 text-amber-300" />
       <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
@@ -1170,7 +1348,7 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
 
       {!flipped && card.reasons && card.reasons.length > 0 ? (
         <div className="pointer-events-none absolute left-3 right-3 top-3 z-10">
-          <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/55 px-2 py-1 backdrop-blur-sm">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-cyan-400/30 bg-black/75 px-2 py-1">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/90">
               Matchar
             </span>
@@ -1189,12 +1367,12 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
         <div className="h-28 bg-gradient-to-t from-black/90 to-transparent" />
         <div className="-mt-24 px-1">
-          <div className="text-lg font-semibold text-white drop-shadow">
+          <div className="text-lg font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
             {card.title}
             {card.year ? <span className="ml-2 opacity-80">({card.year})</span> : null}
           </div>
           {isUpcoming && card.releaseDate ? (
-            <div className="mt-0.5 text-xs font-medium text-amber-300/90 drop-shadow">
+            <div className="mt-0.5 text-xs font-medium text-amber-300/90 [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
               {t("upcoming.premiere", { date: formatPremiereDate(card.releaseDate, locale) })}
             </div>
           ) : null}
@@ -1205,7 +1383,7 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
           byggt på en handfull förhandsröster) innan premiären, och "★ 0.0" ser
           ut som ett underkännande. Premiärdatumet är kortets siffra i stället. */}
       {!isUpcoming && typeof card.rating === "number" ? (
-        <div className="absolute bottom-2 right-2 rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40 backdrop-blur">
+        <div className="absolute bottom-2 right-2 rounded-md bg-black/70 px-2 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40">
           ★ {card.rating.toFixed(1)}
         </div>
       ) : null}

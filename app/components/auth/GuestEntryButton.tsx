@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { replayAnonLikes } from "@/lib/anonLikes";
+import { replayAnonLikesInBackground } from "@/lib/anonLikes";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
@@ -33,9 +33,10 @@ export default function GuestEntryButton({
       if (res.ok && j.ok) {
         funnel("guest_created");
         // Startsidans hero lovar att swipesen "följer med". Gästen får en riktig
-        // profil här, så löftet infrias direkt — best-effort, precis som i
-        // onboardingen.
-        await replayAnonLikes().catch(() => 0);
+        // profil här, så löftet infrias direkt — best-effort, och utan att
+        // vänta på svaren (keepalive överlever sidbytet). Förr väntade knappen
+        // på dem och visade "Startar…" i flera sekunder.
+        replayAnonLikesInBackground();
         window.location.href = "/swipe";
         return;
       }

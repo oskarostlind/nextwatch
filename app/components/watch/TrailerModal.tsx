@@ -40,7 +40,7 @@ export default function TrailerModal({ open, trailer, title, onClose }: Props) {
           role="dialog"
           aria-modal
           aria-label={`Trailer: ${title}`}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

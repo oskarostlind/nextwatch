@@ -14,8 +14,8 @@
 //
 // Lagerordning: PickSheet ligger på z-[65] och dess panel är transformerad
 // (framer-motion), så `fixed` inuti den hade blivit relativ till panelen.
-// Därför portalas arket till body på z-[70]; RatingModal/TrailerModal (z-60)
-// renderas inuti samma z-[70]-kontext och hamnar alltså ovanpå valarket.
+// Därför portalas arket till body på z-[70]; dela/betyg-modalerna (z-60/z-1000)
+// får en egen z-[80]-kontext ovanför, och TrailerModal (egen portal) ligger på z-[90].
 // Escape fångas i capture-fasen så att bara detaljarket stängs, inte valarket.
 
 import { useEffect, useState } from "react";
@@ -149,7 +149,7 @@ export default function PickDetailSheet({ item, from, onClose, saved, saving, on
   const actionCls = `flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-2xl border px-1 text-[12px] font-medium transition active:scale-[0.97] disabled:active:scale-100 ${focusRing}`;
   const idle = "border-white/10 bg-white/[0.05] text-white/85 hover:bg-white/10";
 
-  return createPortal(
+  const sheet = createPortal(
     <div className="relative z-[70]">
       <AnimatePresence>
         {item ? (
@@ -316,7 +316,13 @@ export default function PickDetailSheet({ item, from, onClose, saved, saving, on
           </div>
         ) : null}
       </AnimatePresence>
+    </div>,
+    document.body
+  );
 
+  // Dela/betyg ligger i en egen z-[80]-kontext ovanför detaljarket (z-[70]).
+  const modals = createPortal(
+    <div className="relative z-[80]">
       <ShareTitleModal
         open={shareOpen && item !== null}
         item={
@@ -353,5 +359,12 @@ export default function PickDetailSheet({ item, from, onClose, saved, saving, on
       />
     </div>,
     document.body
+  );
+
+  return (
+    <>
+      {sheet}
+      {modals}
+    </>
   );
 }

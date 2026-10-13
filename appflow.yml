@@ -1,9 +1,17 @@
 # Appflow auto-increment iOS build number via CI_BUILD_NUMBER.
 # Docs: https://ionic.io/docs/appflow/cookbook/auto-incrementing-build-numbers
+#
+# Appen och Notification Service-extensionen MÅSTE ha samma build-nummer – annars varnar
+# App Store Connect (ITMS-90473). Trapeze sätter därför CURRENT_PROJECT_VERSION per target;
+# båda Info.plist-filerna använder $(CURRENT_PROJECT_VERSION) som CFBundleVersion.
 vars:
   CI_BUILD_NUMBER:
     default: 1
 
 platforms:
   ios:
-    buildNumber: $CI_BUILD_NUMBER
+    targets:
+      App:
+        buildNumber: $CI_BUILD_NUMBER
+      NotificationService:
+        buildNumber: $CI_BUILD_NUMBER

@@ -83,11 +83,27 @@ sökvägsstilen.
 
 | Fil | Syfte |
 |-----|--------|
-| `appflow.yml` | Trapeze: sätter buildNumber från `CI_BUILD_NUMBER` |
-| `ios/App/App/App.entitlements` | Sign in with Apple |
-| `ios/App/App.xcodeproj/project.pbxproj` | `MARKETING_VERSION` (1.0), `CURRENT_PROJECT_VERSION` |
+| `appflow.yml` | Trapeze: sätter buildNumber från `CI_BUILD_NUMBER` för BÅDA targets (`App` + `NotificationService`) — måste vara lika, annars ITMS-90473 |
+| `ios/App/App/App.entitlements` | Sign in with Apple, push, Time Sensitive Notifications |
+| `ios/App/App.xcodeproj/project.pbxproj` | `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` — finns i BÅDA targets; ändras versionen i App måste extensionen följa med |
+| `ios/App/NotificationService/` | Notification Service Extension (bundle `com.nextwatch.app.NotificationService`): laddar ner payloadens `image` och bifogar den |
+| `ios/App/App/PushActionDelegate.swift` | Proxy framför Capacitors NotificationRouter: låsskärmsknapparna (NW_TITLE/NW_SAVED) POSTar `/api/push/action` i bakgrunden |
+| `ios/App/App/NWBridgeViewController.swift` | Subklass av CAPBridgeViewController (Main.storyboard pekar hit) som installerar proxyn igen efter att bridgen skapats |
 | `ios/App/CapApp-SPM/Package.swift` | SPM-registrering av Capacitor-plugins (via cap sync) |
 | `patches/@capacitor-community+apple-sign-in+7.1.0.patch` | SPM Capacitor 8-kompatibilitet |
+
+## Notis-extension och Appflow-signering (sedan 2026-10-14)
+
+Appen har två targets. Appflow signerar extensionen med en EGEN App Store-profil:
+Appflow → Build → Signing Certificates → Edit → "Provisioning profiles" ska
+innehålla både `com.nextwatch.app` och `com.nextwatch.app.NotificationService`.
+Felet "No profiles for '…NotificationService' were found" betyder att den andra
+profilen saknas där. Ändras capabilities på `com.nextwatch.app` i Apple-portalen
+blir profilen ogiltig — generera om och ladda upp den på nytt i Appflow.
+
+pbxproj-ändringar görs med Ruby-gemet `xcodeproj` (det finns ingen Mac). Behåll
+`objectVersion = 60` och vanliga `PBXGroup` — Appflow faller på
+`PBXFileSystemSynchronizedRootGroup`.
 
 ## Vad som INTE kräver ny build
 

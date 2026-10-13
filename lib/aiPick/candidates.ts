@@ -133,6 +133,8 @@ export type PickIntent = {
   maxRuntimeTv: number | null;
   light: boolean;
   thrilling: boolean;
+  /** "Mind-bending", "tankeväckande", "twistig" … → mysterium/thriller/sci-fi. */
+  mindbend: boolean;
   surprise: boolean;
   /** Fritexten nämner uttryckligen film eller serie (bara när filtret är 'both'). */
   mediaHint: MediaType | null;
@@ -189,7 +191,11 @@ const GENRE_RULES: GenreRule[] = [
 
 const LIGHT_RE = rx("mysig|myspys|feelgood|feel-good|feel good|lättsam|lätt\\b|cozy|cosy|light|chill|avslappnad|uplifting");
 const THRILL_RE = rx(
-  "spännande|spänning|mörk|obehag|intensiv|psykologisk|mindfuck|mind-?fuck|mind-?bend|twist|nervkittlande|nervig|thrilling|dark|intense|suspense|psychological|disturbing|gritty|tense",
+  "spännande|spänning|mörk|obehag|intensiv|psykologisk|nervkittlande|nervig|thrilling|dark|intense|suspense|psychological|disturbing|gritty|tense",
+);
+// "Inception-stämningen": hjärnvridande snarare än bara mörkt — egen stämning.
+const MINDBEND_RE = rx(
+  "mind[- ]?bend|mind[- ]?blow|mind[- ]?twist|mind[- ]?fuck|brain[- ]?bend|twisty|twist|tankeväckande|hjärnvridande|förvirrande|mindfuck",
 );
 const SHORT_RE = rx("kort|short|snabb|quick");
 const SURPRISE_RE = rx("överrask|surprise|något nytt|something new|random|slump");
@@ -203,6 +209,9 @@ export const THRILL_GENRES = { movie: [53, 9648, 80], tv: [80, 9648, 10759] };
 export const LIGHT_AVOID = { movie: [27, 53], tv: [] as number[] };
 /** "Mörkt och spännande" ska aldrig ge en komedi, familjefilm eller romcom. */
 export const THRILL_AVOID = { movie: [35, 10751, 10749], tv: [35, 10751, 10762] };
+/** Mind-bending = mysterium + thriller + sci-fi (serier: mysterium, sci-fi & fantasy, krim). */
+export const MINDBEND_GENRES = { movie: [9648, 53, 878], tv: [9648, 10765, 80] };
+export const MINDBEND_AVOID = { movie: [35, 10751, 10749, 16], tv: [35, 10751, 10762, 16] };
 
 export const SHORT_MOVIE_MAX = 90; // chippet heter "Max 90 min" — håll siffrorna lika
 export const SHORT_TV_MAX = 35;
@@ -277,32 +286,34 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
   let anyTvMapped = g.anyTv;
   const wantsFamily = g.wantsFamily;
 
+  const mindbendRaw = text !== "" && MINDBEND_RE.test(text);
   const light = chipSet.has("light") || (text !== "" && LIGHT_RE.test(text));
-  const thrilling = chipSet.has("thrilling") || (text !== "" && THRILL_RE.test(text));
+  const thrillingRaw = chipSet.has("thrilling") || (text !== "" && THRILL_RE.test(text));
   const surprise = chipSet.has("surprise") || (text !== "" && SURPRISE_RE.test(text));
   const shortWord = chipSet.has("short") || (text !== "" && SHORT_RE.test(text));
   const minutes = text ? explicitMinutes(text) : null;
+
+  // En stämning åt gången. Mind-bending vinner över "mörkt" (den innehåller
+  // redan thriller); lätt + spännande samtidigt = ingen stämningsgenre.
+  const mood = moodOf(light, thrillingRaw, mindbendRaw);
+  const thrilling = mood === "thrilling";
+  const mindbend = mood === "mindbend";
 
   // Stämning blir genre bara om fritexten inte redan namngav en genre —
   // "mysig skräck" ska fortfarande vara skräck.
   const explicitGenre = terms.length > 0;
   if (light) terms.push("light");
   if (thrilling) terms.push("thrilling");
-  if (!explicitGenre) {
-    if (light && !thrilling) {
-      movieGenres.push(...LIGHT_GENRES.movie);
-      tvGenres.push(...LIGHT_GENRES.tv);
-      anyTvMapped = true;
-    } else if (thrilling && !light) {
-      movieGenres.push(...THRILL_GENRES.movie);
-      tvGenres.push(...THRILL_GENRES.tv);
-      anyTvMapped = true;
-    }
+  if (mindbend) terms.push("mindbend");
+  const moodGenres = mood ? MOOD_GENRES[mood] : null;
+  if (!explicitGenre && moodGenres) {
+    movieGenres.push(...moodGenres.genres.movie);
+    tvGenres.push(...moodGenres.genres.tv);
+    anyTvMapped = true;
   }
   // Stämningen styr bara "undvik" när den också styr genrerna (ingen explicit genre).
-  const moodOnly = !explicitGenre && light !== thrilling;
-  const avoidMovieGenres = moodOnly ? [...(light ? LIGHT_AVOID.movie : THRILL_AVOID.movie)] : [];
-  const avoidTvGenres = moodOnly ? [...(light ? LIGHT_AVOID.tv : THRILL_AVOID.tv)] : [];
+  const avoidMovieGenres = !explicitGenre && moodGenres ? [...moodGenres.avoid.movie] : [];
+  const avoidTvGenres = !explicitGenre && moodGenres ? [...moodGenres.avoid.tv] : [];
 
   let maxRuntimeMovie: number | null = null;
   let maxRuntimeTv: number | null = null;
@@ -327,16 +338,38 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
     avoidTvGenres,
     maxRuntimeMovie,
     maxRuntimeTv,
-    light,
+    light: mood === "light",
     thrilling,
+    mindbend,
     surprise,
     mediaHint: mediaHintOf(text),
     wantsFamily,
     runtimeSoft: false,
     relaxedRuntimeMovie: null,
     relaxedRuntimeTv: null,
+    // Explicita minuter ("under 100") luckras upp högst ett steg — "under 100"
+    // får aldrig bli 145 som i prod 2026-10-13.
+    runtimeCeilMovie: minutes != null && maxRuntimeMovie != null ? maxRuntimeMovie + RELAX_STEP_MIN : null,
+    runtimeCeilTv: minutes != null && maxRuntimeTv != null ? maxRuntimeTv + RELAX_STEP_MIN : null,
     terms,
   };
+}
+
+export type Mood = "light" | "thrilling" | "mindbend";
+
+/** Stämningens genrer och vad den aldrig får ge. */
+export const MOOD_GENRES: Record<Mood, { genres: { movie: number[]; tv: number[] }; avoid: { movie: number[]; tv: number[] } }> = {
+  light: { genres: LIGHT_GENRES, avoid: LIGHT_AVOID },
+  thrilling: { genres: THRILL_GENRES, avoid: THRILL_AVOID },
+  mindbend: { genres: MINDBEND_GENRES, avoid: MINDBEND_AVOID },
+};
+
+/** En stämning ur flaggorna: mind-bending > (lätt XOR spännande). */
+export function moodOf(light: boolean, thrilling: boolean, mindbend: boolean): Mood | null {
+  if (mindbend && !light) return "mindbend";
+  if (light && !thrilling && !mindbend) return "light";
+  if (thrilling && !light) return "thrilling";
+  return null;
 }
 
 export function intentHasGenreFilter(intent: PickIntent, mediaType?: MediaType): boolean {
@@ -406,6 +439,11 @@ export type FitParts = {
   runtime: number | null;
   /** Träffar en undviken genre utan att träffa någon önskad (komedi för "mörkt och spännande"). */
   contradicts: boolean;
+  /**
+   * Relativt överskott mot ett AKTUELLT speltidsönskemål ((speltid − önskemål)
+   * / önskemål; 0 inom önskemålet, okänt eller när speltiden är mjuk).
+   */
+  runtimeOver: number;
   strict: boolean;
 };
 
@@ -420,7 +458,7 @@ export const NEUTRAL_FIT = 0.8;
 /** Stark passform: SAVED-bonusen och "bra" i speltidsuppluckringen kräver minst detta. */
 export const HIGH_FIT = 0.6;
 /** Sparade under detta (eller som motsäger önskemålen) får ingen garanterad plats i listan. */
-export const WEAK_FIT = 0.5;
+export const WEAK_FIT = 0.6;
 
 type FitCheckable = IntentCheckable & { similarTo?: string[] | null };
 
@@ -441,26 +479,48 @@ export function genreFit(genreIds: number[], wanted: number[], avoid: number[]):
 }
 
 /**
+ * Breda genrer säger nästan inget om likhet: The Transporter och Inception
+ * delar "Action" men inget annat (prod 2026-10-13). De väger 0.25 i
+ * genrelikheten, de specifika 1.
+ */
+const BROAD_GENRES = new Set([28, 18, 12, 35, 10759, 10751]);
+const genreWeight = (g: number) => (BROAD_GENRES.has(g) ? 0.25 : 1);
+
+/** Viktad Jaccard (breda genrer väger lite), 0–1. */
+export function weightedGenreOverlap(a: number[], b: number[]): number {
+  const union = new Set([...a, ...b]);
+  let wu = 0;
+  let wi = 0;
+  for (const g of union) {
+    const w = genreWeight(g);
+    wu += w;
+    if (a.includes(g) && b.includes(g)) wi += w;
+  }
+  return wu > 0 ? wi / wu : 0;
+}
+
+/** Bara genrelikhet med favoriterna räcker aldrig långt (≤ 0.35). */
+export const REF_GENRE_MAX = 0.35;
+/** Med favoriter kräver SAVED-bonusen verklig likhet (TMDB rekommenderar den för en favorit). */
+export const REF_HIGH_FIT = 0.5;
+
+/**
  * Likhet med favoriterna: TMDB rekommenderar den för 1 favorit → 0.85, 2 →
- * 0.95, 3+ → 1. Annars bara genrelikhet (Jaccard mot närmaste favorit) → ≤ 0.6.
+ * 0.95, 3+ → 1. Annars bara viktad genrelikhet mot närmaste favorit → ≤ 0.35.
  */
 export function refFit(genreIds: number[], similarTo: string[] | null | undefined, refs: RefContext | null): number | null {
   const sim = similarTo?.length ?? 0;
   if (sim > 0) return Math.min(1, 0.85 + 0.1 * (sim - 1));
   if (!refs || refs.genreSets.length === 0) return null;
-  if (genreIds.length === 0) return 0.3;
+  if (genreIds.length === 0) return 0.15;
   let best = 0;
-  for (const set of refs.genreSets) {
-    const inter = genreIds.filter((g) => set.includes(g)).length;
-    const union = new Set([...genreIds, ...set]).size;
-    best = Math.max(best, union > 0 ? inter / union : 0);
-  }
-  return 0.1 + 0.5 * best;
+  for (const set of refs.genreSets) best = Math.max(best, weightedGenreOverlap(genreIds, set));
+  return 0.05 + (REF_GENRE_MAX - 0.05) * best;
 }
 
 /**
- * Speltid: inom önskemålet 1, inom ett uppluckrat tak 1 → 0.8, därefter
- * relativt överskott (10 % över → 0.5, 26 % över → golvet 0.1). Efter
+ * Speltid: inom önskemålet 1, inom ett uppluckrat tak 1 → 0.5, därefter
+ * relativt överskott (10 % över → 0.25, 16 % över → golvet 0.1). Efter
  * "kortare" (`ceil` satt) är allt som är minst lika långt som titeln som
  * visades en motsägelse (0.05) — "kortare" än 109 min är aldrig 113 min.
  * `pref` = önskemålet, `relaxed` = ev. uppluckrat tak.
@@ -475,8 +535,8 @@ export function runtimeFit(
   if (ceil != null && runtimeMin >= ceil + 5) return 0.05;
   const max = Math.max(pref, relaxed ?? pref);
   if (runtimeMin <= pref) return 1;
-  if (runtimeMin <= max) return 1 - (0.2 * (runtimeMin - pref)) / Math.max(1, max - pref);
-  return Math.max(0.1, 0.75 - (2.5 * (runtimeMin - max)) / max);
+  if (runtimeMin <= max) return 1 - (0.5 * (runtimeMin - pref)) / Math.max(1, max - pref);
+  return Math.max(0.1, 0.5 - (2.5 * (runtimeMin - max)) / max);
 }
 
 /** Delarna bakom fit för en kandidat. */
@@ -492,6 +552,7 @@ export function computeFit(c: FitCheckable, intent: PickIntent, refs: RefContext
     ref: refFit(c.genreIds, c.similarTo, refs),
     runtime: runtimeFit(c.runtimeMin, pref, relaxed, ceil),
     contradicts: g.contradicts,
+    runtimeOver: !intent.runtimeSoft && pref != null && c.runtimeMin != null && c.runtimeMin > pref ? (c.runtimeMin - pref) / pref : 0,
     strict: matchesIntent(c, intent),
   };
 }
@@ -532,8 +593,13 @@ export function qualityOk(c: Pick<PickCandidate, "voteAverage" | "voteCount">): 
   return bayesQuality(c.voteAverage, c.voteCount) >= 6.4;
 }
 
-/** Stark passform: fit ≥ HIGH_FIT, motsäger inget och kvaliteten duger. */
+/**
+ * Stark passform: fit ≥ HIGH_FIT, motsäger inget, kvaliteten duger — och när
+ * användaren nämnt favoriter även verklig likhet med dem (ref ≥ 0.5). En
+ * actionfilm som bara delar genre med Inception får ingen SAVED-bonus.
+ */
 export function isHighFit(c: Pick<PickCandidate, "voteAverage" | "voteCount">, fit: number, p: FitParts): boolean {
+  if (p.ref != null && p.ref < REF_HIGH_FIT) return false;
   return !p.contradicts && fit >= HIGH_FIT && qualityOk(c);
 }
 
@@ -686,12 +752,14 @@ export type FallbackOptions = {
 };
 
 /**
- * Kvalitetsdelen: Bayes-utjämnat betyg (−2.5 … +3.2) + 0.6 för "stabilt bra"
+ * Kvalitetsdelen: Bayes-utjämnat betyg, brantare över 7.0 (6.6 → +0.2,
+ * 7.4 → +2.0, 8.2 → +4.2, tak +4.5, golv −2.5) + 0.6 för "stabilt bra"
  * (film ≥ 6.8 med ≥ 300 röster, serie ≥ 7.2 med ≥ 150) − 0.8 för svagt
  * (< 6.2 med ≥ 100 röster).
  */
 export function qualityTerm(c: Pick<PickCandidate, "voteAverage" | "voteCount" | "mediaType">): number {
-  let t = Math.max(-2.5, Math.min(3.2, (bayesQuality(c.voteAverage, c.voteCount) - 6.5) * 1.6));
+  const b = bayesQuality(c.voteAverage, c.voteCount);
+  let t = Math.max(-2.5, Math.min(4.5, (b - 6.5) * 1.6 + Math.max(0, b - 7) * 1.2));
   const votes = c.voteCount ?? 0;
   if (c.voteAverage != null) {
     const good = c.mediaType === "movie" ? c.voteAverage >= 6.8 && votes >= 300 : c.voteAverage >= 7.2 && votes >= 150;
@@ -701,10 +769,30 @@ export function qualityTerm(c: Pick<PickCandidate, "voteAverage" | "voteCount" |
   return t;
 }
 
+/**
+ * Obskyrt: film med < 300 röster (serie < 100) eller TV-film — t.ex.
+ * "Cleveland Abduction" (TV-film 2015) för "kortare". Undantag: TMDB
+ * rekommenderar den för minst två av favoriterna.
+ */
+export function obscurityPenalty(c: Pick<PickCandidate, "voteCount" | "mediaType" | "genreIds"> & { similarTo?: string[] }): number {
+  if ((c.similarTo?.length ?? 0) >= 2) return 0;
+  let p = 0;
+  const votes = c.voteCount ?? 0;
+  if (votes < (c.mediaType === "movie" ? 300 : 100)) p += votes < 100 ? 1.5 : 1;
+  if (c.genreIds.includes(10770)) p += 1;
+  return p;
+}
+
 /** Vikten på fit (0–1) i rangordningen — störst, eftersom önskemålet NU går först. */
 export const FIT_WEIGHT = 6;
 /** Extra straff för att gå emot önskad stämning/genre (utöver att fit ≤ 0.1). */
 export const CONTRADICTION_PENALTY = 4;
+/**
+ * Längre än ett AKTUELLT speltidsönskemål ("under 100", "kortare"): −15 per
+ * 100 % överskott, max −3 (113 min mot "under 100" ≈ −2). Utan detta vann
+ * Memento (8.2, 113 min) över Source Code (7.3, 93 min) på kvalitet.
+ */
+export const RUNTIME_OVER_PENALTY = 15;
 /** SAVED-bonusen i "strong": bara vid stark passform — annars en ren tiebreaker. */
 export const SAVED_BOOST_HIGH_FIT = 2.5;
 export const SAVED_BOOST_WEAK = 0.3;
@@ -713,10 +801,11 @@ export const SAVED_BOOST_WEAK = 0.3;
  * Rangordningspoäng — samma ordning i urvalet till modellen, i fallbacken och
  * när alternativ fylls på:
  *   1. önskemål nu    6·fit (0 … 6), motsägelse ytterligare −4
- *   2. kvalitet       qualityTerm (≈ −3.3 … +3.8)
+ *   2. kvalitet       qualityTerm (≈ −3.3 … +5.1) − obscurityPenalty (≤ 2.5)
  *   3. smak           ±0.8·beteendeaffinitet, egna tjänster +0.3 / −1, recommender-rank ≤ +0.5
  *   4. SAVED          +2.5 om highFit (fit ≥ 0.6, ingen motsägelse, ok kvalitet), annars +0.3
- *   5. speltid        ingår i fit (vikt 0.15, 0.06 när mjuk) — ≤ 0.9 poäng
+ *   5. speltid        ingår i fit (vikt 0.35, 0.06 när mjuk); ett AKTUELLT
+ *                     önskemål ger dessutom −15·överskott (max −3)
  * En SAVED med stark passform slår alltså en lika stark NEW (Oskars prioritet),
  * men en SAVED med svag passform kan aldrig ta sig förbi en NEW med stark
  * passform och samma kvalitet på bonusen. Okodade kandidater (utan fitParts)
@@ -728,7 +817,8 @@ export function fallbackScore(c: PickCandidate, opts: FallbackOptions): number {
   const aff = opts.affinity ? opts.affinity(c.genreIds) : 0;
   let s = FIT_WEIGHT * fit;
   if (c.fitParts?.contradicts) s -= CONTRADICTION_PENALTY;
-  s += qualityTerm(c);
+  s -= Math.min(3, RUNTIME_OVER_PENALTY * (c.fitParts?.runtimeOver ?? 0));
+  s += qualityTerm(c) - obscurityPenalty(c);
   // Överraskning: utanför vanan är en fördel, inte en nackdel.
   s += (opts.surprise ? -0.8 : 0.8) * aff;
   if (c.onUserServices === true) s += 0.3;
@@ -755,34 +845,66 @@ export const MAX_CANDIDATES = 30;
 /** Minst så många färska platser, även när de sparade fyller sin kvot. */
 const MIN_FRESH_SLOTS = 12;
 
-/** Sparad titel som inte passar det användaren ber om (motsäger, eller fit < 0.5). */
+/** Sparad titel som inte passar starkt nog för en garanterad plats (motsäger, eller fit < 0.6). */
 function weakSaved(c: PickCandidate): boolean {
   const p = c.fitParts;
   return !!p && (p.contradicts || c.fit < WEAK_FIT);
 }
 
+/** Klarar speltiden (inom önskemålet eller det uppluckrade bandet) och motsäger inget. */
+function slotWorthySimilar(c: PickCandidate): boolean {
+  const p = c.fitParts;
+  if (c.similarTo.length === 0 || p?.contradicts) return false;
+  return p?.runtime == null || p.runtime >= 0.5;
+}
+
+/** Platser för "liknar <favorit>" som klarar speltiden, när favoriter finns. */
+export const SIMILAR_RESERVE = 12;
+/** Max sparade i listan när favoriter finns (de ska inte tränga ut favoriternas stil). */
+export const SAVED_MAX_WITH_REFS = 10;
+
 /**
- * Listan till modellen: upp till `savedMax` sparade som PASSAR (bäst först) +
- * färska upp till MAX_CANDIDATES. Sparade som går emot önskemålen läggs bara
- * till om poolen annars inte räcker — inga hårda bortfall.
+ * Listan till modellen:
+ *   1. upp till `savedMax` sparade som PASSAR STARKT (fit ≥ 0.6, bäst först) —
+ *      de enda sparade med garanterad plats;
+ *   2. med `similarReserve` (favoriter/"mer som den" finns): så många titlar
+ *      som TMDB rekommenderar för dem och som klarar speltiden;
+ *   3. resten efter rangordning bland övriga färska OCH svagare sparade — en
+ *      sparad som passar svagt konkurrerar på poäng, den tränger aldrig undan.
+ *      `savedMax` gäller alla sparade i listan.
+ * Färska har alltid minst 12 platser. Inga hårda bortfall.
  */
 export function selectFinalCandidates(
   saved: PickCandidate[],
   fresh: PickCandidate[],
-  opts: FallbackOptions & { savedMax: number; max?: number },
+  opts: FallbackOptions & { savedMax: number; max?: number; similarReserve?: number },
 ): PickCandidate[] {
   const max = opts.max ?? MAX_CANDIDATES;
   const rankedSaved = rankCandidates(saved, opts);
-  const goodSaved = rankedSaved.filter((c) => !weakSaved(c));
+  const strong = rankedSaved.filter((c) => !weakSaved(c)).slice(0, Math.min(opts.savedMax, max));
   const weak = rankedSaved.filter((c) => weakSaved(c));
-  const s = goodSaved.slice(0, Math.min(opts.savedMax, max));
-  const freshSlots = Math.max(MIN_FRESH_SLOTS, max - s.length);
-  const f = rankCandidates(fresh, opts).slice(0, freshSlots);
-  // Färska får alltid sina minsta platser; sparade trimmas i så fall bakifrån.
-  const keepSaved = Math.max(0, Math.min(s.length, max - f.length));
-  const out = [...s.slice(0, keepSaved), ...f];
-  for (const c of weak) {
+  const rankedFresh = rankCandidates(fresh, opts);
+  const reserved = opts.similarReserve
+    ? rankedFresh.filter(slotWorthySimilar).slice(0, Math.min(opts.similarReserve, max))
+    : [];
+  const keepSaved = Math.max(0, Math.min(strong.length, max - Math.max(MIN_FRESH_SLOTS, reserved.length)));
+  const out = [...strong.slice(0, keepSaved), ...reserved];
+  let savedIn = keepSaved;
+  const rest = rankCandidates([...rankedFresh.filter((c) => !reserved.includes(c)), ...weak], opts);
+  const skipped: PickCandidate[] = [];
+  for (const c of rest) {
     if (out.length >= max) break;
+    // savedMax gäller ALLA sparade i listan, även de som konkurrerar på poäng.
+    if (c.fromSaved && savedIn >= opts.savedMax) {
+      skipped.push(c);
+      continue;
+    }
+    if (c.fromSaved) savedIn++;
+    out.push(c);
+  }
+  // Hellre en sparad över taket än en lista under MIN_POOL-gränsen.
+  for (const c of skipped) {
+    if (out.length >= Math.min(max, MIN_FRESH_SLOTS)) break;
     out.push(c);
   }
   return out;
@@ -1314,6 +1436,9 @@ const LITE_ENRICH_WITH_REFS = 30;
 /** Garanterade platser för "liknar <favorit>" bland de berikade (≥ 10 enligt specen). */
 const SIMILAR_MIN_SLOTS = 10;
 const SIMILAR_MIN_SLOTS_MULTI = 16;
+/** Med ett speltidsönskemål behövs fler liknande att välja bland (de flesta är långa). */
+const SIMILAR_MIN_SLOTS_RUNTIME = 24;
+const LITE_ENRICH_RUNTIME = 36;
 /** Så många liknande titlar att be references.ts om. */
 const SIMILAR_LIMIT = 60;
 /** Under så här många kandidater ger vi upp (no_candidates). */
@@ -1389,7 +1514,8 @@ export function rankLiteItems(
     return (
       FIT_WEIGHT * fitOf(p, intent) -
       (p.contradicts ? CONTRADICTION_PENALTY : 0) +
-      qualityTerm({ voteAverage: i.voteAverage, voteCount: i.voteCount, mediaType: i.mediaType }) +
+      qualityTerm({ voteAverage: i.voteAverage, voteCount: i.voteCount, mediaType: i.mediaType }) -
+      obscurityPenalty(i) +
       (opts.constrained && p.strict ? 0.5 : 0) +
       (opts.surprise ? -0.8 : 0.8) * aff -
       i.order * 0.005
@@ -1466,6 +1592,45 @@ export function refLabel(r: { title: string; year: number | null }): string {
   return `${r.title}${r.year ? ` (${r.year})` : ""}`;
 }
 
+/**
+ * Sida 2 av /recommendations för varje referens (≤ 3 cachade anrop) — när
+ * speltiden är snäv räcker inte sida 1 + /similar till ≥ 12 korta titlar i
+ * favoriternas stil ("kortare än Minority Report" → Source Code, Primer …).
+ */
+async function moreRecommendations(
+  sources: { tmdbId: number; mediaType: MediaType; title: string }[],
+  tmdbLocale: string,
+  type: MediaType | null,
+): Promise<LiteItem[]> {
+  const list = sources.filter((r) => !type || r.mediaType === type).slice(0, MAX_REFERENCES);
+  const pages = await Promise.all(
+    list.map((r) =>
+      tmdbJson<{ results?: TmdbListResult[] }>(`/${r.mediaType}/${r.tmdbId}/recommendations`, { language: tmdbLocale, page: 2 }, DETAILS_REVALIDATE_S).then(
+        (d) => ({ r, results: (d?.results ?? []).filter((x) => Number.isFinite(x.id) && !x.adult) }),
+      ),
+    ),
+  );
+  const out: LiteItem[] = [];
+  for (const { r, results } of pages) {
+    for (const x of results) out.push({ ...toLite(x, r.mediaType, 100 + out.length), similarTo: [r.title] });
+  }
+  return out;
+}
+
+/** Slår ihop liknande-listor: samma titel → unionen av favoriterna den liknar. */
+export function mergeSimilarLite(lists: LiteItem[][]): LiteItem[] {
+  const byKey = new Map<string, LiteItem>();
+  for (const l of lists) {
+    for (const i of l) {
+      const k = candidateKey(i.mediaType, i.tmdbId);
+      const prev = byKey.get(k);
+      if (!prev) byKey.set(k, { ...i, similarTo: [...i.similarTo] });
+      else for (const t of i.similarTo) if (!prev.similarTo.includes(t)) prev.similarTo.push(t);
+    }
+  }
+  return [...byKey.values()];
+}
+
 /* ---------------- Huvudfunktion ---------------- */
 
 export async function buildCandidates(input: BuildCandidatesInput): Promise<CandidateSet | null> {
@@ -1480,6 +1645,8 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
   const constrained = intentHasConstraints(baseIntent);
   const knownRef = fu?.knownRef ?? null;
   const typeOrNull = filter === "both" ? null : filter;
+  const hasRuntimeWish =
+    (filter !== "tv" && baseIntent.maxRuntimeMovie != null) || (filter !== "movie" && baseIntent.maxRuntimeTv != null);
 
   /* ---- 0. Favoriter → TMDB (startas först; inget beror på DB:n) ---- */
   const resolvedPromise: Promise<ResolvedRef[]> =
@@ -1494,10 +1661,11 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
       ...resolved.filter((r) => !knownRef || r.tmdbId !== knownRef.tmdbId || r.mediaType !== knownRef.mediaType),
     ];
     if (sources.length === 0) return { resolved, items: [] as LiteItem[] };
-    const sim = await similarForReferences(sources, { tmdbLocale: input.tmdbLocale, mediaType: typeOrNull, limit: SIMILAR_LIMIT }).catch(
-      () => [],
-    );
-    const items: LiteItem[] = sim.map((s, i) => ({
+    const [sim, more] = await Promise.all([
+      similarForReferences(sources, { tmdbLocale: input.tmdbLocale, mediaType: typeOrNull, limit: SIMILAR_LIMIT }).catch(() => []),
+      hasRuntimeWish ? moreRecommendations(sources, input.tmdbLocale, typeOrNull).catch(() => []) : Promise.resolve([]),
+    ]);
+    const first: LiteItem[] = sim.map((s, i) => ({
       tmdbId: s.tmdbId,
       mediaType: s.mediaType,
       genreIds: s.genreIds,
@@ -1506,6 +1674,8 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
       similarTo: s.similarTo,
       order: i,
     }));
+    const refKeySet = new Set(sources.map((r) => candidateKey(r.mediaType, r.tmdbId)));
+    const items = mergeSimilarLite([first, more]).filter((i) => !refKeySet.has(candidateKey(i.mediaType, i.tmdbId)));
     return { resolved, items };
   });
 
@@ -1646,8 +1816,8 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     const ranked = rankLiteItems(lite, baseIntent, { affinity, constrained, surprise: baseIntent.surprise, refs: refCtx });
     const chosen = pickLiteForEnrichment(
       ranked,
-      sim.items.length > 0 ? LITE_ENRICH_WITH_REFS : LITE_ENRICH,
-      multi ? SIMILAR_MIN_SLOTS_MULTI : SIMILAR_MIN_SLOTS,
+      sim.items.length === 0 ? LITE_ENRICH : hasRuntimeWish ? LITE_ENRICH_RUNTIME : LITE_ENRICH_WITH_REFS,
+      hasRuntimeWish ? SIMILAR_MIN_SLOTS_RUNTIME : multi ? SIMILAR_MIN_SLOTS_MULTI : SIMILAR_MIN_SLOTS,
     );
     const enriched = await enrichAll(
       chosen.map((i) => ({
@@ -1700,8 +1870,15 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     scoreCandidates(saved, intent, refCtx);
   }
   const runtimeRelaxedTo = runtimeRelaxedFor(intent, filter);
-  const savedMax = input.priority === "strong" ? 18 : 12;
-  const candidates = selectFinalCandidates(saved, fresh, { ...rank, savedMax });
+  // Med favoriter/"mer som den": max 10 sparade och ≥ 12 platser för titlar i
+  // favoriternas stil som klarar speltiden (prod: 18 sparade, The Transporter).
+  const hasRefs = resolved.length > 0 || knownRef != null;
+  const savedMax = hasRefs ? SAVED_MAX_WITH_REFS : input.priority === "strong" ? 18 : 12;
+  const candidates = selectFinalCandidates(saved, fresh, {
+    ...rank,
+    savedMax,
+    similarReserve: hasRefs ? SIMILAR_RESERVE : 0,
+  });
 
   const [taste, names] = await Promise.all([
     tastePromise,

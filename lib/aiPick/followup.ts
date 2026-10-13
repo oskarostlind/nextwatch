@@ -34,16 +34,14 @@ import { prisma } from "@/lib/prisma";
 import {
   explicitGenres,
   explicitMinutes,
-  LIGHT_AVOID,
-  LIGHT_GENRES,
   mediaHintOf,
   mergeRefQueries,
   parseIntent,
   SHORT_MOVIE_MAX,
   SHORT_TV_MAX,
-  THRILL_AVOID,
-  THRILL_GENRES,
+  MOOD_GENRES,
   withoutReferences,
+  type Mood,
   type GenreIntent,
   type MediaFilter,
   type MediaType,
@@ -276,7 +274,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
 
   let genres: GenreIntent | null = null;
   let genreAt = -1;
-  let mood: "light" | "thrilling" | null = null;
+  let mood: Mood | null = null;
   let moodAt = -1;
   let maxMovie: number | null = null;
   let maxTv: number | null = null;
@@ -310,9 +308,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
       genreAt = k;
     }
 
-    let mm: "light" | "thrilling" | null = null;
-    if (base.light && !base.thrilling) mm = "light";
-    else if (base.thrilling && !base.light) mm = "thrilling";
+    let mm: Mood | null = base.mindbend ? "mindbend" : base.light ? "light" : base.thrilling ? "thrilling" : null;
     if (sig.lighter && !sig.darker) mm = "light";
     else if (sig.darker && !sig.lighter) mm = "thrilling";
     if (mm) {
@@ -324,8 +320,9 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     if (explicitMinutes(text) != null) {
       maxMovie = base.maxRuntimeMovie;
       maxTv = base.maxRuntimeTv;
-      ceilMovie = null;
-      ceilTv = null;
+      // "under 100" luckras upp högst ett steg (parseIntent sätter taket).
+      ceilMovie = base.runtimeCeilMovie ?? null;
+      ceilTv = base.runtimeCeilTv ?? null;
       runtimeAt = k;
       runtimeExplicit = true;
     } else if (sig.shorter) {
@@ -383,16 +380,14 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     tvGenres = [...g.tv];
     wantsFamily = g.wantsFamily;
     terms.push(...g.labels);
-  } else if (md === "light") {
-    movieGenres = [...LIGHT_GENRES.movie];
-    tvGenres = [...LIGHT_GENRES.tv];
-    avoidMovieGenres = [...LIGHT_AVOID.movie];
-    avoidTvGenres = [...LIGHT_AVOID.tv];
-  } else if (md === "thrilling") {
-    movieGenres = [...THRILL_GENRES.movie];
-    tvGenres = [...THRILL_GENRES.tv];
-    avoidMovieGenres = [...THRILL_AVOID.movie];
-    avoidTvGenres = [...THRILL_AVOID.tv];
+  } else if (md) {
+    // Stämningen (även en äldre som bara följts av speltidsändringar) styr
+    // genrerna och vad som aldrig får föreslås.
+    const mg = MOOD_GENRES[md];
+    movieGenres = [...mg.genres.movie];
+    tvGenres = [...mg.genres.tv];
+    avoidMovieGenres = [...mg.avoid.movie];
+    avoidTvGenres = [...mg.avoid.tv];
   }
   if (md) terms.push(md);
   const mx = maxMovie;
@@ -424,6 +419,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     maxRuntimeTv: mt,
     light: md === "light",
     thrilling: md === "thrilling",
+    mindbend: md === "mindbend",
     surprise: newestBase.surprise,
     mediaHint: med?.type ?? null,
     wantsFamily,
@@ -571,12 +567,14 @@ export function describeWishes(intent: PickIntent, filter: MediaFilter): string 
       !t.startsWith("relax") &&
       t !== "light" &&
       t !== "thrilling" &&
+      t !== "mindbend" &&
       t !== "surprise" &&
       t !== "short",
   );
   if (genres.length) parts.push(`genre: ${genres.join(" or ")}`);
   if (intent.light) parts.push("mood: light / feel-good (no horror/thriller)");
   if (intent.thrilling) parts.push("mood: dark / thrilling (no comedy, family or romance)");
+  if (intent.mindbend) parts.push("mood: mind-bending / twisty (mystery, thriller, sci-fi; no comedy, family, romance or animation)");
   const rt = (max: number, relaxed: number | null, unit: string) =>
     `${unit} ${intent.runtimeSoft ? "ideally " : ""}≤ ${max} min${relaxed != null && relaxed > max ? ` (relaxed to ${relaxed})` : ""}`;
   if (intent.maxRuntimeMovie != null && filter !== "tv") parts.push(rt(intent.maxRuntimeMovie, intent.relaxedRuntimeMovie, "films"));

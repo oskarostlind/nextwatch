@@ -203,6 +203,8 @@ export type ReserveInput = {
   prompt: string | null;
   chips: string[];
   mediaFilter: string;
+  /** Klientens konversations-id (historiken), null = egen session. */
+  sessionId: string | null;
 };
 
 export type ReserveResult =
@@ -236,6 +238,7 @@ export async function reservePick(
           prompt: input.prompt,
           chips: input.chips,
           mediaFilter: input.mediaFilter,
+          sessionId: input.sessionId,
         },
         select: { id: true },
       });
@@ -255,6 +258,7 @@ export async function createSelftestRequest(uid: string, input: ReserveInput): P
       prompt: input.prompt,
       chips: input.chips,
       mediaFilter: input.mediaFilter,
+      sessionId: input.sessionId,
     },
     select: { id: true },
   });
@@ -274,6 +278,10 @@ export type FinishData = {
   costUsd?: number | null;
   latencyMs?: number | null;
   error?: string | null;
+  /** Motiveringen som visades (bara 'ok'). */
+  reason?: string | null;
+  /** { pick, alternatives } som PickItem — historikens ögonblicksbild (bara 'ok'). */
+  result?: Prisma.InputJsonValue | null;
 };
 
 /** Skriver om reservationen till slutstatus. Kastar aldrig (loggar). */
@@ -294,7 +302,10 @@ export async function finishPickRequest(requestId: string, data: FinishData): Pr
         costUsd: data.costUsd ?? null,
         latencyMs: data.latencyMs ?? null,
         error: data.error ? data.error.slice(0, 1000) : null,
+        reason: data.reason ?? null,
+        result: data.result ?? Prisma.DbNull,
       },
+      select: { id: true },
     });
   } catch (err) {
     // Misslyckas uppdateringen blir raden kvar som 'pending' och slutar räknas

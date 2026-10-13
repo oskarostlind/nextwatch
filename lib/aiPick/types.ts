@@ -43,21 +43,65 @@ export type PickRequestBody = {
   chips?: PickChipId[];
   mediaFilter?: "both" | "movie" | "tv";
   exclude?: number[];           // tmdb ids already shown this session ("Visa något annat")
+  sessionId?: string;           // client-generated id per sheet "conversation" (≤64 chars, [A-Za-z0-9_-])
 };
 
 export type PickResponse =
-  | { ok: true; pick: PickItem; alternatives: PickItem[]; reason: string; quota: PickQuota }
+  | {
+      ok: true;
+      pick: PickItem;
+      alternatives: PickItem[];   // exactly 2 whenever the candidate pool allows
+      reason: string;
+      quota: PickQuota;
+      requestId: string;          // the ai_pick_requests row (history entry id)
+      sessionId: string | null;   // echoes PickRequestBody.sessionId
+    }
   | { ok: false; error: "no_quota" | "no_candidates" | "unavailable" | "disabled" | "bad_request"; quota?: PickQuota };
 
 export type PickEventType =
   | "open" | "chip" | "submit" | "open_service" | "save" | "another" | "alt_select"
-  | "paywall_view" | "ad_start" | "ad_complete" | "ad_fail" | "upsell_view" | "upsell_click" | "close";
+  | "paywall_view" | "ad_start" | "ad_complete" | "ad_fail" | "upsell_view" | "upsell_click" | "close"
+  | "history_open" | "history_entry_open";
 
 /** Runtime-lista över tillåtna händelsetyper (vitlistan i /api/pick/event). */
 export const PICK_EVENT_TYPES: readonly PickEventType[] = [
   "open", "chip", "submit", "open_service", "save", "another", "alt_select",
   "paywall_view", "ad_start", "ad_complete", "ad_fail", "upsell_view", "upsell_click", "close",
+  "history_open", "history_entry_open",
 ] as const;
+
+/* ---------------- Historik ("chattarna", v2) ---------------- */
+
+export type PickHistoryEntry = {
+  requestId: string;
+  createdAt: string;            // ISO
+  prompt: string | null;
+  chips: PickChipId[];
+  mediaFilter: "both" | "movie" | "tv";
+  pick: PickItem;
+  alternatives: PickItem[];
+  reason: string;
+};
+
+export type PickHistorySession = {
+  sessionId: string;            // rows without session id: "r:" + requestId
+  startedAt: string;            // ISO, oldest entry
+  lastAt: string;               // ISO, newest entry
+  entries: PickHistoryEntry[];  // oldest → newest
+};
+
+/** GET /api/pick/history?before=<ISO>&limit=<1..30> */
+export type PickHistoryResponse =
+  | { ok: true; sessions: PickHistorySession[]; nextBefore: string | null }
+  | { ok: false; error: "unauthorized" | "unavailable" };
+
+/** DELETE /api/pick/history — rensar visningen, aldrig kvoten. */
+export type PickHistoryClearResponse =
+  | { ok: true }
+  | { ok: false; error: "unauthorized" | "unavailable" };
+
+/** Max längd på klientens sessionId. */
+export const PICK_SESSION_ID_MAX = 64;
 
 export const PICK_CHIP_IDS: readonly PickChipId[] = ["light", "short", "thrilling", "surprise"] as const;
 

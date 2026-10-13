@@ -7,16 +7,22 @@
 //      att få folk att faktiskt titta på det de gillat — även gamla, bortglömda
 //      likes ska komma upp, inte bara de senaste.
 //   2. FÄRSKA (sekundär): computeUnifiedRecs (lib/unifiedRecs.ts) — samma
-//      recommender som swipe-leken, ingen fork. Används när ingen sparad like
-//      passar, för "överraska mig", eller när användaren har få sparade.
+//      recommender som swipe-leken, ingen fork — plus upp till 4 TMDB-discover-
+//      anrop på användarens tjänster (önskade genrer + populärt + topplistat)
+//      och, när fritexten nämner en titel ("tycker om serien House"), TMDB:s
+//      recommendations/similar för den titeln.
 //
-// Chips/nyckelord i fritexten blir ett deterministiskt förfilter (genre +
-// speltid) innan LLM:en får se något — modellen väljer bara bland titlar som
-// redan klarar de hårda kraven. Blir poolen för tunn körs ett extra
-// TMDB-discover-pass för de efterfrågade genrerna på användarens tjänster.
+// v2 (2026-10-13, efter prod-felet): chips/fritext är MJUKA signaler. Bara
+// film/serie-filtret, "redan sett/betygsatt/nej-svept" och `exclude` är hårda.
+// Genre/speltid/stämning ger poäng (intentFit) och en "fits request"-not i
+// prompten — aldrig ett bortfall. Finns det många träffar hamnar de först och
+// fyller hela listan; finns det få fylls resten med de närmaste. v1 filtrerade
+// hårt och "serie, 20-40 min avsnitt, drama, gillar House" gav EN kandidat —
+// och "Visa något annat" sa sedan att inget passade.
 //
-// Rena funktioner (parseIntent, matchesIntent, selectSavedForEnrichment,
-// fallbackSelection …) är exporterade och testbara utan DB/TMDB.
+// Rena funktioner (parseIntent, intentFit, fallbackScore, selectFinalCandidates,
+// fillAlternatives, extractTitleReference, matchReferenceResult,
+// planDiscoverCalls …) är exporterade och testbara utan DB/TMDB.
 
 import { prisma } from "@/lib/prisma";
 import { tmdbFetch } from "@/lib/tmdbClient";
@@ -69,8 +75,14 @@ export type PickCandidate = {
   onUserServices: boolean | null;
   /** Position i recommenderns lek (färska), för fallback-ordningen. */
   recRank: number | null;
-  /** Kom ur det extra discover-passet. */
+  /** Kom ur ett discover-pass. */
   fromDiscover?: boolean;
+  /** TMDB-rekommendation för titeln användaren nämnde ("tycker om House"). */
+  similarTo?: string | null;
+  /** Klarar alla önskemål (genre/speltid/undvik) — sätts av scoreCandidates. */
+  strictMatch?: boolean;
+  /** Mjuk passform mot önskemålen (intentFit), ~[−3, 2]. */
+  fit?: number;
 };
 
 export function candidateKey(mediaType: MediaType, tmdbId: number): string {
@@ -78,7 +90,7 @@ export function candidateKey(mediaType: MediaType, tmdbId: number): string {
 }
 
 /* ======================================================================
- * Intent: chips + nyckelord → hårda filter
+ * Intent: chips + nyckelord → mjuka önskemål (poäng, inte filter)
  * ==================================================================== */
 
 export type PickIntent = {
@@ -148,16 +160,29 @@ function uniq(nums: number[]): number[] {
   return Array.from(new Set(nums));
 }
 
-/** Plockar ut "max 90", "under 90 min", "90 min" → 90 (rimligt intervall). */
-function explicitMinutes(text: string): number | null {
-  const m =
-    text.match(/(?:max|högst|under|mindre än|less than|at most|up to|max\.)\s*(\d{2,3})/iu) ??
-    text.match(/(\d{2,3})\s*(?:min|minuter|minutes|mins)\b/iu);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!Number.isFinite(n) || n < 20 || n > 240) return null;
-  return n;
+function validMinutes(n: number): number | null {
+  return Number.isFinite(n) && n >= 20 && n <= 240 ? n : null;
 }
+
+/**
+ * Plockar ut speltidsönskemålet: "20-40 min" → 40 (övre gränsen), "max 90" /
+ * "under 90" → 90, "ca 45 min" → 55 (ungefär = lite marginal), "90 min" → 90.
+ * Intervall kräver enhet så "80-90-talet" inte tolkas som minuter.
+ */
+export function explicitMinutes(text: string): number | null {
+  const range = text.match(/(?<!\d)(\d{2,3})\s*(?:-|–|—|till|to)\s*(\d{2,3})\s*(?:min|minuter|minutes|mins)/iu);
+  if (range) return validMinutes(Math.max(Number(range[1]), Number(range[2])));
+  const cap = text.match(/(?:max|högst|under|mindre än|less than|at most|up to|max\.)\s*(\d{2,3})/iu);
+  if (cap) return validMinutes(Number(cap[1]));
+  const approx = text.match(/(?:ca\.?|cirka|runt|ungefär|omkring|about|around|~)\s*(\d{2,3})\s*(?:min|minuter|minutes|mins)/iu);
+  if (approx) return validMinutes(Number(approx[1]) + 10);
+  const plain = text.match(/(\d{2,3})\s*(?:min|minuter|minutes|mins)\b/iu);
+  if (plain) return validMinutes(Number(plain[1]));
+  return null;
+}
+
+// "40 min avsnitt" gäller avsnittslängd — inte filmer.
+const EPISODE_RE = /avsnitt|episod|episode/iu;
 
 export function parseIntent(prompt: string | null | undefined, chips: readonly PickChipId[] = []): PickIntent {
   const text = (prompt ?? "").toLowerCase();
@@ -205,7 +230,8 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
   let maxRuntimeMovie: number | null = null;
   let maxRuntimeTv: number | null = null;
   if (minutes != null) {
-    maxRuntimeMovie = minutes;
+    const episodeOnly = EPISODE_RE.test(text);
+    maxRuntimeMovie = episodeOnly ? (shortWord ? SHORT_MOVIE_MAX : null) : minutes;
     maxRuntimeTv = shortWord ? Math.min(minutes, SHORT_TV_MAX) : minutes;
     terms.push(`max${minutes}`);
   } else if (shortWord) {
@@ -255,9 +281,21 @@ export function effectiveMediaFilter(filter: MediaFilter, intent: PickIntent): M
 
 type IntentCheckable = Pick<PickCandidate, "mediaType" | "genreIds" | "runtimeMin">;
 
+/** Har önskemålen något som faktiskt skiljer kandidater åt (genre/speltid/undvik)? */
+export function intentHasConstraints(intent: PickIntent): boolean {
+  return (
+    intentHasGenreFilter(intent) ||
+    intent.maxRuntimeMovie != null ||
+    intent.maxRuntimeTv != null ||
+    intent.avoidMovieGenres.length > 0 ||
+    intent.avoidTvGenres.length > 0
+  );
+}
+
 /**
- * Klarar kandidaten de hårda kraven? Okänd speltid/genre fälls INTE — hellre
- * låta modellen bedöma än att tappa en sparad like för att TMDB saknar data.
+ * Klarar kandidaten ALLA önskemål? (v2: används för rangordning och prompt-
+ * noten "fits request" — inte längre som filter.) Okänd speltid/genre räknas
+ * som träff — hellre låta modellen bedöma än att straffa saknad TMDB-data.
  */
 export function matchesIntent(c: IntentCheckable, intent: PickIntent): boolean {
   const wanted = c.mediaType === "movie" ? intent.movieGenres : intent.tvGenres;
@@ -269,6 +307,40 @@ export function matchesIntent(c: IntentCheckable, intent: PickIntent): boolean {
   }
   if (maxRt != null && c.runtimeMin != null && c.runtimeMin > maxRt) return false;
   return true;
+}
+
+/**
+ * Mjuk passform mot önskemålen. Genreträff +1 (+0.2 per extra träff), miss
+ * −0.8; undvikna genrer −1.2; speltid inom gränsen +0.6, över gränsen ett
+ * avdrag som växer med överskottet (max −1.5) — 44 min när man bad om 40 är
+ * nästan lika bra, 90 min är det inte. Okänt = 0.
+ */
+export function intentFit(c: IntentCheckable, intent: PickIntent): { strict: boolean; fit: number } {
+  const wanted = c.mediaType === "movie" ? intent.movieGenres : intent.tvGenres;
+  const avoid = c.mediaType === "movie" ? intent.avoidMovieGenres : intent.avoidTvGenres;
+  const maxRt = c.mediaType === "movie" ? intent.maxRuntimeMovie : intent.maxRuntimeTv;
+  let fit = 0;
+  if (c.genreIds.length > 0) {
+    if (wanted.length > 0) {
+      const hits = c.genreIds.filter((g) => wanted.includes(g)).length;
+      fit += hits > 0 ? 1 + 0.2 * Math.min(2, hits - 1) : -0.8;
+    }
+    if (avoid.length > 0 && c.genreIds.some((g) => avoid.includes(g))) fit -= 1.2;
+  }
+  if (maxRt != null && c.runtimeMin != null) {
+    fit += c.runtimeMin <= maxRt ? 0.6 : -Math.min(1.5, (c.runtimeMin - maxRt) / 15);
+  }
+  return { strict: matchesIntent(c, intent), fit };
+}
+
+/** Sätter strictMatch/fit på kandidaterna (muterar, returnerar samma lista). */
+export function scoreCandidates<T extends PickCandidate>(cands: T[], intent: PickIntent): T[] {
+  for (const c of cands) {
+    const r = intentFit(c, intent);
+    c.strictMatch = r.strict;
+    c.fit = r.fit;
+  }
+  return cands;
 }
 
 /* ======================================================================
@@ -343,49 +415,260 @@ export type FallbackOptions = {
   surprise: boolean;
   /** Beteendebaserad genreaffinitet i [−1, 1] (lib/genreStats). */
   affinity?: (genreIds: number[]) => number;
+  /** Bad användaren om något konkret (genre/speltid)? Då väger strictMatch. */
+  constrained?: boolean;
 };
 
+/**
+ * Rangordningspoäng — samma ordning i urvalet till modellen, i fallbacken och
+ * när alternativ fylls på. SAVED väger tungt (Oskar: "vikta de jag redan
+ * gillat extra mycket") men bara fullt ut när titeln passar önskemålen: en
+ * sparad titel som inte alls passar ska inte slå en färsk som passar perfekt.
+ */
 export function fallbackScore(c: PickCandidate, opts: FallbackOptions): number {
   const aff = opts.affinity ? opts.affinity(c.genreIds) : 0;
   // Överraskning: utanför vanan är en fördel, inte en nackdel.
   let s = bayesQuality(c.voteAverage, c.voteCount) + (opts.surprise ? -0.8 : 0.8) * aff;
   if (c.onUserServices === true) s += 0.3;
+  else if (c.onUserServices === false) s -= 1.5;
   if (c.recRank != null) s += Math.max(0, 0.5 - c.recRank * 0.02);
+  s += (c.fit ?? 0) * 1.5;
+  if (opts.constrained && c.strictMatch) s += 2;
+  if (c.similarTo) s += 1.5;
   if (opts.surprise) {
     if (!c.fromSaved) s += 50;
   } else if (opts.priority === "strong" && c.fromSaved) {
-    s += 100;
+    s += opts.constrained && c.strictMatch === false ? 3 : 100;
   }
   return s;
 }
 
+/** Bäst först enligt fallbackScore (stabil vid lika poäng). */
+export function rankCandidates(cands: PickCandidate[], opts: FallbackOptions): PickCandidate[] {
+  return cands
+    .map((c, i) => ({ c, s: fallbackScore(c, opts), i }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .map((x) => x.c);
+}
+
+export const MAX_CANDIDATES = 30;
+/** Minst så många färska platser, även när de sparade fyller sin kvot. */
+const MIN_FRESH_SLOTS = 12;
+
+/**
+ * Listan till modellen: upp till `savedMax` sparade (passande först) + färska
+ * (passande/liknande först) upp till MAX_CANDIDATES. Inga hårda bortfall här —
+ * passar för få fylls resten med de närmaste.
+ */
+export function selectFinalCandidates(
+  saved: PickCandidate[],
+  fresh: PickCandidate[],
+  opts: FallbackOptions & { savedMax: number; max?: number },
+): PickCandidate[] {
+  const max = opts.max ?? MAX_CANDIDATES;
+  const s = rankCandidates(saved, opts).slice(0, Math.min(opts.savedMax, max));
+  const freshSlots = Math.max(MIN_FRESH_SLOTS, max - s.length);
+  const f = rankCandidates(fresh, opts).slice(0, freshSlots);
+  // Färska får alltid sina minsta platser; sparade trimmas i så fall bakifrån.
+  const keepSaved = Math.max(0, Math.min(s.length, max - f.length));
+  return [...s.slice(0, keepSaved), ...f];
+}
+
+/**
+ * Alltid två alternativ när poolen räcker: modellens giltiga alternativ först,
+ * sedan deterministiskt ur rangordningen. I "strong"/överraskningsläge blir
+ * det helst en SAVED + en NEW så användaren både påminns och upptäcker.
+ */
+export function fillAlternatives(
+  pick: PickCandidate,
+  chosen: PickCandidate[],
+  cands: PickCandidate[],
+  opts: FallbackOptions,
+): PickCandidate[] {
+  const out: PickCandidate[] = [];
+  const used = new Set<string>([pick.key]);
+  const add = (c: PickCandidate | undefined) => {
+    if (!c || out.length >= 2 || used.has(c.key)) return;
+    used.add(c.key);
+    out.push(c);
+  };
+  for (const c of chosen) add(c);
+  if (out.length >= 2) return out;
+  const ranked = rankCandidates(cands, opts);
+  if (opts.priority === "strong" || opts.surprise) {
+    if (!out.some((c) => c.fromSaved)) add(ranked.find((c) => c.fromSaved && !used.has(c.key)));
+    if (!out.some((c) => !c.fromSaved)) add(ranked.find((c) => !c.fromSaved && !used.has(c.key)));
+  }
+  for (const c of ranked) add(c);
+  return out;
+}
+
 /**
  * Deterministiskt val när LLM:en fallerar: bästa kandidaten enligt samma
- * SAVED-först-prioritet som prompten, alternativ helst en sparad + en färsk.
+ * prioritet som prompten, plus två alternativ (fillAlternatives).
  */
 export function fallbackSelection(
   cands: PickCandidate[],
   opts: FallbackOptions,
 ): { pick: PickCandidate; alternatives: PickCandidate[] } | null {
   if (cands.length === 0) return null;
-  const scored = cands
-    .map((c, i) => ({ c, s: fallbackScore(c, opts), i }))
-    .sort((a, b) => b.s - a.s || a.i - b.i)
-    .map((x) => x.c);
-  const pick = scored[0];
-  const rest = scored.slice(1);
-  const alts: PickCandidate[] = [];
-  if (opts.priority === "strong" || opts.surprise) {
-    const saved = rest.find((c) => c.fromSaved);
-    const fresh = rest.find((c) => !c.fromSaved);
-    if (saved) alts.push(saved);
-    if (fresh) alts.push(fresh);
+  const pick = rankCandidates(cands, opts)[0];
+  return { pick, alternatives: fillAlternatives(pick, [], cands, opts) };
+}
+
+/* ======================================================================
+ * "Tycker om serien House" → referenstitel
+ * ==================================================================== */
+
+export type TitleReference = {
+  query: string;
+  mediaHint: MediaType | null;
+  /** Kom ur citattecken eller "serien/filmen X" — då är det säkert en titel. */
+  explicit: boolean;
+};
+
+const REF_STOP = new Set([
+  "är", "var", "att", "det", "den", "detta", "dom", "dem", "något", "nåt", "någonting", "nånting", "mycket", "lite",
+  "när", "hur", "sånt", "sådant", "sådana", "såna", "som", "man", "jag", "du", "vi", "en", "ett", "med", "och",
+  "inte", "alla", "allt", "mest", "bara", "också", "verkligen", "typ", "gärna", "helst", "kolla", "titta", "se",
+  "it", "that", "this", "those", "these", "them", "something", "anything", "when", "how", "to", "a", "an", "some",
+  "watching", "being", "lots", "really", "very", "most", "all", "stuff", "things", "not", "kind", "sort",
+]);
+
+const TYPE_WORD = String.raw`(?:(?:tv-?)?serien|filmen|dokumentären|the (?:tv )?(?:show|series)|the (?:movie|film)|(?:tv )?show|series)`;
+const REF_PATTERNS: RegExp[] = [
+  new RegExp(
+    String.raw`(?<!\p{L})(?:tycker om|tyckte om|gillar|gillade|gillat|älskar|älskade|i stil med|liknande|påminner om|ungefär som|typ som|(?:något|nåt|någonting|nånting|serie|serier|film|filmer)\s+som)\s+(?:heter\s+)?(${TYPE_WORD}\s+)?(.+?)(?=\s*[.,!?;:\n(]|\s+(?:och|men|eller|fast|så|för|typ|gärna|helst|med|från)\s|$)`,
+    "giu",
+  ),
+  new RegExp(
+    String.raw`(?<!\p{L})(?:i (?:really |also )?(?:like|liked|love|loved|enjoy|enjoyed|adore)|similar to|something like|anything like|stuff like|(?:shows?|series|movies?|films?) like|in the style of|reminds? me of|fans? of)\s+(${TYPE_WORD}\s+)?(.+?)(?=\s*[.,!?;:\n(]|\s+(?:and|but|or|so|because|with|from)\s|$)`,
+    "giu",
+  ),
+];
+const QUOTED_RE = /["“”„«»]([^"“”„«»]{2,60})["“”„«»]/u;
+
+function typeWordHint(w: string | undefined): MediaType | null {
+  if (!w) return null;
+  const t = w.toLowerCase();
+  if (/film|movie/.test(t)) return "movie";
+  if (/serie|show|series|dokument/.test(t)) return "tv";
+  return null;
+}
+
+function validRefPhrase(raw: string, explicit: boolean): string | null {
+  const q = raw
+    .replace(/\s+/g, " ")
+    .replace(/\s+(?:tack|please|thanks|pls|plz|kanske|maybe)$/iu, "")
+    .replace(/^[\s"'“”„«»-]+|[\s"'“”„«»-]+$/g, "")
+    .trim();
+  if (q.length < 2 || q.length > 60) return null;
+  const words = q.split(" ");
+  if (words.length > 6) return null;
+  if (explicit) return q;
+  if (REF_STOP.has(words[0].toLowerCase())) return null;
+  // "gillar drama", "like scary movies" — genre/stämning, inte en titel.
+  if (words.length <= 3 && parseIntent(q, []).terms.length > 0) return null;
+  if (/^(?:serier|filmer|series|movies|films|shows)$/iu.test(words[words.length - 1]) && words.length <= 3) return null;
+  return q;
+}
+
+/** Hittar en titel användaren säger att den gillar. null om inget säkert. */
+export function extractTitleReference(prompt: string | null | undefined): TitleReference | null {
+  const text = (prompt ?? "").trim();
+  if (!text) return null;
+  const quoted = text.match(QUOTED_RE);
+  if (quoted) {
+    const q = validRefPhrase(quoted[1], true);
+    if (q) return { query: q, mediaHint: null, explicit: true };
   }
-  for (const c of rest) {
-    if (alts.length >= 2) break;
-    if (!alts.includes(c)) alts.push(c);
+  for (const re of REF_PATTERNS) {
+    re.lastIndex = 0;
+    for (const m of text.matchAll(re)) {
+      const typeWord = m[1]?.trim();
+      const q = validRefPhrase(m[2] ?? "", !!typeWord);
+      if (q) return { query: q, mediaHint: typeWordHint(typeWord), explicit: !!typeWord };
+    }
   }
-  return { pick, alternatives: alts.slice(0, 2) };
+  return null;
+}
+
+/** Jämförbar titel: gemener, utan skiljetecken/diakritik, utan inledande "the"/"dr". */
+export function normTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/^(?:the|dr|doctor) /, "")
+    .trim();
+}
+
+export type TmdbSearchResult = {
+  id: number;
+  media_type?: string;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  vote_count?: number;
+  popularity?: number;
+  release_date?: string | null;
+  first_air_date?: string | null;
+};
+
+/**
+ * Exakt titelträff (titel eller originaltitel, normaliserad) med minst 30
+ * röster — hellre ingen referens än fel referens. Föredragen typ först, sedan
+ * flest röster.
+ */
+export function matchReferenceResult(
+  results: TmdbSearchResult[],
+  query: string,
+  prefer: MediaType | null,
+): (TmdbSearchResult & { media_type: MediaType }) | null {
+  const q = normTitle(query);
+  if (!q) return null;
+  const hits = results
+    .filter((r): r is TmdbSearchResult & { media_type: MediaType } => r.media_type === "movie" || r.media_type === "tv")
+    .filter((r) => Number.isFinite(r.id) && (r.vote_count ?? 0) >= 30)
+    .filter((r) => [r.title, r.name, r.original_title, r.original_name].some((t) => !!t && normTitle(t) === q));
+  hits.sort(
+    (a, b) =>
+      Number(b.media_type === prefer) - Number(a.media_type === prefer) || (b.vote_count ?? 0) - (a.vote_count ?? 0),
+  );
+  return hits[0] ?? null;
+}
+
+/* ======================================================================
+ * Discover-plan (max 4 extra anrop)
+ * ==================================================================== */
+
+export type DiscoverCall = { type: MediaType; kind: "genre" | "popular" | "top"; page: number };
+
+/** Max antal discover-anrop per val. */
+export const DISCOVER_BUDGET = 4;
+/** Sluta hämta när så många osedda färska titlar finns. */
+export const FRESH_POOL_TARGET = 40;
+
+/**
+ * Ordnad plan: önskade genrer → populärt → topplistat → sida 2. Första vågen
+ * körs direkt (parallellt), resten bara om poolen fortfarande är < 40.
+ */
+export function planDiscoverCalls(filter: MediaFilter, intent: PickIntent): { wave1: DiscoverCall[]; wave2: DiscoverCall[] } {
+  const types: MediaType[] = filter === "both" ? ["movie", "tv"] : [filter];
+  const hasGenres = (t: MediaType) => (t === "movie" ? intent.movieGenres : intent.tvGenres).length > 0;
+  const plan: DiscoverCall[] = [];
+  const order: DiscoverCall["kind"][] = intent.surprise ? ["top", "popular"] : ["popular", "top"];
+  for (const t of types) if (hasGenres(t)) plan.push({ type: t, kind: "genre", page: 1 });
+  for (const k of order) for (const t of types) plan.push({ type: t, kind: k, page: 1 });
+  for (const t of types) if (hasGenres(t)) plan.push({ type: t, kind: "genre", page: 2 });
+  for (const k of order) for (const t of types) plan.push({ type: t, kind: k, page: 2 });
+  const budget = plan.slice(0, DISCOVER_BUDGET);
+  const firstN = types.length === 2 ? DISCOVER_BUDGET : 3;
+  return { wave1: budget.slice(0, firstN), wave2: budget.slice(firstN) };
 }
 
 /* ======================================================================
@@ -535,6 +818,7 @@ type DetailsInput = {
   likedAt: Date | null;
   recRank: number | null;
   fromDiscover?: boolean;
+  similarTo?: string | null;
 };
 
 function yearOf(date: string | null | undefined): number | null {
@@ -620,6 +904,7 @@ async function fetchCandidate(
     onUserServices: onUserServices(providers, services),
     recRank: input.recRank,
     fromDiscover: input.fromDiscover,
+    similarTo: input.similarTo ?? null,
   };
 }
 
@@ -719,12 +1004,20 @@ export type BuildCandidatesInput = {
   priority: SavedPriority;
 };
 
+/** Titeln användaren sa att den gillar, upplöst mot TMDB. */
+export type CandidateReference = { tmdbId: number; mediaType: MediaType; title: string; year: number | null };
+
 export type CandidateSet = {
   candidates: PickCandidate[];
   savedCount: number;
   freshCount: number;
   intent: PickIntent;
   effectiveFilter: MediaFilter;
+  /** Bad användaren om något konkret (genre/speltid/undvik)? */
+  constrained: boolean;
+  reference: CandidateReference | null;
+  /** Rangordningen som fallback och alternativ-påfyllning ska använda. */
+  rank: FallbackOptions;
   taste: TasteSummary;
   affinity: (ids: number[]) => number;
   services: UserServices;
@@ -734,15 +1027,28 @@ export type CandidateSet = {
     savedEligible: number;
     savedEnriched: number;
     freshRecs: number;
-    discoverRan: boolean;
     recsTimedOut: boolean;
+    discoverCalls: number;
+    liteUnseen: number;
+    similarItems: number;
+    freshEnriched: number;
+    strictSaved: number;
+    strictFresh: number;
     msCandidates: number;
   };
 };
 
-const MAX_CANDIDATES = 30;
 const RECS_TIMEOUT_MS = 9000;
-const MIN_POOL = 12;
+/** Sparade likes att berika (nyast + utspridda äldre, se selectSavedForEnrichment). */
+const SAVED_ENRICH = 48;
+/** Recommenderns lek: så många osedda att berika. */
+const RECS_ENRICH = 24;
+/** Discover/liknande: de bäst rankade (på listdata) att berika. */
+const LITE_ENRICH = 24;
+/** Garanterade platser för "liknar <titel>" bland de berikade. */
+const SIMILAR_MIN_SLOTS = 10;
+/** Under så här många kandidater ger vi upp (no_candidates). */
+export const MIN_POOL = 3;
 
 function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: T): Promise<{ v: T; timedOut: boolean }> {
   return new Promise((resolve) => {
@@ -760,12 +1066,176 @@ function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: T): Promise<{ v: T
   });
 }
 
+/* ---------------- Listdata ("lite") från discover/recommendations ---------------- */
+
+type TmdbListResult = {
+  id: number;
+  genre_ids?: number[];
+  vote_average?: number;
+  vote_count?: number;
+  adult?: boolean;
+};
+
+export type LiteItem = {
+  tmdbId: number;
+  mediaType: MediaType;
+  genreIds: number[];
+  voteAverage: number | null;
+  voteCount: number | null;
+  /** Etikett för referenstiteln ("House (2004)") när källan är dess rekommendationer. */
+  similarTo: string | null;
+  /** Position i källistan (tiebreak). */
+  order: number;
+};
+
+function toLite(r: TmdbListResult, mediaType: MediaType, order: number, similarTo: string | null): LiteItem {
+  return {
+    tmdbId: r.id,
+    mediaType,
+    genreIds: Array.isArray(r.genre_ids) ? r.genre_ids : [],
+    voteAverage: typeof r.vote_average === "number" && r.vote_count ? r.vote_average : null,
+    voteCount: typeof r.vote_count === "number" ? r.vote_count : null,
+    similarTo,
+    order,
+  };
+}
+
+/** Barnheuristiken från recommendern: Kids-genre, eller Animation ∧ Family. */
+export function isKidsLike(genreIds: number[]): boolean {
+  return genreIds.includes(10762) || (genreIds.includes(16) && genreIds.includes(10751));
+}
+
+/**
+ * Rangordning på listdata (ingen speltid ännu) — avgör vilka discover-/
+ * liknande-titlar som är värda ett detaljanrop. Samma vikter som fallbackScore.
+ */
+export function rankLiteItems(
+  items: LiteItem[],
+  intent: PickIntent,
+  opts: { affinity?: (ids: number[]) => number; constrained: boolean; surprise: boolean },
+): LiteItem[] {
+  const score = (i: LiteItem) => {
+    const r = intentFit({ mediaType: i.mediaType, genreIds: i.genreIds, runtimeMin: null }, intent);
+    const aff = opts.affinity ? opts.affinity(i.genreIds) : 0;
+    return (
+      bayesQuality(i.voteAverage, i.voteCount) +
+      r.fit * 1.5 +
+      (opts.constrained && r.strict ? 2 : 0) +
+      (i.similarTo ? 1.5 : 0) +
+      (opts.surprise ? -0.8 : 0.8) * aff -
+      i.order * 0.005
+    );
+  };
+  return items
+    .map((it, idx) => ({ it, s: score(it), idx }))
+    .sort((a, b) => b.s - a.s || a.idx - b.idx)
+    .map((x) => x.it);
+}
+
+/** De n bästa, men med minst `similarMin` platser för "liknar <titel>" om de finns. */
+export function pickLiteForEnrichment(ranked: LiteItem[], n: number, similarMin: number): LiteItem[] {
+  const similar = ranked.filter((i) => i.similarTo).slice(0, similarMin);
+  const out = [...similar];
+  for (const i of ranked) {
+    if (out.length >= n) break;
+    if (!out.includes(i)) out.push(i);
+  }
+  return out.slice(0, Math.max(n, similar.length));
+}
+
+type DiscoverCtx = {
+  intent: PickIntent;
+  region: string;
+  tmdbLocale: string;
+  services: UserServices;
+  certMax: string;
+  showKids: boolean;
+  avoidTop: number[];
+};
+
+async function discoverLite(call: DiscoverCall, ctx: DiscoverCtx): Promise<LiteItem[]> {
+  const { intent, region, tmdbLocale, services } = ctx;
+  const t = call.type;
+  const genres = t === "movie" ? intent.movieGenres : intent.tvGenres;
+  const avoid = new Set<number>([
+    ...(t === "movie" ? intent.avoidMovieGenres : intent.avoidTvGenres),
+    ...(intent.surprise ? ctx.avoidTop.filter((g) => !genres.includes(g)) : []),
+    ...(ctx.showKids ? [] : t === "movie" ? [10751] : [10762, 10751]),
+  ]);
+  const maxRt = t === "movie" ? intent.maxRuntimeMovie : intent.maxRuntimeTv;
+  const isGenre = call.kind === "genre";
+  const isTop = call.kind === "top";
+  const data = await tmdbJson<{ results?: TmdbListResult[] }>(
+    `/discover/${t}`,
+    {
+      language: tmdbLocale,
+      region: t === "movie" ? region : undefined,
+      watch_region: region,
+      with_watch_providers: services.discoverIds.length > 0 ? services.discoverIds.join("|") : undefined,
+      with_genres: isGenre && genres.length ? genres.join("|") : undefined,
+      without_genres: avoid.size ? Array.from(avoid).join(",") : undefined,
+      // Bara genre-passet snävar in på speltid — det är "träffarna". Populärt/
+      // topplistat är bredden som fyller på när träffarna är få.
+      "with_runtime.lte": isGenre && maxRt ? maxRt : undefined,
+      certification_country: t === "movie" ? "SE" : undefined,
+      "certification.lte": t === "movie" ? ctx.certMax : undefined,
+      sort_by: isTop ? "vote_average.desc" : "popularity.desc",
+      "vote_count.gte": isTop ? (t === "movie" ? 800 : 300) : 150,
+      include_adult: "false",
+      page: call.page,
+    },
+    DETAILS_REVALIDATE_S,
+  );
+  return (data?.results ?? [])
+    .filter((r) => Number.isFinite(r.id) && !r.adult)
+    .map((r, i) => toLite(r, t, (call.page - 1) * 20 + i, null));
+}
+
+/**
+ * "Tycker om serien House": sök titeln (UI-språket, sedan engelska) och hämta
+ * TMDB:s recommendations + similar för den. 2–4 anrop, alla cachade.
+ */
+async function resolveReference(
+  ref: TitleReference,
+  prefer: MediaType | null,
+  tmdbLocale: string,
+): Promise<{ ref: CandidateReference; items: LiteItem[] } | null> {
+  type SearchRes = { results?: TmdbSearchResult[] };
+  const search = (language: string) =>
+    tmdbJson<SearchRes>("/search/multi", { query: ref.query, language, include_adult: "false", page: 1 }, DETAILS_REVALIDATE_S);
+  let hit = matchReferenceResult((await search(tmdbLocale))?.results ?? [], ref.query, prefer);
+  if (!hit && tmdbLocale !== "en-US") hit = matchReferenceResult((await search("en-US"))?.results ?? [], ref.query, prefer);
+  if (!hit) return null;
+
+  const type = hit.media_type;
+  const title = (type === "movie" ? hit.title : hit.name) || hit.original_title || hit.original_name || ref.query;
+  const year = yearOf(type === "movie" ? hit.release_date : hit.first_air_date);
+  const label = `${title}${year ? ` (${year})` : ""}`;
+  const [recs, similar] = await Promise.all([
+    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${hit.id}/recommendations`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
+    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${hit.id}/similar`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
+  ]);
+  // Varva: recommendations (beteendebaserat, oftast bäst) först i varje par.
+  const a = (recs?.results ?? []).filter((r) => Number.isFinite(r.id) && !r.adult);
+  const b = (similar?.results ?? []).filter((r) => Number.isFinite(r.id) && !r.adult);
+  const items: LiteItem[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i]) items.push(toLite(a[i], type, items.length, label));
+    if (b[i]) items.push(toLite(b[i], type, items.length, label));
+  }
+  return { ref: { tmdbId: hit.id, mediaType: type, title, year }, items };
+}
+
+/* ---------------- Huvudfunktion ---------------- */
+
 export async function buildCandidates(input: BuildCandidatesInput): Promise<CandidateSet | null> {
   const t0 = Date.now();
   const intent = parseIntent(input.prompt, input.chips);
   const filter = effectiveMediaFilter(input.mediaFilter, intent);
   const wantType = (t: string) => filter === "both" || t === filter;
   const excludeIds = new Set(input.exclude);
+  const constrained = intentHasConstraints(intent);
+  const titleRef = extractTitleReference(input.prompt);
 
   const [profile, watch, ratings, stats] = await Promise.all([
     prisma.profile.findUnique({
@@ -798,12 +1268,16 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
   const region = (input.region || profile.region || "SE").toUpperCase();
   const services = resolveUserServices(parseProvidersJson(profile.providers));
   const affinity = behaviouralAffinity(stats);
+  const rank: FallbackOptions = { priority: input.priority, surprise: intent.surprise, affinity, constrained };
+  const showKids = profile.showKidsContent === true || intent.wantsFamily;
 
   const ratingByKey = new Map<string, { rating: number | null; decision: string; decidedAt: Date }>();
   for (const r of ratings) ratingByKey.set(`${r.mediaType}_${r.tmdbId}`, r);
   const knownKeys = new Set<string>([...ratingByKey.keys(), ...watch.map((w) => `${w.mediaType}_${w.tmdbId}`)]);
+  /** Färska: rätt typ, aldrig svept/sparad, inte redan visad i sessionen. */
+  const freshOk = (t: MediaType, id: number) => wantType(t) && !knownKeys.has(`${t}_${id}`) && !excludeIds.has(id);
 
-  /* ---- 1. Sparade likes ---- */
+  /* ---- 1. Sparade likes (alla behöriga — passande rankas först senare) ---- */
   const savedEligible: SavedRow[] = watch
     .map((w) => ({ tmdbId: w.tmdbId, mediaType: w.mediaType as MediaType, addedAt: w.addedAt }))
     .filter((w) => w.mediaType === "movie" || w.mediaType === "tv")
@@ -824,12 +1298,7 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     services,
   });
 
-  const hasFilters =
-    intentHasGenreFilter(intent) || intent.maxRuntimeMovie != null || intent.maxRuntimeTv != null;
-  const enrichN = hasFilters ? 48 : 32;
-  const savedPick = selectSavedForEnrichment(savedEligible, enrichN);
-  const recentCut = Math.round(Math.min(enrichN, savedEligible.length) * 0.6);
-
+  const savedPick = selectSavedForEnrichment(savedEligible, SAVED_ENRICH);
   const savedPromise = enrichAll(
     savedPick.map((s) => ({ tmdbId: s.tmdbId, mediaType: s.mediaType, fromSaved: true, likedAt: s.addedAt, recRank: null })),
     input.tmdbLocale,
@@ -837,7 +1306,7 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     services,
   );
 
-  /* ---- 2. Färska (recommendern) — parallellt med berikningen ovan ---- */
+  /* ---- 2. Recommenderns lek → berika de första osedda ---- */
   const recsPromise = withTimeout(
     computeUnifiedRecs({
       uid: input.uid,
@@ -849,61 +1318,106 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     RECS_TIMEOUT_MS,
     [],
   );
-
-  const [savedEnriched, recs] = await Promise.all([savedPromise, recsPromise]);
-
-  // Sparade: hårda krav + finns på användarens tjänster (när det är känt).
-  const savedOk = savedEnriched.filter(
-    (c) => matchesIntent(c, intent) && c.onUserServices !== false,
-  );
-  const savedMax = input.priority === "strong" ? 18 : 12;
-  const recentIdx = new Set(savedPick.slice(0, recentCut).map((s) => candidateKey(s.mediaType, s.tmdbId)));
-  const savedRecent = savedOk.filter((c) => recentIdx.has(c.key));
-  const savedOlder = savedOk.filter((c) => !recentIdx.has(c.key));
-  const saved: PickCandidate[] = [...savedRecent.slice(0, 12), ...savedOlder.slice(0, 6)];
-  for (const c of savedOk) {
-    if (saved.length >= savedMax) break;
-    if (!saved.includes(c)) saved.push(c);
-  }
-  saved.splice(savedMax);
-
-  const freshMax = Math.min(20, Math.max(12, MAX_CANDIDATES - saved.length));
-  const recItems = recs.v
-    .filter((it) => wantType(it.tmdbType) && !excludeIds.has(it.id))
-    .filter((it) => !knownKeys.has(`${it.tmdbType}_${it.id}`))
-    .slice(0, freshMax + 8);
-  const freshEnriched = await enrichAll(
-    recItems.map((it, i) => ({ tmdbId: it.id, mediaType: it.tmdbType, fromSaved: false, likedAt: null, recRank: i })),
-    input.tmdbLocale,
-    region,
-    services,
-  );
-  let fresh = freshEnriched.filter((c) => matchesIntent(c, intent)).slice(0, freshMax);
-
-  /* ---- 3. Extra discover-pass vid tunn pool / överraskning ---- */
-  let discoverRan = false;
-  const poolThin = saved.length + fresh.length < MIN_POOL;
-  if (poolThin || intent.surprise) {
-    discoverRan = true;
-    const { top } = rankGenresByBehaviour(stats);
-    const extra = await discoverPass({
-      intent,
-      filter,
+  const recsEnrichedPromise = recsPromise.then(async (recs) => {
+    const items = recs.v.filter((it) => freshOk(it.tmdbType, it.id)).slice(0, RECS_ENRICH);
+    const enriched = await enrichAll(
+      items.map((it, i) => ({ tmdbId: it.id, mediaType: it.tmdbType, fromSaved: false, likedAt: null, recRank: i })),
+      input.tmdbLocale,
       region,
-      tmdbLocale: input.tmdbLocale,
       services,
-      certMax: seMaxCert(ageFromDob(new Date(profile.dob))),
-      showKids: profile.showKidsContent === true || intent.wantsFamily,
-      avoidTop: intent.surprise ? top.slice(0, 2) : [],
-      skip: (t, id) => knownKeys.has(`${t}_${id}`) || excludeIds.has(id),
-      limit: intent.surprise ? 10 : 16,
-    });
-    const have = new Set([...saved, ...fresh].map((c) => c.key));
-    const extraOk = extra.filter((c) => !have.has(c.key) && matchesIntent(c, intent));
-    fresh = [...fresh, ...extraOk].slice(0, Math.max(freshMax, MAX_CANDIDATES - saved.length));
-  }
+    );
+    return { total: recs.v.length, timedOut: recs.timedOut, enriched };
+  });
 
-  const candidates = [...saved, ...fresh].slice(0, MAX_CANDIDATES);
+  /* ---- 3. Discover (≤ 4 anrop) + "liknar <titel>" — parallellt med recs ---- */
+  const ctx: DiscoverCtx = {
+    intent,
+    region,
+    tmdbLocale: input.tmdbLocale,
+    services,
+    certMax: seMaxCert(ageFromDob(new Date(profile.dob))),
+    showKids,
+    avoidTop: rankGenresByBehaviour(stats).top.slice(0, 2),
+  };
+  const liteOk = (i: LiteItem) => freshOk(i.mediaType, i.tmdbId) && (showKids || !isKidsLike(i.genreIds));
+  const countUnseen = (lists: LiteItem[][]) => {
+    const keys = new Set<string>();
+    for (const l of lists) for (const i of l) if (liteOk(i)) keys.add(candidateKey(i.mediaType, i.tmdbId));
+    return keys.size;
+  };
+
+  const discoverPromise = (async () => {
+    const plan = planDiscoverCalls(filter, intent);
+    let lists = await Promise.all(plan.wave1.map((c) => discoverLite(c, ctx)));
+    let calls = plan.wave1.length;
+    if (plan.wave2.length > 0 && countUnseen(lists) < FRESH_POOL_TARGET) {
+      lists = [...lists, ...(await Promise.all(plan.wave2.map((c) => discoverLite(c, ctx))))];
+      calls += plan.wave2.length;
+    }
+    return { lists, calls };
+  })();
+
+  const similarPromise = titleRef
+    ? resolveReference(titleRef, titleRef.mediaHint ?? (filter !== "both" ? filter : null), input.tmdbLocale).catch(() => null)
+    : Promise.resolve(null);
+
+  const liteEnrichedPromise = Promise.all([discoverPromise, similarPromise]).then(async ([disc, sim]) => {
+    const refKey = sim ? candidateKey(sim.ref.mediaType, sim.ref.tmdbId) : null;
+    const seen = new Set<string>();
+    const lite: LiteItem[] = [];
+    // Liknande först så deras flagga vinner vid dubbletter.
+    for (const i of [...(sim?.items ?? []), ...disc.lists.flat()]) {
+      const k = candidateKey(i.mediaType, i.tmdbId);
+      if (seen.has(k) || k === refKey || !liteOk(i)) continue;
+      seen.add(k);
+      lite.push(i);
+    }
+    const ranked = rankLiteItems(lite, intent, { affinity, constrained, surprise: intent.surprise });
+    const chosen = pickLiteForEnrichment(ranked, LITE_ENRICH, SIMILAR_MIN_SLOTS);
+    const enriched = await enrichAll(
+      chosen.map((i) => ({
+        tmdbId: i.tmdbId,
+        mediaType: i.mediaType,
+        fromSaved: false,
+        likedAt: null,
+        recRank: null,
+        fromDiscover: !i.similarTo,
+        similarTo: i.similarTo,
+      })),
+      input.tmdbLocale,
+      region,
+      services,
+    );
+    return {
+      enriched,
+      unseen: lite.length,
+      calls: disc.calls,
+      similarItems: lite.filter((i) => i.similarTo).length,
+      ref: sim?.ref ?? null,
+    };
+  });
+
+  const [savedEnriched, recsRes, liteRes] = await Promise.all([savedPromise, recsEnrichedPromise, liteEnrichedPromise]);
+
+  /* ---- 4. Slå ihop, poängsätt, välj ~30 ---- */
+  const refKey = liteRes.ref ? candidateKey(liteRes.ref.mediaType, liteRes.ref.tmdbId) : null;
+  const freshByKey = new Map<string, PickCandidate>();
+  for (const c of [...liteRes.enriched, ...recsRes.enriched]) {
+    const prev = freshByKey.get(c.key);
+    if (!prev) freshByKey.set(c.key, c);
+    else {
+      prev.recRank = prev.recRank ?? c.recRank;
+      prev.similarTo = prev.similarTo ?? c.similarTo ?? null;
+    }
+  }
+  // Referenstiteln själv föreslås inte — "tycker om House" betyder att de sett den.
+  const fresh = scoreCandidates(
+    [...freshByKey.values()].filter((c) => c.key !== refKey && wantType(c.mediaType)),
+    intent,
+  );
+  const saved = scoreCandidates(savedEnriched.filter((c) => c.key !== refKey), intent);
+  const savedMax = input.priority === "strong" ? 18 : 12;
+  const candidates = selectFinalCandidates(saved, fresh, { ...rank, savedMax });
 
   const taste = await tastePromise;
 
@@ -913,6 +1427,9 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     freshCount: candidates.filter((c) => !c.fromSaved).length,
     intent,
     effectiveFilter: filter,
+    constrained,
+    reference: liteRes.ref,
+    rank,
     taste,
     affinity,
     services,
@@ -921,78 +1438,17 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
       savedTotal: watch.length,
       savedEligible: savedEligible.length,
       savedEnriched: savedEnriched.length,
-      freshRecs: recs.v.length,
-      discoverRan,
-      recsTimedOut: recs.timedOut,
+      freshRecs: recsRes.total,
+      recsTimedOut: recsRes.timedOut,
+      discoverCalls: liteRes.calls,
+      liteUnseen: liteRes.unseen,
+      similarItems: liteRes.similarItems,
+      freshEnriched: fresh.length,
+      strictSaved: saved.filter((c) => c.strictMatch).length,
+      strictFresh: fresh.filter((c) => c.strictMatch).length,
       msCandidates: Date.now() - t0,
     },
   };
-}
-
-type DiscoverItem = { id: number; vote_count?: number };
-
-async function discoverPass(opts: {
-  intent: PickIntent;
-  filter: MediaFilter;
-  region: string;
-  tmdbLocale: string;
-  services: UserServices;
-  certMax: string;
-  showKids: boolean;
-  avoidTop: number[];
-  skip: (t: MediaType, id: number) => boolean;
-  limit: number;
-}): Promise<PickCandidate[]> {
-  const { intent, filter, region, tmdbLocale, services } = opts;
-  const providers = services.discoverIds.length > 0 ? services.discoverIds.join("|") : undefined;
-  const types: MediaType[] = filter === "both" ? ["movie", "tv"] : [filter];
-
-  const lists = await Promise.all(
-    types.map(async (t) => {
-      const genres = t === "movie" ? intent.movieGenres : intent.tvGenres;
-      const avoid = new Set<number>([
-        ...(t === "movie" ? intent.avoidMovieGenres : intent.avoidTvGenres),
-        ...opts.avoidTop.filter((g) => !genres.includes(g)),
-        ...(opts.showKids ? [] : t === "movie" ? [10751] : [10762, 10751]),
-      ]);
-      const maxRt = t === "movie" ? intent.maxRuntimeMovie : null; // TV: avsnittslängd filtreras efteråt
-      const data = await tmdbJson<{ results?: DiscoverItem[] }>(
-        `/discover/${t}`,
-        {
-          language: tmdbLocale,
-          region: t === "movie" ? region : undefined,
-          watch_region: region,
-          with_watch_providers: providers,
-          with_genres: genres.length ? genres.join("|") : undefined,
-          without_genres: avoid.size ? Array.from(avoid).join(",") : undefined,
-          "with_runtime.lte": maxRt ?? undefined,
-          certification_country: t === "movie" ? "SE" : undefined,
-          "certification.lte": t === "movie" ? opts.certMax : undefined,
-          sort_by: intent.surprise ? "vote_average.desc" : "popularity.desc",
-          "vote_count.gte": intent.surprise ? 800 : 150,
-          include_adult: "false",
-          page: 1,
-        },
-        DETAILS_REVALIDATE_S,
-      );
-      return (data?.results ?? [])
-        .filter((r) => Number.isFinite(r.id) && !opts.skip(t, r.id))
-        .map((r) => ({ tmdbId: r.id, mediaType: t }));
-    }),
-  );
-
-  // Varva film/serie så "both" inte bara blir filmer.
-  const merged: { tmdbId: number; mediaType: MediaType }[] = [];
-  const maxLen = Math.max(0, ...lists.map((l) => l.length));
-  for (let i = 0; i < maxLen && merged.length < opts.limit; i++) {
-    for (const l of lists) if (l[i] && merged.length < opts.limit) merged.push(l[i]);
-  }
-  return enrichAll(
-    merged.map((m, i) => ({ ...m, fromSaved: false, likedAt: null, recRank: 30 + i, fromDiscover: true })),
-    tmdbLocale,
-    region,
-    services,
-  );
 }
 
 async function buildTasteSummary(opts: {

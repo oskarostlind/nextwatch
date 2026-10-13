@@ -9,6 +9,7 @@
 
 import type {
   PickEventType,
+  PickHistoryResponse,
   PickQuota,
   PickRequestBody,
   PickResponse,
@@ -88,6 +89,55 @@ export async function requestPick(body: PickRequestBody): Promise<PickResponse> 
     return { ok: false, error: errorForStatus(res.status) };
   } catch {
     return { ok: false, error: "unavailable" };
+  }
+}
+
+/**
+ * Ett id per "konversation" i arket — skickas med varje förfrågan så att
+ * historiken kan gruppera dem. Servern godtar [A-Za-z0-9_-], max 64 tecken.
+ * randomUUID saknas i äldre WebViews och utanför säkra kontexter → reserv.
+ */
+export function newPickSessionId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    /* faller till reserven */
+  }
+  const rand = Math.random().toString(36).slice(2, 12);
+  return `s-${Date.now().toString(36)}-${rand}`;
+}
+
+/**
+ * GET /api/pick/history — tidigare val grupperade per "konversation" (ett
+ * öppnat ark = en session). `before` är föregående svars nextBefore. Kastar
+ * aldrig: fel blir { ok:false }.
+ */
+export async function getPickHistory(before?: string | null, limit = 15): Promise<PickHistoryResponse> {
+  try {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (before) qs.set("before", before);
+    const res = await fetch(`/api/pick/history?${qs.toString()}`, { cache: "no-store" });
+    if (res.status === 401) return { ok: false, error: "unauthorized" };
+    const j = (await res.json().catch(() => null)) as PickHistoryResponse | null;
+    if (res.ok && j && j.ok === true && Array.isArray(j.sessions)) return j;
+    return { ok: false, error: "unavailable" };
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+/**
+ * DELETE /api/pick/history — tömmer det som visas i historiken. Påverkar inte
+ * kvoten (servern räknar bara status/källa/tid). true om det gick.
+ */
+export async function clearPickHistory(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/pick/history", { method: "DELETE", cache: "no-store" });
+    if (!res.ok) return false;
+    const j = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+    return j?.ok === true;
+  } catch {
+    return false;
   }
 }
 

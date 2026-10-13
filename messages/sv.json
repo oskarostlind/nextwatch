@@ -1475,6 +1475,31 @@
     "another": "Visa något annat",
     "alternatives": "Eller kanske",
     "altAria": "Visa {title} i stället",
+    "thread": {
+      "aria": "Tidigare förslag i den här konversationen",
+      "previous": "Förra förslaget:",
+      "newQuestion": "Ny fråga",
+      "askAgain": "Vad är du sugen på nu?",
+      "anyQuery": "Välj något åt mig"
+    },
+    "history": {
+      "open": "Tidigare val",
+      "title": "Dina val",
+      "back": "Tillbaka",
+      "today": "Idag {time}",
+      "yesterday": "Igår {time}",
+      "count": "{count} förslag",
+      "emptyTitle": "Här sparas dina val",
+      "emptyBody": "När NextWatch väljer åt dig hamnar förslagen här, så att du kan hitta tillbaka till dem.",
+      "loadFailed": "Kunde inte hämta dina tidigare val just nu.",
+      "more": "Visa fler",
+      "clear": "Rensa historik",
+      "clearConfirm": "Rensa alla tidigare val?",
+      "clearNote": "Det påverkar inte hur många val du har kvar.",
+      "clearAction": "Rensa",
+      "cancel": "Avbryt",
+      "clearFailed": "Kunde inte rensa just nu. Försök igen."
+    },
     "welcomeLeft": "Du har {count} gratis val att testa med",
     "quotaLeft": "{count, plural, =0 {Det var ditt sista val} one {Du har 1 val kvar} other {Du har # val kvar}}",
     "premiumNudge": "Med Premium får du {count} val i månaden utan reklam",
@@ -1491,8 +1516,8 @@
       "unlocked": "Klart! {count, plural, one {1 nytt val} other {# nya val}} upplåsta."
     },
     "error": {
-      "noCandidatesTitle": "Hittade inget som passar",
-      "noCandidatesBody": "Prova att bredda: sök i både film och serier, eller lägg till fler tjänster i profilen.",
+      "noCandidatesTitle": "Hittade inget nytt just nu",
+      "noCandidatesBody": "Prova att bredda sökningen eller fråga på ett annat sätt.",
       "tryBoth": "Sök i både film och serier",
       "editServices": "Ändra tjänster",
       "back": "Tillbaka",

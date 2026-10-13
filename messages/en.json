@@ -1475,6 +1475,31 @@
     "another": "Show me something else",
     "alternatives": "Or maybe",
     "altAria": "Show {title} instead",
+    "thread": {
+      "aria": "Earlier suggestions in this conversation",
+      "previous": "Last suggestion:",
+      "newQuestion": "New question",
+      "askAgain": "What are you in the mood for now?",
+      "anyQuery": "Pick something for me"
+    },
+    "history": {
+      "open": "Earlier picks",
+      "title": "Your picks",
+      "back": "Back",
+      "today": "Today {time}",
+      "yesterday": "Yesterday {time}",
+      "count": "{count, plural, one {# suggestion} other {# suggestions}}",
+      "emptyTitle": "Your picks are saved here",
+      "emptyBody": "When NextWatch picks for you, the suggestions end up here so you can find them again.",
+      "loadFailed": "Couldn't load your earlier picks right now.",
+      "more": "Show more",
+      "clear": "Clear history",
+      "clearConfirm": "Clear all earlier picks?",
+      "clearNote": "This doesn't affect how many picks you have left.",
+      "clearAction": "Clear",
+      "cancel": "Cancel",
+      "clearFailed": "Couldn't clear right now. Try again."
+    },
     "welcomeLeft": "You have {count} free picks to try it out",
     "quotaLeft": "{count, plural, =0 {That was your last pick} one {You have 1 pick left} other {You have # picks left}}",
     "premiumNudge": "With Premium you get {count} picks a month, no ads",
@@ -1491,8 +1516,8 @@
       "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
     },
     "error": {
-      "noCandidatesTitle": "Nothing fits right now",
-      "noCandidatesBody": "Try broadening: search both movies and series, or add more services in your profile.",
+      "noCandidatesTitle": "Nothing new right now",
+      "noCandidatesBody": "Try broadening the search or asking in a different way.",
       "tryBoth": "Search movies and series",
       "editServices": "Change services",
       "back": "Back",

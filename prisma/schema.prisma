@@ -622,11 +622,18 @@ model AiPickRequest {
   costUsd         Float?   @map("cost_usd")
   latencyMs       Int?     @map("latency_ms")
   error           String?
+  /// Klientens id för en "konversation" i arket (v2, historiken). null = egen session.
+  sessionId       String?  @map("session_id")
+  /// Motiveringen som visades (v2). Nollas av "Rensa historik".
+  reason          String?
+  /// { pick: PickItem, alternatives: PickItem[] } — ögonblicksbild för historiken (v2).
+  result          Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt], map: "idx_ai_pick_requests_user_created")
   @@index([createdAt], map: "idx_ai_pick_requests_created")
+  @@index([userId, sessionId], map: "idx_ai_pick_requests_user_session")
   @@map("ai_pick_requests")
 }
 

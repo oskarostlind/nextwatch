@@ -3,7 +3,14 @@
 // zod-scheman för /api/pick* (delas av pick- och selftest-routen).
 
 import { z } from "zod";
-import { PICK_CHIP_IDS, PICK_EVENT_TYPES, PICK_PROMPT_MAX, type PickChipId, type PickEventType } from "@/lib/aiPick/types";
+import {
+  PICK_CHIP_IDS,
+  PICK_EVENT_TYPES,
+  PICK_PROMPT_MAX,
+  PICK_SESSION_ID_MAX,
+  type PickChipId,
+  type PickEventType,
+} from "@/lib/aiPick/types";
 
 export const pickRequestSchema = z.object({
   prompt: z
@@ -17,6 +24,21 @@ export const pickRequestSchema = z.object({
     .optional(),
   mediaFilter: z.enum(["both", "movie", "tv"]).optional(),
   exclude: z.array(z.number().int().positive()).max(200).optional(),
+  sessionId: z
+    .string()
+    .min(1)
+    .max(PICK_SESSION_ID_MAX)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+});
+
+/** GET /api/pick/history — `before` (ISO) + `limit` (1..30, default 15). */
+export const pickHistoryQuerySchema = z.object({
+  before: z
+    .string()
+    .optional()
+    .refine((s) => s === undefined || !Number.isNaN(new Date(s).getTime()), { message: "bad_before" }),
+  limit: z.coerce.number().int().min(1).max(30).optional(),
 });
 
 export const pickEventSchema = z.object({

@@ -13,12 +13,19 @@
 // deterministiskt med samma SAVED-först-prioritet som prompten, med en
 // generisk lokaliserad motivering. Användaren fick ett val → status 'ok', men
 // felet loggas i `error`.
+//
+// v2: alltid två alternativ när poolen räcker (modellens giltiga först, sedan
+// fillAlternatives), och 'ok'-raden sparar motivering + ögonblicksbild
+// (`reason`, `result`) och klientens `session_id` för historiken.
 
 import type { AppLocale } from "@/lib/i18nConfig";
 import { tmdbLanguage } from "@/lib/i18nConfig";
+import type { Prisma } from "@prisma/client";
 import {
+  MIN_POOL,
   buildCandidates,
   fallbackSelection,
+  fillAlternatives,
   savedPriority,
   toPickItem,
   type MediaFilter,
@@ -33,13 +40,14 @@ import {
   type FinishData,
 } from "@/lib/aiPick/quota";
 import { stockholmClock } from "@/lib/aiPick/time";
-import type { PickChipId, PickQuota, PickResponse } from "@/lib/aiPick/types";
+import type { PickChipId, PickItem, PickQuota, PickResponse } from "@/lib/aiPick/types";
 
 export type NormalizedPickBody = {
   prompt: string | null;
   chips: PickChipId[];
   mediaFilter: MediaFilter;
   exclude: number[];
+  sessionId: string | null;
 };
 
 export type RunPickOptions = {
@@ -66,6 +74,8 @@ export type PickDebug = {
   intent: string[];
   effectiveFilter: MediaFilter | null;
   pipeline: Record<string, number | boolean> | null;
+  reference: string | null;
+  constrained: boolean;
 };
 
 export type RunPickResult = { status: number; body: PickResponse; debug: PickDebug };
@@ -98,6 +108,8 @@ function emptyDebug(): PickDebug {
     intent: [],
     effectiveFilter: null,
     pipeline: null,
+    reference: null,
+    constrained: false,
   };
 }
 
@@ -124,7 +136,12 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     return { status: 503, body: { ok: false, error: "unavailable", quota: quota0 }, debug };
   }
 
-  const reserveInput = { prompt: body.prompt, chips: body.chips, mediaFilter: body.mediaFilter };
+  const reserveInput = {
+    prompt: body.prompt,
+    chips: body.chips,
+    mediaFilter: body.mediaFilter,
+    sessionId: body.sessionId,
+  };
   let requestId: string;
   if (mode === "user") {
     const r = await reservePick(uid, quota0.premium, quota0.enabled, reserveInput);
@@ -153,7 +170,8 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       priority,
     });
 
-    if (!set || set.candidates.length === 0) {
+    // v2: poolen är mjuk och bred — under MIN_POOL (3) ska i praktiken aldrig hända.
+    if (!set || set.candidates.length < MIN_POOL) {
       debug.error = set ? "no_candidates" : "profile_missing";
       debug.pipeline = set ? { ...set.debug } : null;
       debug.intent = set?.intent.terms ?? [];
@@ -167,6 +185,8 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     debug.intent = set.intent.terms;
     debug.effectiveFilter = set.effectiveFilter;
     debug.pipeline = { ...set.debug };
+    debug.constrained = set.constrained;
+    debug.reference = set.reference ? `${set.reference.mediaType}:${set.reference.tmdbId} ${set.reference.title}` : null;
 
     const byKey = new Map(set.candidates.map((c) => [c.key, c] as const));
     const system = buildSystemPrompt({ uiLocale, priority });
@@ -177,6 +197,8 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       prompt: body.prompt ?? "",
       taste: set.taste,
       candidates: set.candidates,
+      constrained: set.constrained,
+      reference: set.reference,
     });
 
     const llm = await callPickLlm(system, user);
@@ -205,11 +227,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     }
 
     if (!pick) {
-      const fb = fallbackSelection(set.candidates, {
-        priority,
-        surprise: set.intent.surprise,
-        affinity: set.affinity,
-      });
+      const fb = fallbackSelection(set.candidates, set.rank);
       if (!fb) {
         // Kan inte hända med icke-tom kandidatlista, men var defensiv.
         await finish({ status: "error", model: debug.model, error: error ?? "fallback_empty" });
@@ -220,7 +238,13 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       alternatives = fb.alternatives;
       reason = pick.fromSaved ? FALLBACK_REASON[uiLocale].saved : FALLBACK_REASON[uiLocale].fresh;
     }
+    // Alltid två alternativ när poolen räcker — modellens giltiga först.
+    alternatives = fillAlternatives(pick, alternatives, set.candidates, set.rank);
     debug.error = error;
+
+    const pickItem = toPickItem(pick, set.services);
+    const altItems = alternatives.map((c) => toPickItem(c, set.services));
+    const snapshot: { pick: PickItem; alternatives: PickItem[] } = { pick: pickItem, alternatives: altItems };
 
     await finish({
       status: "ok",
@@ -234,16 +258,20 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       outputTokens: llm.outputTokens || null,
       costUsd: llm.inputTokens || llm.outputTokens ? debug.costUsd : null,
       error,
+      reason,
+      result: snapshot as unknown as Prisma.InputJsonValue,
     });
 
     return {
       status: 200,
       body: {
         ok: true,
-        pick: toPickItem(pick, set.services),
-        alternatives: alternatives.map((c) => toPickItem(c, set.services)),
+        pick: pickItem,
+        alternatives: altItems,
         reason,
         quota: await freshQuota(),
+        requestId,
+        sessionId: body.sessionId,
       },
       debug,
     };
@@ -262,6 +290,7 @@ export function normalizePickBody(b: {
   chips?: PickChipId[];
   mediaFilter?: MediaFilter;
   exclude?: number[];
+  sessionId?: string;
 }): NormalizedPickBody {
   const prompt = sanitizeUserText(b.prompt ?? "", 300);
   return {
@@ -269,5 +298,6 @@ export function normalizePickBody(b: {
     chips: Array.from(new Set(b.chips ?? [])),
     mediaFilter: b.mediaFilter ?? "both",
     exclude: Array.from(new Set((b.exclude ?? []).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 100),
+    sessionId: b.sessionId && /^[A-Za-z0-9_-]{1,64}$/.test(b.sessionId) ? b.sessionId : null,
   };
 }

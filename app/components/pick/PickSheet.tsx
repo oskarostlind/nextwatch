@@ -2,14 +2,25 @@
 
 // "Välj åt mig" — bottenarket. Öppnas av PickLauncher (✦ i swipens topprad).
 //
-// Tillstånd: ask → loading → result, plus paywall och error. Servern
-// (/api/pick*) är källan till sanning för kvoten; arket läser den cachade
-// kvoten direkt vid öppning och hämtar en färsk i bakgrunden.
+// Tillstånd: ask → loading → result, plus paywall, error och historiken
+// (history → historyDetail). Servern (/api/pick*) är källan till sanning för
+// kvoten; arket läser den cachade kvoten direkt vid öppning och hämtar en
+// färsk i bakgrunden.
+//
+// Ett öppnat ark = en "konversation" (sessionId skickas med varje förfrågan).
+// Varje svar blir en tur i tråden: det aktuella förslaget visas fullt, de två
+// närmast föregående som hopfällda rader ("Förra förslaget: …") ovanför — lugnt,
+// men det känns som ett samtal. Äldre konversationer finns i historiken
+// (klockan i rubriken), som läses från /api/pick/history.
 //
 // Ägarens prioritet: AI:n ska helst välja något användaren REDAN gillat men
 // inte sett. Därför visas "Du gillade den för 3 veckor sedan" tydligt när valet
 // kommer från de sparade — poängen är att få folk att faktiskt se det de
 // swipat ja på.
+//
+// Layout: på en 390×844-telefon ska de två alternativen ("Eller kanske") synas
+// utan att man scrollar, även med två hopfällda tidigare turer ovanför. Därav
+// 92 px affisch, tätare mellanrum och arkets max 88dvh.
 //
 // Monetisering (se PICK_SPEC):
 //   - Gratis: 0 val utan vidare. Belöningsvideo (bara native iOS) → +N val.
@@ -19,19 +30,26 @@
 // Premium-CTA:n leder till /premium (inte direkt till köpet) — där finns
 // pris/period/förnyelse-texten som App Review kräver vid köptillfället (3.1.2c).
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import {
   ArrowUp,
-  Bookmark,
-  BookmarkCheck,
+  ChevronDown,
+  ChevronLeft,
   Clock,
   Crown,
-  Heart,
-  Info,
+  History as HistoryIcon,
+  PenLine,
   PlayCircle,
   RefreshCw,
   Shuffle,
@@ -41,18 +59,38 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
-import type { PickChipId, PickItem, PickQuota, PickRequestBody } from "@/lib/aiPick/types";
-import { getPickStatus, requestPick, trackPickEvent } from "@/lib/aiPick/client";
+import { useLocale, useTranslations } from "next-intl";
+import type { PickChipId, PickHistorySession, PickItem, PickQuota, PickRequestBody } from "@/lib/aiPick/types";
+import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
 import { isNativeIos } from "@/lib/premiumPurchase";
-import { providerWatchUrl } from "@/lib/watchLinks";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
+import {
+  AskBubble,
+  askText,
+  focusRing,
+  itemKey,
+  PickCard,
+  Poster,
+  Pulse,
+  type AskEcho,
+} from "@/app/components/pick/PickParts";
+import { HistoryDetail, HistoryList, sessionLabel, usePickHistory } from "@/app/components/pick/PickHistory";
 
-type View = "ask" | "loading" | "result" | "paywall" | "error";
+type View = "ask" | "loading" | "result" | "paywall" | "error" | "history" | "historyDetail";
 type ErrorKind = "no_candidates" | "unavailable" | "disabled";
 type Query = { prompt?: string; chips?: PickChipId[]; mediaFilter: "both" | "movie" | "tv" };
+
+/** Ett svar i tråden. `main`/`alts` ändras när användaren byter in ett alternativ. */
+type Turn = {
+  id: string;
+  ask: AskEcho;
+  pick: PickItem;
+  main: PickItem;
+  alts: PickItem[];
+  reason: string;
+};
 
 const CHIPS: { id: PickChipId; icon: LucideIcon }[] = [
   { id: "light", icon: Smile },
@@ -68,87 +106,28 @@ const LOADING_STEP_MS = 1700;
 const SHEET_SPRING = { type: "spring" as const, stiffness: 380, damping: 39 };
 const VIEW_FADE = { duration: 0.16, ease: "easeOut" as const };
 
-const TMDB_IMG = "https://image.tmdb.org/t/p";
+/** Hur många tidigare turer som syns hopfällda ovanför det aktuella förslaget. */
+const THREAD_ROWS = 2;
 
-/** TMDB-sökväg (/abc.jpg) eller färdig URL → URL. */
-function imgUrl(src: string | null | undefined, size: "w92" | "w342"): string | null {
-  if (!src) return null;
-  if (src.startsWith("http")) return src;
-  if (src.startsWith("/")) return `${TMDB_IMG}/${size}${src}`;
+/**
+ * Sätter scrollytans position när en ny vy monteras (AnimatePresence
+ * mode="wait" monterar den först när den gamla tonat ut). Används för att
+ * historiklistan ska ligga kvar där man var när man går tillbaka från en session.
+ */
+function ScrollRestore({
+  target,
+  pending,
+}: {
+  target: RefObject<HTMLDivElement | null>;
+  pending: RefObject<number | null>;
+}) {
+  useLayoutEffect(() => {
+    if (pending.current === null || !target.current) return;
+    target.current.scrollTop = pending.current;
+    pending.current = null;
+  }, [pending, target]);
   return null;
 }
-
-const itemKey = (it: Pick<PickItem, "tmdbId" | "mediaType">) => `${it.mediaType}-${it.tmdbId}`;
-
-/** Hela kalenderdagar mellan likedAt och idag, i användarens tidszon. */
-function daysSince(iso: string): number | null {
-  const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return null;
-  const now = new Date();
-  const a = Date.UTC(then.getFullYear(), then.getMonth(), then.getDate());
-  const b = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.max(0, Math.round((b - a) / 86_400_000));
-}
-
-type T = ReturnType<typeof useTranslations>;
-
-function likedLine(item: PickItem, t: T): string {
-  const d = item.likedAt ? daysSince(item.likedAt) : null;
-  if (d === null) return t("liked.fromSaved");
-  if (d === 0) return t("liked.today");
-  if (d === 1) return t("liked.yesterday");
-  if (d < 7) return t("liked.days", { count: d });
-  if (d < 30) return t("liked.weeks", { count: Math.floor(d / 7) });
-  if (d < 365) return t("liked.months", { count: Math.max(1, Math.floor(d / 30)) });
-  return t("liked.years", { count: Math.floor(d / 365) });
-}
-
-function runtimeText(item: PickItem, t: T): string | null {
-  const m = item.runtimeMin;
-  if (!m || m <= 0) return null;
-  if (item.mediaType === "tv") return t("runtimeEpisode", { min: m });
-  if (m < 60) return t("runtime", { min: m });
-  return t("runtimeHm", { h: Math.floor(m / 60), m: m % 60 });
-}
-
-function metaLine(item: PickItem, t: T, genres = 2): string {
-  return [item.year ? String(item.year) : null, ...item.genres.slice(0, genres), runtimeText(item, t)]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-/** Första tjänsten vi kan direktlänka till (samma hjälpare som kortets baksida). */
-function bestService(item: PickItem): { name: string; logo: string | null; url: string } | null {
-  for (const p of item.providers) {
-    const url = providerWatchUrl(p.name, item.title);
-    if (url) return { name: p.name, logo: p.logo, url };
-  }
-  return null;
-}
-
-/* ---------- små byggstenar ---------- */
-
-function Poster({ src, title, className }: { src: string | null; title: string; className: string }) {
-  const url = imgUrl(src, "w342");
-  return (
-    <div className={`relative shrink-0 overflow-hidden bg-white/[0.06] ring-1 ring-white/10 ${className}`}>
-      {url ? (
-        // Dekorativ: titeln står alltid i klartext bredvid postern.
-        <Image src={url} alt="" fill sizes="120px" className="object-cover" draggable={false} />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center p-1 text-center text-[10px] text-white/40">
-          {title}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Pulse({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-white/10 ${className}`} />;
-}
-
-const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60";
 
 /* ---------- arket ---------- */
 
@@ -162,11 +141,15 @@ export default function PickSheet({
   initialQuota: PickQuota | null;
 }) {
   const t = useTranslations("pick");
+  const locale = useLocale();
   const router = useRouter();
   const { mediaFilter } = useSwipeSettings();
   const dragControls = useDragControls();
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const native = isNativeIos();
+  const history = usePickHistory();
+  const resetHistory = history.reset;
 
   const [view, setView] = useState<View>("ask");
   const viewRef = useRef<View>("ask");
@@ -174,15 +157,20 @@ export default function PickSheet({
   const [errorKind, setErrorKind] = useState<ErrorKind>("unavailable");
   const [text, setText] = useState("");
 
-  // Resultat
-  const [main, setMain] = useState<PickItem | null>(null);
-  const [alts, setAlts] = useState<PickItem[]>([]);
-  const [reason, setReason] = useState("");
-  const [reasonFor, setReasonFor] = useState<string>("");
+  // Tråden
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [pendingAsk, setPendingAsk] = useState<AskEcho | null>(null);
+  const [expandedTurn, setExpandedTurn] = useState<string | null>(null);
   const [savedKeys, setSavedKeys] = useState<Set<string>>(() => new Set());
-  const [saving, setSaving] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const savingRef = useRef(false);
   const [nudge, setNudge] = useState(false);
+
+  // Historik
+  const [detail, setDetail] = useState<PickHistorySession | null>(null);
+  const historyReturn = useRef<View>("ask");
+  const listScroll = useRef(0);
+  const pendingScroll = useRef<number | null>(null);
 
   // Paywall
   const [adBusy, setAdBusy] = useState(false);
@@ -192,10 +180,13 @@ export default function PickSheet({
   const [loadingStep, setLoadingStep] = useState(0);
 
   // Sessionstillstånd (nollställs vid varje öppning)
+  const sessionId = useRef<string>("");
   const shownIds = useRef<number[]>([]);
   const lastQuery = useRef<Query | null>(null);
+  const lastAsk = useRef<AskEcho>({ kind: "any" });
   const nudgeUsed = useRef(false);
   const requestSeq = useRef(0);
+  const localTurnSeq = useRef(0);
 
   const go = useCallback((v: View) => {
     viewRef.current = v;
@@ -212,19 +203,21 @@ export default function PickSheet({
     [go, native]
   );
 
-  /* ----- öppning: nollställ sessionen, välj startvy, hämta färsk kvot ----- */
+  /* ----- öppning: ny konversation, välj startvy, hämta färsk kvot ----- */
   useEffect(() => {
     if (!open) return;
     requestSeq.current += 1;
     const seq = requestSeq.current;
+    sessionId.current = newPickSessionId();
     shownIds.current = [];
     lastQuery.current = null;
+    lastAsk.current = { kind: "any" };
     nudgeUsed.current = false;
-    setMain(null);
-    setAlts([]);
-    setReason("");
-    setReasonFor("");
-    setInfoOpen(false);
+    setTurns([]);
+    setPendingAsk(null);
+    setExpandedTurn(null);
+    setDetail(null);
+    resetHistory();
     setNudge(false);
     setUnlocked(null);
     setAdError(false);
@@ -281,23 +274,27 @@ export default function PickSheet({
 
   /* ----- förfrågan ----- */
   const run = useCallback(
-    async (query: Query) => {
+    async (query: Query, ask: AskEcho) => {
       if (quota && quota.totalLeft <= 0) {
         goPaywall(quota);
         return;
       }
       lastQuery.current = query;
+      if (ask.kind !== "another") lastAsk.current = ask;
       requestSeq.current += 1;
       const seq = requestSeq.current;
       setNudge(false);
       setUnlocked(null);
-      setInfoOpen(false);
+      setPendingAsk(ask);
+      setExpandedTurn(null);
+      pendingScroll.current = 0;
       go("loading");
 
       const body: PickRequestBody = { mediaFilter: query.mediaFilter };
       if (query.prompt) body.prompt = query.prompt;
       if (query.chips?.length) body.chips = query.chips;
       if (shownIds.current.length) body.exclude = [...shownIds.current];
+      if (sessionId.current) body.sessionId = sessionId.current;
 
       const res = await requestPick(body);
       if (seq !== requestSeq.current) return;
@@ -306,20 +303,29 @@ export default function PickSheet({
       if (res.ok) {
         const ids = [res.pick, ...res.alternatives].map((x) => x.tmdbId);
         shownIds.current = Array.from(new Set([...shownIds.current, ...ids]));
-        setMain(res.pick);
-        setAlts(res.alternatives.slice(0, 2));
-        setReason(res.reason);
-        setReasonFor(itemKey(res.pick));
+        localTurnSeq.current += 1;
+        const turn: Turn = {
+          id: res.requestId || `local-${localTurnSeq.current}`,
+          ask,
+          pick: res.pick,
+          main: res.pick,
+          alts: res.alternatives.slice(0, 2),
+          reason: res.reason,
+        };
+        setTurns((prev) => [...prev, turn]);
+        setPendingAsk(null);
         // Premium-nudge: en gång per arksession, aldrig för premium.
         if (!res.quota.premium && !nudgeUsed.current) {
           nudgeUsed.current = true;
           setNudge(true);
           trackPickEvent("upsell_view", { from: "result" });
         }
+        pendingScroll.current = 0;
         go("result");
         return;
       }
 
+      setPendingAsk(null);
       switch (res.error) {
         case "no_quota":
           goPaywall(res.quota ?? quota);
@@ -338,61 +344,119 @@ export default function PickSheet({
     [go, goPaywall, quota]
   );
 
+  const current = turns.length > 0 ? turns[turns.length - 1] : null;
+
   const onChip = (id: PickChipId) => {
     trackPickEvent("chip", { chip: id });
-    void run({ chips: [id], mediaFilter });
+    void run({ chips: [id], mediaFilter }, { kind: "chips", ids: [id] });
   };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     const prompt = text.trim().slice(0, 300);
     if (!prompt) return;
-    trackPickEvent("submit", { len: prompt.length });
-    void run({ prompt, mediaFilter });
+    trackPickEvent("submit", { len: prompt.length, followUp: turns.length > 0 });
+    void run({ prompt, mediaFilter }, { kind: "prompt", text: prompt });
   };
 
   const onAnother = () => {
-    trackPickEvent("another", main ? { tmdbId: main.tmdbId } : undefined);
-    void run(lastQuery.current ?? { mediaFilter });
+    trackPickEvent("another", current ? { tmdbId: current.main.tmdbId } : undefined);
+    void run(lastQuery.current ?? { mediaFilter }, { kind: "another" });
   };
 
-  const onAltSelect = (alt: PickItem) => {
-    if (!main) return;
+  const onNewQuestion = () => {
+    setExpandedTurn(null);
+    setText("");
+    pendingScroll.current = 0;
+    go("ask");
+  };
+
+  /** Byt in ett alternativ i en tur (aktuell eller uppfälld äldre). */
+  const swapInTurn = (turnId: string, alt: PickItem) => {
     trackPickEvent("alt_select", { tmdbId: alt.tmdbId, fromSaved: alt.fromSaved });
-    const prev = main;
-    setMain(alt);
-    setAlts((list) => list.map((a) => (itemKey(a) === itemKey(alt) ? prev : a)));
-    setInfoOpen(false);
+    setTurns((list) =>
+      list.map((tn) =>
+        tn.id !== turnId
+          ? tn
+          : {
+              ...tn,
+              main: alt,
+              alts: tn.alts.map((a) => (itemKey(a) === itemKey(alt) ? tn.main : a)),
+            }
+      )
+    );
   };
 
-  const onSave = async () => {
-    if (!main || saving) return;
-    const key = itemKey(main);
-    setSaving(true);
-    try {
-      const res = await fetch("/api/watchlist/like", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          tmdbId: main.tmdbId,
-          mediaType: main.mediaType,
-          title: main.title,
-          year: main.year ? String(main.year) : null,
-          poster: main.poster,
-        }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      setSavedKeys((s) => new Set(s).add(key));
-      trackPickEvent("save", { tmdbId: main.tmdbId, fromSaved: main.fromSaved });
-      notify(t("savedToast"));
-    } catch {
-      notify(t("saveFailed"));
-    } finally {
-      setSaving(false);
+  const isSaved = useCallback(
+    (item: PickItem) => item.inWatchlist || savedKeys.has(itemKey(item)),
+    [savedKeys]
+  );
+
+  const saveItem = useCallback(
+    async (item: PickItem, from: "thread" | "history") => {
+      const key = itemKey(item);
+      if (savingRef.current) return;
+      savingRef.current = true;
+      setSavingKey(key);
+      try {
+        const res = await fetch("/api/watchlist/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            tmdbId: item.tmdbId,
+            mediaType: item.mediaType,
+            title: item.title,
+            year: item.year ? String(item.year) : null,
+            poster: item.poster,
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        setSavedKeys((s) => new Set(s).add(key));
+        trackPickEvent("save", { tmdbId: item.tmdbId, fromSaved: item.fromSaved, from });
+        notify(t("savedToast"));
+      } catch {
+        notify(t("saveFailed"));
+      } finally {
+        savingRef.current = false;
+        setSavingKey(null);
+      }
+    },
+    [t]
+  );
+
+  const openService = (item: PickItem, provider: string, from: "thread" | "history") =>
+    trackPickEvent("open_service", { tmdbId: item.tmdbId, provider, fromSaved: item.fromSaved, from });
+
+  /* ----- historik ----- */
+  const openHistory = () => {
+    const v = viewRef.current;
+    if (v !== "history" && v !== "historyDetail") historyReturn.current = v;
+    pendingScroll.current = 0;
+    trackPickEvent("history_open", { from: v, turns: turns.length });
+    go("history");
+    void history.load();
+  };
+
+  const openSession = (s: PickHistorySession) => {
+    listScroll.current = scrollRef.current?.scrollTop ?? 0;
+    pendingScroll.current = 0;
+    setDetail(s);
+    trackPickEvent("history_entry_open", { entries: s.entries.length });
+    go("historyDetail");
+  };
+
+  const onBack = () => {
+    if (viewRef.current === "historyDetail") {
+      pendingScroll.current = listScroll.current;
+      go("history");
+      return;
     }
+    pendingScroll.current = 0;
+    go(historyReturn.current);
   };
 
+  /* ----- belöning / premium ----- */
   const onWatchAd = async () => {
     if (adBusy) return;
     setAdBusy(true);
@@ -426,14 +490,73 @@ export default function PickSheet({
   const monthly = quota?.premiumMonthly ?? 20;
   const rewardPicks = quota?.rewardPicks ?? 3;
   const showQuotaLine = quota !== null && quota.totalLeft <= 1;
+  const inHistory = view === "history" || view === "historyDetail";
 
   const quotaLine = showQuotaLine ? (
     <p className="text-center text-xs text-white/45">{t("quotaLeft", { count: Math.max(0, quota.totalLeft) })}</p>
   ) : null;
 
+  /** Tidigare turer som hopfällda rader; ett tryck fäller ut kortet på plats. */
+  const threadRows = (list: Turn[]) =>
+    list.length === 0 ? null : (
+      <ul className="space-y-1.5" aria-label={t("thread.aria")}>
+        {list.map((tn) => {
+          const expanded = expandedTurn === tn.id;
+          const panelId = `pick-turn-${tn.id}`;
+          return (
+            <li key={tn.id} className="rounded-xl bg-white/[0.03] ring-1 ring-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => setExpandedTurn(expanded ? null : tn.id)}
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                className={`flex min-h-11 w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left ${focusRing}`}
+              >
+                <Poster
+                  src={tn.main.poster}
+                  title={tn.main.title}
+                  tiny
+                  sizes="32px"
+                  className="aspect-[2/3] w-5 rounded-[4px]"
+                />
+                <span className="min-w-0 flex-1 truncate text-[13px]">
+                  <span className="text-white/40">{t("thread.previous")}</span>{" "}
+                  <span className="font-medium text-white/75">{tn.main.title}</span>
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-white/35 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  aria-hidden
+                />
+              </button>
+              {expanded ? (
+                <div id={panelId} className="space-y-2.5 px-3 pb-3 pt-1">
+                  <AskBubble text={askText(tn.ask, t)} lines={3} />
+                  <PickCard
+                    key={itemKey(tn.main)}
+                    size="compact"
+                    main={tn.main}
+                    pickKey={itemKey(tn.pick)}
+                    reason={tn.reason}
+                    alts={tn.alts}
+                    onAltSelect={(alt) => swapInTurn(tn.id, alt)}
+                    saved={isSaved(tn.main)}
+                    saving={savingKey === itemKey(tn.main)}
+                    onSave={(it) => void saveItem(it, "thread")}
+                    onOpenService={(it, p) => openService(it, p, "thread")}
+                  />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    );
+
   const askView = (
     <div className="space-y-4">
-      <p className="text-sm leading-relaxed text-white/55">{t("subtitle")}</p>
+      {threadRows(turns.slice(-THREAD_ROWS))}
+
+      <p className="text-sm leading-relaxed text-white/55">{turns.length > 0 ? t("thread.askAgain") : t("subtitle")}</p>
 
       {unlocked !== null ? (
         <p role="status" className="rounded-xl bg-white/[0.06] px-3 py-2 text-sm text-white/85">
@@ -486,9 +609,11 @@ export default function PickSheet({
   );
 
   const loadingView = (
-    <div aria-busy="true" aria-label={t("loadingAria")} className="space-y-4">
+    <div aria-busy="true" aria-label={t("loadingAria")} className="space-y-3">
+      {threadRows(turns.slice(-THREAD_ROWS))}
+      {pendingAsk ? <AskBubble text={askText(pendingAsk, t)} /> : null}
       <div className="flex gap-4">
-        <Pulse className="aspect-[2/3] w-[100px] shrink-0 rounded-xl" />
+        <Pulse className="aspect-[2/3] w-[92px] shrink-0 rounded-xl" />
         <div className="min-w-0 flex-1 space-y-2.5 pt-1">
           <Pulse className="h-4 w-28 rounded-full" />
           <Pulse className="h-6 w-4/5" />
@@ -521,162 +646,61 @@ export default function PickSheet({
     </div>
   );
 
-  const resultView = main
-    ? (() => {
-        const key = itemKey(main);
-        const service = bestService(main);
-        const saved = main.inWatchlist || savedKeys.has(key);
-        const isOriginal = key === reasonFor;
-        const meta = metaLine(main, t);
-        const logos = main.providers.filter((p) => imgUrl(p.logo, "w92")).slice(0, 4);
-        return (
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <Poster src={main.poster} title={main.title} className="aspect-[2/3] w-[100px] rounded-xl" />
-              <div className="min-w-0 flex-1">
-                {main.fromSaved ? (
-                  <span className="mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/25">
-                    <Heart className="h-3 w-3 shrink-0 fill-current" aria-hidden />
-                    <span className="truncate">{likedLine(main, t)}</span>
-                  </span>
-                ) : null}
-                <h3 id="pick-result-title" className="text-xl font-bold leading-tight text-white">
-                  {main.title}
-                </h3>
-                {meta ? <p className="mt-1 text-[13px] leading-snug text-white/50">{meta}</p> : null}
-                {logos.length > 0 ? (
-                  <ul aria-label={t("providersAria")} className="mt-2.5 flex flex-wrap gap-1.5">
-                    {logos.map((p) => (
-                      <li key={p.name} title={p.name} className="relative h-7 w-7 overflow-hidden rounded-lg ring-1 ring-white/10">
-                        <Image src={imgUrl(p.logo, "w92")!} alt={p.name} fill sizes="28px" className="object-cover" />
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
+  const resultView = current ? (
+    <div className="space-y-3">
+      {threadRows(turns.slice(-(THREAD_ROWS + 1), -1))}
+      <AskBubble text={askText(current.ask, t)} />
 
-            {isOriginal && reason ? (
-              <p className="text-[15px] leading-relaxed text-white/80">{reason}</p>
-            ) : main.overview ? (
-              <p className="line-clamp-3 text-[15px] leading-relaxed text-white/70">{main.overview}</p>
-            ) : null}
+      <PickCard
+        size="full"
+        titleId="pick-result-title"
+        main={current.main}
+        pickKey={itemKey(current.pick)}
+        reason={current.reason}
+        alts={current.alts}
+        onAltSelect={(alt) => swapInTurn(current.id, alt)}
+        saved={isSaved(current.main)}
+        saving={savingKey === itemKey(current.main)}
+        onSave={(it) => void saveItem(it, "thread")}
+        onOpenService={(it, p) => openService(it, p, "thread")}
+      />
 
-            {infoOpen && main.overview && isOriginal ? (
-              <p className="text-sm leading-relaxed text-white/60">{main.overview}</p>
-            ) : null}
+      <div className="flex items-center justify-center gap-1">
+        <button
+          type="button"
+          onClick={onAnother}
+          className={`flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          {t("another")}
+        </button>
+        <span className="text-white/20" aria-hidden>
+          ·
+        </span>
+        <button
+          type="button"
+          onClick={onNewQuestion}
+          className={`flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
+        >
+          <PenLine className="h-3.5 w-3.5" aria-hidden />
+          {t("thread.newQuestion")}
+        </button>
+      </div>
 
-            <div className="flex items-stretch gap-2">
-              {service ? (
-                <a
-                  href={service.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() =>
-                    trackPickEvent("open_service", {
-                      tmdbId: main.tmdbId,
-                      provider: service.name,
-                      fromSaved: main.fromSaved,
-                    })
-                  }
-                  className={`flex min-h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-4 text-[15px] font-semibold text-black transition hover:bg-cyan-400 active:scale-[0.98] ${focusRing}`}
-                >
-                  {imgUrl(service.logo, "w92") ? (
-                    <span className="relative h-5 w-5 shrink-0 overflow-hidden rounded">
-                      <Image src={imgUrl(service.logo, "w92")!} alt="" fill sizes="20px" className="object-cover" />
-                    </span>
-                  ) : (
-                    <PlayCircle className="h-5 w-5 shrink-0" aria-hidden />
-                  )}
-                  <span className="truncate">{t("openIn", { service: service.name })}</span>
-                </a>
-              ) : main.overview && isOriginal ? (
-                <button
-                  type="button"
-                  onClick={() => setInfoOpen((v) => !v)}
-                  aria-expanded={infoOpen}
-                  className={`flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-[15px] font-semibold text-white transition hover:bg-white/10 active:scale-[0.98] ${focusRing}`}
-                >
-                  <Info className="h-4 w-4" aria-hidden />
-                  {infoOpen ? t("hideInfo") : t("showInfo")}
-                </button>
-              ) : (
-                <div className="flex-1" />
-              )}
+      {quotaLine}
 
-              <button
-                type="button"
-                onClick={() => void onSave()}
-                disabled={saved || saving}
-                aria-label={saved ? t("saved") : t("save")}
-                title={saved ? t("saved") : t("save")}
-                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition active:scale-95 disabled:active:scale-100 ${focusRing} ${
-                  saved
-                    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                    : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60"
-                }`}
-              >
-                {saved ? <BookmarkCheck className="h-5 w-5" aria-hidden /> : <Bookmark className="h-5 w-5" aria-hidden />}
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={onAnother}
-              className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              {t("another")}
-            </button>
-
-            {alts.length > 0 ? (
-              <div className="border-t border-white/[0.06] pt-3">
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                  {t("alternatives")}
-                </p>
-                <ul className="space-y-1">
-                  {alts.map((alt) => (
-                    <li key={itemKey(alt)}>
-                      <button
-                        type="button"
-                        onClick={() => onAltSelect(alt)}
-                        aria-label={t("altAria", { title: alt.title })}
-                        className={`flex min-h-14 w-full items-center gap-3 rounded-xl p-1.5 text-left transition hover:bg-white/[0.05] active:scale-[0.99] ${focusRing}`}
-                      >
-                        <Poster src={alt.poster} title={alt.title} className="aspect-[2/3] w-10 rounded-md" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-white/90">{alt.title}</span>
-                          <span className="block truncate text-xs text-white/45">{metaLine(alt, t, 1)}</span>
-                        </span>
-                        {alt.fromSaved ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-400/25">
-                            <Heart className="h-2.5 w-2.5 fill-current" aria-hidden />
-                            {t("likedMarker")}
-                          </span>
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {quotaLine}
-
-            {nudge && !premium ? (
-              <button
-                type="button"
-                onClick={() => onPremium("result")}
-                className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-center text-xs text-white/45 transition hover:text-white/75 ${focusRing}`}
-              >
-                <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {t("premiumNudge", { count: monthly })}
-              </button>
-            ) : null}
-          </div>
-        );
-      })()
-    : null;
+      {nudge && !premium ? (
+        <button
+          type="button"
+          onClick={() => onPremium("result")}
+          className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-center text-xs text-white/45 transition hover:text-white/75 ${focusRing}`}
+        >
+          <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {t("premiumNudge", { count: monthly })}
+        </button>
+      ) : null}
+    </div>
+  ) : null;
 
   const canAd = native;
   const rewardsLeft = quota?.rewardsLeftToday ?? 1;
@@ -731,6 +755,18 @@ export default function PickSheet({
         ) : (
           <p className="text-xs text-white/45">{t("paywall.resetNote")}</p>
         )}
+
+        {/* Kvoten tog slut mitt i en konversation → låt användaren gå tillbaka
+            till förslaget hen redan fått. */}
+        {current ? (
+          <button
+            type="button"
+            onClick={() => go("result")}
+            className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
+          >
+            {t("error.back")}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -749,7 +785,7 @@ export default function PickSheet({
             {lastQuery.current && lastQuery.current.mediaFilter !== "both" ? (
               <button
                 type="button"
-                onClick={() => void run({ ...lastQuery.current!, mediaFilter: "both" })}
+                onClick={() => void run({ ...lastQuery.current!, mediaFilter: "both" }, lastAsk.current)}
                 className={`flex min-h-12 w-full items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 ${focusRing}`}
               >
                 {t("error.tryBoth")}
@@ -767,7 +803,7 @@ export default function PickSheet({
             </button>
             <button
               type="button"
-              onClick={() => go("ask")}
+              onClick={() => go(current ? "result" : "ask")}
               className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
             >
               {t("error.back")}
@@ -792,17 +828,42 @@ export default function PickSheet({
                 {t("error.retry")}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={requestClose}
-              className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
-            >
-              {t("close")}
-            </button>
+            {current ? (
+              <button
+                type="button"
+                onClick={() => go("result")}
+                className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
+              >
+                {t("error.back")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={requestClose}
+                className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
+              >
+                {t("close")}
+              </button>
+            )}
           </div>
         </>
       )}
     </div>
+  );
+
+  const historyView = <HistoryList history={history} onOpen={openSession} scrollRoot={scrollRef} />;
+
+  const detailView = detail ? (
+    <HistoryDetail
+      session={detail}
+      isSaved={isSaved}
+      savingKey={savingKey}
+      onSave={(it) => void saveItem(it, "history")}
+      onOpenService={(it, p) => openService(it, p, "history")}
+      onAltSelect={(alt) => trackPickEvent("alt_select", { tmdbId: alt.tmdbId, fromSaved: alt.fromSaved, from: "history" })}
+    />
+  ) : (
+    historyView
   );
 
   const body =
@@ -814,7 +875,25 @@ export default function PickSheet({
           ? resultView
           : view === "paywall"
             ? paywallView
-            : errorView;
+            : view === "history"
+              ? historyView
+              : view === "historyDetail"
+                ? detailView
+                : errorView;
+
+  const viewKey =
+    view === "result" && current
+      ? `result-${current.id}-${itemKey(current.main)}`
+      : view === "historyDetail" && detail
+        ? `detail-${detail.sessionId}`
+        : view;
+
+  const headerTitle =
+    view === "history"
+      ? t("history.title")
+      : view === "historyDetail" && detail
+        ? sessionLabel(detail.lastAt, locale, t)
+        : t("title");
 
   return createPortal(
     <AnimatePresence>
@@ -837,7 +916,7 @@ export default function PickSheet({
             aria-modal="true"
             aria-labelledby="pick-sheet-title"
             tabIndex={-1}
-            className="relative flex max-h-[85dvh] w-full max-w-lg flex-col rounded-t-[28px] border-t border-white/10 bg-neutral-900 shadow-[0_-18px_60px_rgba(0,0,0,0.6)] outline-none"
+            className="relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-[28px] border-t border-white/10 bg-neutral-900 shadow-[0_-18px_60px_rgba(0,0,0,0.6)] outline-none"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -860,11 +939,35 @@ export default function PickSheet({
               <div className="flex justify-center pb-1 pt-2.5">
                 <span className="h-1 w-9 rounded-full bg-white/20" />
               </div>
-              <div className="flex items-center gap-2 px-5 pb-2">
-                <Sparkles className="h-5 w-5 text-cyan-300" aria-hidden />
-                <h2 id="pick-sheet-title" className="flex-1 text-[17px] font-semibold text-white">
-                  {t("title")}
+              <div className="flex items-center gap-1 px-5 pb-2">
+                {inHistory ? (
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-label={t("history.back")}
+                    className={`-ml-2.5 flex h-11 w-11 items-center justify-center rounded-full text-white/60 transition hover:bg-white/10 hover:text-white ${focusRing}`}
+                  >
+                    <ChevronLeft className="h-5 w-5" aria-hidden />
+                  </button>
+                ) : (
+                  <Sparkles className="mr-1 h-5 w-5 text-cyan-300" aria-hidden />
+                )}
+                <h2 id="pick-sheet-title" className="min-w-0 flex-1 truncate text-[17px] font-semibold text-white">
+                  {headerTitle}
                 </h2>
+                {!inHistory && view !== "loading" ? (
+                  <button
+                    type="button"
+                    onClick={openHistory}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-label={t("history.open")}
+                    title={t("history.open")}
+                    className={`flex h-11 w-11 items-center justify-center rounded-full text-white/45 transition hover:bg-white/10 hover:text-white ${focusRing}`}
+                  >
+                    <HistoryIcon className="h-5 w-5" aria-hidden />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={requestClose}
@@ -877,15 +980,19 @@ export default function PickSheet({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-1">
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-1"
+            >
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
-                  key={view === "result" && main ? `result-${itemKey(main)}` : view}
+                  key={viewKey}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={VIEW_FADE}
                 >
+                  <ScrollRestore target={scrollRef} pending={pendingScroll} />
                   {body}
                 </motion.div>
               </AnimatePresence>

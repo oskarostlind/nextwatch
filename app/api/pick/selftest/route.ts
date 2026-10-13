@@ -1,6 +1,6 @@
 // app/api/pick/selftest/route.ts
 //
-// GET /api/pick/selftest?uid=…&prompt=…&chips=light,short&media=both&exclude=1,2&lang=sv
+// GET /api/pick/selftest?uid=…&prompt=…&chips=light,short&media=both&exclude=1,2&lang=sv&session=abc
 //
 // Kör HELA "Välj åt mig"-pipelinen för en användare utan att debitera
 // (loggas med source 'selftest') och returnerar PickResponse + debug
@@ -57,6 +57,7 @@ export async function GET(req: Request) {
     chips: csv(sp.get("chips")),
     mediaFilter: sp.get("media") ?? sp.get("mediaFilter") ?? undefined,
     exclude: csv(sp.get("exclude")).map(Number),
+    sessionId: sp.get("session") || undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "bad_request", issues: parsed.error.issues }, { status: 400 });

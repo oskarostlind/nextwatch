@@ -1475,6 +1475,7 @@
     "another": "Visa något annat",
     "alternatives": "Eller kanske",
     "altAria": "Visa {title} i stället",
+    "welcomeLeft": "Du har {count} gratis val att testa med",
     "quotaLeft": "{count, plural, =0 {Det var ditt sista val} one {Du har 1 val kvar} other {Du har # val kvar}}",
     "premiumNudge": "Med Premium får du {count} val i månaden utan reklam",
     "paywall": {

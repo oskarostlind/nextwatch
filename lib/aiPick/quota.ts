@@ -43,13 +43,29 @@ export type PickConfig = {
   premiumMonthly: number;
   rewardPicks: number;
   rewardMaxPerDay: number;
+  /** Gratis val för nya konton (innan reklamlåset) — för att locka in dem. */
+  welcomePicks: number;
+  /** Konton skapade från och med detta datum får välkomstvalen. */
+  welcomeSince: Date;
 };
+
+// Välkomstvalen gäller konton skapade från lanseringsdagen. Sätt
+// NW_PICK_WELCOME_SINCE till ett tidigare datum (ISO) för att ge även
+// befintliga konton dem — ingen deploy behövs för att ändra antalet.
+const WELCOME_SINCE_DEFAULT = "2026-10-13T00:00:00+02:00";
+
+function envDate(name: string, fallback: string): Date {
+  const d = new Date(process.env[name] || fallback);
+  return Number.isNaN(d.getTime()) ? new Date(fallback) : d;
+}
 
 export function pickConfig(): PickConfig {
   return {
     premiumMonthly: envInt("NW_PICK_PREMIUM_MONTHLY", 20),
     rewardPicks: envInt("NW_PICK_REWARD_PICKS", 3),
     rewardMaxPerDay: envInt("NW_PICK_REWARD_MAX_PER_DAY", 10),
+    welcomePicks: envInt("NW_PICK_WELCOME_PICKS", 5),
+    welcomeSince: envDate("NW_PICK_WELCOME_SINCE", WELCOME_SINCE_DEFAULT),
   };
 }
 
@@ -71,6 +87,8 @@ export type PickUsage = {
   grantedPicks: number;
   /** Antal grants i innevarande kalenderdygn. */
   grantsToday: number;
+  /** Välkomstval kontot har rätt till (0 för konton från före lanseringen). */
+  welcomePicks: number;
 };
 
 export function computeQuota(input: {
@@ -81,7 +99,9 @@ export function computeQuota(input: {
 }): PickQuota {
   const { enabled, premium, usage, cfg } = input;
   const premiumLeft = premium ? Math.max(0, cfg.premiumMonthly - usage.premiumUsed) : null;
-  const credits = Math.max(0, usage.grantedPicks - usage.creditUsed);
+  // Välkomstvalen ligger i samma kreditpott som reklamvalen och förbrukas först.
+  const credits = Math.max(0, usage.welcomePicks + usage.grantedPicks - usage.creditUsed);
+  const welcomeLeft = Math.max(0, usage.welcomePicks - usage.creditUsed);
   const rewardsLeftToday =
     cfg.rewardPicks > 0 ? Math.max(0, cfg.rewardMaxPerDay - usage.grantsToday) : 0;
   return {
@@ -93,6 +113,7 @@ export function computeQuota(input: {
     rewardPicks: cfg.rewardPicks,
     rewardsLeftToday,
     totalLeft: (premiumLeft ?? 0) + credits,
+    welcomeLeft,
   };
 }
 
@@ -121,7 +142,8 @@ async function loadUsage(db: Db, uid: string, now: Date): Promise<PickUsage> {
   const monthStart = stockholmMonthStart(now);
   const dayStart = stockholmDayStart(now);
   const consuming = consumingWhere(now);
-  const [premiumUsed, creditUsed, grantAgg, grantsToday] = await Promise.all([
+  const cfg = pickConfig();
+  const [premiumUsed, creditUsed, grantAgg, grantsToday, user] = await Promise.all([
     db.aiPickRequest.count({
       where: { AND: [{ userId: uid, source: "premium", createdAt: { gte: monthStart } }, consuming] },
     }),
@@ -130,12 +152,14 @@ async function loadUsage(db: Db, uid: string, now: Date): Promise<PickUsage> {
     }),
     db.aiPickGrant.aggregate({ where: { userId: uid }, _sum: { picks: true } }),
     db.aiPickGrant.count({ where: { userId: uid, createdAt: { gte: dayStart } } }),
+    db.user.findUnique({ where: { id: uid }, select: { createdAt: true } }),
   ]);
   return {
     premiumUsed,
     creditUsed,
     grantedPicks: grantAgg._sum.picks ?? 0,
     grantsToday,
+    welcomePicks: user && user.createdAt >= cfg.welcomeSince ? cfg.welcomePicks : 0,
   };
 }
 
@@ -171,7 +195,7 @@ export async function getPickQuota(uid: string, now: Date = new Date()): Promise
   // (utrullningen) räcker två billiga frågor — hoppa över räkningarna.
   const usage: PickUsage = enabled
     ? await loadUsage(prisma, uid, now)
-    : { premiumUsed: 0, creditUsed: 0, grantedPicks: 0, grantsToday: 0 };
+    : { premiumUsed: 0, creditUsed: 0, grantedPicks: 0, grantsToday: 0, welcomePicks: 0 };
   return computeQuota({ enabled, premium, usage, cfg: pickConfig() });
 }
 

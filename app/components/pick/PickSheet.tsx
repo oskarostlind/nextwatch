@@ -475,6 +475,12 @@ export default function PickSheet({
         </button>
       </form>
 
+      {/* Välkomstval för nya konton: säg det rakt ut, så att första
+          försöket känns gratis i stället för som en kostnad. Vid ≤1 kvar tar
+          den vanliga kvotraden över. */}
+      {quota && !premium && quota.welcomeLeft > 1 && quota.totalLeft > 1 ? (
+        <p className="text-center text-xs text-white/55">{t("welcomeLeft", { count: quota.welcomeLeft })}</p>
+      ) : null}
       {quota && quota.totalLeft > 0 ? quotaLine : null}
     </div>
   );

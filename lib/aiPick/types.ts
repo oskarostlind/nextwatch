@@ -14,6 +14,7 @@ export type PickQuota = {
   rewardPicks: number;         // 3
   rewardsLeftToday: number;    // grants left today
   totalLeft: number;           // premiumLeft(or 0) + credits
+  welcomeLeft: number;         // unused free welcome picks for new accounts (part of credits)
 };
 
 export type PickProvider = { name: string; logo: string | null };

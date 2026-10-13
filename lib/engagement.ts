@@ -3,11 +3,16 @@
 //
 // Push-frågan kom tidigare vid 0 s på startsidan, innan man sett ett enda kort
 // (tratten 2026-10-12: 84 av 85 nya iOS-enheter fick den direkt, 49 tryckte
-// "Inte nu"). Nu frågar PushRegistration först efter PUSH_ASK_AFTER_LIKES gilla.
+// "Inte nu"). Nu frågar PushRegistration efter PUSH_ASK_AFTER_LIKES gilla.
 // Per enhet i localStorage, best effort.
+//
+// 2026-10-13: sänkt från 5 till 1 (Oskars beslut). Med 5 nådde bara 13 av 41
+// nya iOS-enheter frågan och andelen som tillät push föll från 35 % till 10 %.
+// Första "gilla" nåddes av 17 av 41 — frågan kommer ändå efter att man sett
+// vad appen gör.
 
 export const LIKED_EVENT = "nw:liked";
-export const PUSH_ASK_AFTER_LIKES = 5;
+export const PUSH_ASK_AFTER_LIKES = 1;
 
 const KEY = "nw_like_count";
 

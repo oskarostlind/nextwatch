@@ -14,9 +14,15 @@
 // Före 2026-10-12 räknades pagehide/visibilitychange vid varje full
 // sidnavigering (gäst → /swipe, Apple-inloggning, länkar) som en stängning,
 // så tratten visade "100 % stängde utan swipe" och första session ~20 s.
-// Nu: beforeunload markerar att sidan byts (fyrar vid navigering men aldrig när
-// appen bara läggs i bakgrunden), och i iOS-appen är Capacitors appStateChange
-// källan. swipes = totalt på enheten, inte bara den här sidladdningen.
+//
+// iOS-appen: BARA Capacitors appStateChange räknas. WKWebView (och Safari)
+// fyrar aldrig beforeunload, så första försöket (2026-10-12: beforeunload
+// markerar sidbyte) fungerade i Chrome men inte i appen — där syntes samma
+// "0 swipes" som förut. appStateChange gäller appen, inte sidan, och fyrar
+// aldrig vid en sidnavigering.
+// Webben: visibilitychange, men inte när ett sidbyte pågår (beforeunload, eller
+// ett klick på en intern länk precis innan — Safari saknar beforeunload).
+// swipes = totalt på enheten, inte bara den här sidladdningen.
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { funnel, funnelBeacon, funnelInit, funnelStart, funnelTotalSwipes, lastStep } from "@/lib/funnel";
@@ -79,21 +85,41 @@ export default function FunnelTracker() {
       funnelBeacon("first_exit", props);
       funnelBeacon("last_exit", props, true);
     };
-    const onBeforeUnload = () => {
+    const native = isNative();
+    let navTimer = 0;
+    const markNavigating = () => {
       navigating = true;
+      window.clearTimeout(navTimer);
+      // Blev det inget sidbyte ändå (t.ex. avbrutet) — räkna stängningar igen.
+      navTimer = window.setTimeout(() => {
+        navigating = false;
+      }, 4000);
+    };
+    const onBeforeUnload = () => markNavigating();
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || e.defaultPrevented) return;
+      try {
+        if (new URL(a.href, location.href).origin === location.origin) markNavigating();
+      } catch {
+        /* ogiltig href */
+      }
     };
     const onVis = () => {
       if (document.visibilityState === "hidden") exit();
       else checkReturn();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
-    document.addEventListener("visibilitychange", onVis);
+    document.addEventListener("click", onClick, true);
+    // I iOS-appen styr appStateChange (nedan) — visibilitychange fyrar där även
+    // vid sidbyten och går inte att skilja från en stängning.
+    if (!native) document.addEventListener("visibilitychange", onVis);
 
     // iOS-appen: bakgrund/förgrund kommer från Capacitor, och en app som väcks
     // nästa dag laddar inte om sidan — utan det här syns den aldrig som återbesök.
     let removeApp: (() => void) | null = null;
     let cancelled = false;
-    if (isNative()) {
+    if (native) {
       void (async () => {
         try {
           const { App } = await import("@capacitor/app");
@@ -104,13 +130,19 @@ export default function FunnelTracker() {
           if (cancelled) void h.remove();
           else removeApp = () => void h.remove();
         } catch {
-          /* @capacitor/app saknas — visibilitychange täcker ändå */
+          /* @capacitor/app saknas — reservera på visibilitychange */
+          if (!cancelled) {
+            document.addEventListener("visibilitychange", onVis);
+            removeApp = () => document.removeEventListener("visibilitychange", onVis);
+          }
         }
       })();
     }
     return () => {
       cancelled = true;
+      window.clearTimeout(navTimer);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
       document.removeEventListener("visibilitychange", onVis);
       removeApp?.();
     };

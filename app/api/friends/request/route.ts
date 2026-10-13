@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
         key: "friendRequest",
         values: { name: fromUser.username ?? "" },
         data: { type: "friend_request", fromUserId: me },
+        threadId: "friends",
       });
       return json({ ok: true, requestId: fr.id });
     } catch (e) {
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
               key: "friendRequest",
               values: { name: fromUser.username ?? "" },
               data: { type: "friend_request", fromUserId: me },
+              threadId: "friends",
             });
           }
           return json({ ok: true, requestId: fr.id });

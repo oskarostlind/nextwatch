@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
         title: `Mejl från ${from}`.slice(0, 80),
         body: (ev.data?.subject || "(inget ämne)").slice(0, 140),
         data: { type: "admin_mail" },
+        threadId: "admin-mail",
       });
     }
   }

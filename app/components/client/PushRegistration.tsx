@@ -32,6 +32,34 @@ function snoozeSoftAsk(): void {
 }
 
 /**
+ * Djuplänk för titelpush. Validerar strikt — datan kommer från en push-payload
+ * och hamnar i en URL, så bara ett positivt heltal + movie|tv släpps igenom.
+ */
+function swipePickUrl(tmdbId: string | undefined, tmdbType: string | undefined): string {
+  if (tmdbId && /^\d{1,9}$/.test(tmdbId) && (tmdbType === "movie" || tmdbType === "tv")) {
+    return `/swipe?pick=${tmdbId}&type=${tmdbType}`;
+  }
+  return "/swipe";
+}
+
+/** Rapporterar att en push öppnats. Kastar aldrig och väntas aldrig in. */
+function reportPushOpened(pid: string | undefined, actionId: string | undefined): void {
+  if (!pid) return;
+  try {
+    void fetch("/api/push/opened", {
+      method: "POST",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pid, action: actionId }),
+    }).catch(() => {
+      /* statistik — tyst vid fel */
+    });
+  } catch {
+    /* fetch saknas/kastade synkront — ignorera */
+  }
+}
+
+/**
  * Registrerar enheten för push-notiser när appen körs som native (Capacitor/iOS)
  * och skickar APNs-token till backend. På webben är det en no-op.
  *
@@ -99,7 +127,17 @@ export default function PushRegistration() {
           (action) => {
             const data = action.notification.data as Record<string, string> | undefined;
             const type = data?.type;
-            if (type === "friend_request" || type === "friend_accepted" || type === "group_invite") {
+            // Öppnings-/klickstatistik (push_log). Best effort: får aldrig vänta in
+            // eller fördröja navigeringen — keepalive låter anropet överleva att
+            // sidan byts ut direkt efter.
+            reportPushOpened(data?.pid, action.actionId);
+            if (type === "daily_rec" || type === "weekly_picks" || type === "watchlist_nudge" || type === "release") {
+              // Titelpush: öppna swipen med titeln överst (se pick-hanteringen i
+              // app/swipe/page_client.tsx). Saknas id/typ går vi bara till /swipe.
+              window.location.href = swipePickUrl(data?.tmdbId, data?.tmdbType);
+            } else if (type === "re_engagement") {
+              window.location.href = "/swipe";
+            } else if (type === "friend_request" || type === "friend_accepted" || type === "group_invite") {
               window.location.href = "/group";
             } else if (type === "share_received") {
               // Filmtips: inboxen överst i watchlisten öppnar tråden.

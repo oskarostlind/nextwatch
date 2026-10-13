@@ -963,7 +963,245 @@
     "softAskBody": "We'll let you know when your group matches, when friends share film tips and when today's recommendation lands. You choose which types in settings.",
     "softAskLater": "Not now",
     "softAskTitle": "Want notifications? 🔔",
-    "softAskYes": "Yes, turn them on"
+    "softAskYes": "Yes, turn them on",
+    "recAngles": {
+      "friend": {
+        "v1": {
+          "title": "Friends with taste 👀",
+          "body": "{friend} saved {title} too."
+        },
+        "v2": {
+          "title": "{friend} is on the same track",
+          "body": "{friend} has {title} on their list. Movie night?"
+        },
+        "v3": {
+          "title": "Shared taste 🍿",
+          "body": "You and {friend} both seem to like {title}. The couch fits two."
+        },
+        "v4": {
+          "title": "{friend} saved something 🛋️",
+          "body": "{title} is on {friend}'s watchlist. Watch it together?"
+        }
+      },
+      "topMatch": {
+        "v1": {
+          "title": "Top match 🔥",
+          "body": "{title} – {evidence}. This one is yours."
+        },
+        "v2": {
+          "title": "Made for you 🎯",
+          "body": "{title} hits all the right notes: {evidence}."
+        },
+        "v3": {
+          "title": "We're pretty sure about this one 🔥",
+          "body": "{title} matches your taste: {evidence}."
+        },
+        "v4": {
+          "title": "Top match for you 🔥",
+          "body": "{evidence} – {title} has what you usually like."
+        }
+      },
+      "person": {
+        "v1": {
+          "title": "Like {person}? 🎬",
+          "body": "Then we have another one: {title} ({by})."
+        },
+        "v2": {
+          "title": "More {person}, please! 🍿",
+          "body": "{title} ({by}). You know what you like."
+        },
+        "v3": {
+          "title": "We know who you like 😏",
+          "body": "{title} ({by}) should fit like a glove."
+        },
+        "v4": {
+          "title": "{person} alert 🚨",
+          "body": "{title} ({by}). You're going to like this one."
+        }
+      },
+      "provider": {
+        "v1": {
+          "title": "It's on {service}. Tonight? 📺",
+          "body": "{title} is already waiting in your {service} app."
+        },
+        "v2": {
+          "title": "You already have {service}",
+          "body": "{title} is right there – no excuse not to press play."
+        },
+        "v3": {
+          "title": "Already paid for: {service} 💸",
+          "body": "{title} is included in what you already pay for. Use it!"
+        },
+        "v4": {
+          "title": "Couch + {service} 🛋️",
+          "body": "{title} is ready. All you have to do is press play."
+        }
+      },
+      "rating": {
+        "v1": {
+          "title": "Rated {rating} 😳",
+          "body": "{title} – and you haven't seen it."
+        },
+        "v2": {
+          "title": "A {rating} rating. Missed it?",
+          "body": "{title} has been waiting for you for a while."
+        },
+        "v3": {
+          "title": "People love this one ⭐",
+          "body": "{title} averages {rating}. Time to find out why?"
+        },
+        "v4": {
+          "title": "{rating}/10 – seriously? 🤯",
+          "body": "{title} has a rating few others match. You haven't seen it yet."
+        }
+      },
+      "theme": {
+        "v1": {
+          "title": "{theme} + your taste = 🎯",
+          "body": "{title}. Do the math, it adds up."
+        },
+        "v2": {
+          "title": "You like {theme}, right? 👀",
+          "body": "Then {title} should land well."
+        },
+        "v3": {
+          "title": "More {theme} coming up 🍿",
+          "body": "{title} has just what you usually fall for."
+        },
+        "v4": {
+          "title": "Your taste said {theme}",
+          "body": "We listened: {title}."
+        }
+      },
+      "runtime": {
+        "v1": {
+          "title": "Done before bedtime 🌙",
+          "body": "{title} – {length}. Short enough for a weeknight."
+        },
+        "v2": {
+          "title": "Short and sweet ⏱️",
+          "body": "{title} only takes {length}. No excuses."
+        },
+        "v3": {
+          "title": "Got a little time? 🕘",
+          "body": "Then we have {title}: {length}."
+        },
+        "v4": {
+          "title": "Quick to finish ✅",
+          "body": "{title} – {length}. You'll even have time to do the dishes after."
+        }
+      },
+      "weekday": {
+        "v1": {
+          "title": "A Sunday series to get hooked on 📺",
+          "body": "{title}. One more episode is never just one more episode."
+        },
+        "v2": {
+          "title": "Sunday night = series time 🛋️",
+          "body": "{title} makes Monday a little easier to face."
+        },
+        "v3": {
+          "title": "Friday = movie night 🍿",
+          "body": "{title} – you've earned it."
+        },
+        "v4": {
+          "title": "Friday night plan: sorted",
+          "body": "{title}. The rest is popcorn."
+        },
+        "v5": {
+          "title": "Weeknight, easy choice 🛋️",
+          "body": "{title} – take it easy, you've worked enough today."
+        },
+        "v6": {
+          "title": "Midweek? Perfect for a movie",
+          "body": "{title}. A good way to wind down after the day."
+        }
+      },
+      "challenge": {
+        "v1": {
+          "title": "We bet 👀",
+          "body": "We bet you'll like {title}. Prove us wrong."
+        },
+        "v2": {
+          "title": "Challenge 🥊",
+          "body": "{title}. Give it twenty minutes – if you still say no, you win."
+        },
+        "v3": {
+          "title": "Dare to say no to this one?",
+          "body": "{title} – we believe in it. Prove us wrong."
+        },
+        "v4": {
+          "title": "You don't stand a chance 😏",
+          "body": "{title} is right up your alley. Try to argue."
+        }
+      },
+      "generic": {
+        "v1": {
+          "title": "Today's pick 🎬",
+          "body": "{titleWithYear} – a {media} we think you'll like!"
+        },
+        "v2": {
+          "title": "Tonight's {media}? 🍿",
+          "body": "We thought about it for you: {titleWithYear}."
+        },
+        "v3": {
+          "title": "Psst… 🎬",
+          "body": "{titleWithYear} – a {media} with your taste written all over it."
+        },
+        "v4": {
+          "title": "Fancy something new? 🛋️",
+          "body": "Try {titleWithYear} – we believe in it."
+        }
+      },
+      "weekly": {
+        "v1": {
+          "title": "Friday movie? 🍿",
+          "body": "{a}, {b} or {c} – which one will it be?"
+        },
+        "v2": {
+          "title": "The weekend is here 🎉",
+          "body": "Three picks for the couch: {a}, {b} and {c}."
+        },
+        "v3": {
+          "title": "Friday night menu 🛋️",
+          "body": "On tonight's menu: {a}, {b} or {c}."
+        }
+      },
+      "nudge": {
+        "v1": {
+          "title": "Your list remembers 🛋️",
+          "body": "{title} has been on your list for {weeks} weeks. Tonight, maybe?"
+        },
+        "v2": {
+          "title": "Is it staying there forever?",
+          "body": "{title} has waited {weeks} weeks for you. Give it a chance tonight!"
+        },
+        "v3": {
+          "title": "Dusty finds on your list 🕸️",
+          "body": "{title} was saved {weeks} weeks ago. Time now?"
+        },
+        "v4": {
+          "title": "You saved it for a reason",
+          "body": "{title} has been sitting there for {weeks} weeks. What are you waiting for?"
+        }
+      },
+      "common": {
+        "byDirector": "directed by {person}",
+        "withCast": "with {person}",
+        "runtimeMovie": "{minutes} min",
+        "runtimeTv": "{minutes} min per episode",
+        "movie": "movie",
+        "series": "series"
+      }
+    },
+    "groupMatchMovieTitled": {
+      "title": "It's a match! 🍿",
+      "body": "You all agreed on {title}. Popcorn?"
+    },
+    "groupMatchSeriesTitled": {
+      "title": "It's a match! 🍿",
+      "body": "You all picked the series {title}. Binge time?"
+    }
   },
   "report": {
     "alsoBlock": "Block this user too",

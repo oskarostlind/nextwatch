@@ -1,0 +1,35 @@
+# Timvis anrop av push-cronen.
+#
+# Behövs BARA när NW_PUSH_HOURLY=1 är satt i Vercel. Då får varje användare sitt
+# filmtips i sin egen vanliga swipe-timme (lib/pushRecs/timing.ts), och det
+# kräver att routen anropas varje timme — Vercel Cron kör bara en gång om dagen
+# (vercel.json, 17:00 UTC) och Hobby-planen tillåter inget tätare schema.
+# Utan NW_PUSH_HOURLY gör extra anrop ingen skada: tempospärren
+# (NW_REC_PUSH_MIN_HOURS) hindrar dubbla pushar, men då är det onödiga anrop.
+#
+# SÄTT UPP (ägaren, en gång): lägg till repo-hemligheten CRON_SECRET under
+# Settings → Secrets and variables → Actions, med SAMMA värde som CRON_SECRET i
+# Vercel. Utan den får anropet 401 och inget skickas.
+#
+# Minut 7 i stället för 0: GitHub fördröjer jobb som startar på hel timme när
+# det är hög belastning. Körningar kan ändå försenas några minuter — gränsen
+# vi bryr oss om är Stockholm-timmen, och den klarar några minuters glapp.
+name: Push cron (hourly)
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call daily-recs cron
+        run: |
+          curl -fsS --max-time 290 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://www.nextwatch.se/api/cron/daily-recs

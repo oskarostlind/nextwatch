@@ -22,17 +22,43 @@ import { prisma } from "@/lib/prisma";
 import { groupMatchNeed } from "@/lib/groupSettings";
 import { getTranslations } from "next-intl/server";
 import { DEFAULT_LOCALE, normalizeLocale } from "@/lib/i18nConfig";
+import { tmdbLanguageFor } from "@/lib/tmdbLanguage";
+import { fetchTitleBrief, type TitleBrief } from "@/lib/tmdbTitleBrief";
+import { signPushAction } from "@/lib/pushActionToken";
 
 export type PushPayload = {
   title: string;
   body: string;
+  /** data.type KRÄVS (loggning + notisinställningar). Alla värden är strängar. */
   data?: Record<string, string>;
+  /** https-bild → aps.mutable-content=1 + toppnivånyckeln "image"; iOS Notification
+   *  Service Extension laddar ner och bifogar den. TMDB-backdrop w780 (annars poster w500). */
+  image?: string | null;
+  /** Knappar på låsskärmen. NW_TITLE = [spara, nej] (titel användaren inte tagit ställning till),
+   *  NW_SAVED = [sett, ta bort] (titel som redan ligger i watchlisten). */
+  category?: "NW_TITLE" | "NW_SAVED";
+  /** aps.thread-id: grupperar notiser i Notiscentralen. */
+  threadId?: string;
+  interruptionLevel?: "passive" | "active" | "time-sensitive";
+  /** 0..1, aps.relevance-score (ordning i notissammanfattningen). */
+  relevanceScore?: number;
+  /** Bara analys → push_log.angle (t.ex. "person.v2"); når enheten som data.angle. */
+  angle?: string;
+  /** Titeln pushen handlar om → push_log + åtgärdstoken. */
+  tmdbId?: number;
+  mediaType?: "movie" | "tv";
 };
+
+export type PushResult = { sent: boolean; pid?: string };
 
 // Kopplar notis-"type" (som anropare sätter i payload.data.type) till
 // motsvarande kolumn på Profile. Saknas mappning skickas notisen alltid.
 const TYPE_TO_PREF_COLUMN: Record<string, keyof PrefRow> = {
   daily_rec: "notifyDailyRecs",
+  // Veckovalen och watchlist-knuffen är också rekommendationspushar — samma
+  // reglage ("Dagliga tips") styr alla tre, vi lägger inte till fler toggles.
+  weekly_picks: "notifyDailyRecs",
+  watchlist_nudge: "notifyDailyRecs",
   group_match: "notifyGroupMatches",
   friend_request: "notifyFriendRequests",
   friend_accepted: "notifyFriendRequests",
@@ -147,15 +173,27 @@ function sendToToken(
   creds: ApnsCredentials,
   jwt: string,
   deviceToken: string,
-  payload: PushPayload
+  payload: PushPayload,
+  data: Record<string, string>
 ): Promise<SendResult> {
   return new Promise((resolve) => {
+    // Frånvarande nycklar utelämnas helt — APNs tolkar null/undefined olika.
+    const aps: Record<string, unknown> = {
+      alert: { title: payload.title, body: payload.body },
+      sound: "default",
+    };
+    // mutable-content väcker Notification Service Extension som bifogar bilden.
+    if (payload.image) aps["mutable-content"] = 1;
+    if (payload.category) aps.category = payload.category;
+    if (payload.threadId) aps["thread-id"] = payload.threadId;
+    if (payload.interruptionLevel) aps["interruption-level"] = payload.interruptionLevel;
+    if (typeof payload.relevanceScore === "number" && Number.isFinite(payload.relevanceScore)) {
+      aps["relevance-score"] = Math.min(1, Math.max(0, payload.relevanceScore));
+    }
     const body = JSON.stringify({
-      aps: {
-        alert: { title: payload.title, body: payload.body },
-        sound: "default",
-      },
-      ...(payload.data ?? {}),
+      aps,
+      ...(payload.image ? { image: payload.image } : {}),
+      ...data,
     });
 
     const req = session.request({
@@ -203,25 +241,68 @@ function sendToToken(
 /**
  * Skickar en push till alla registrerade enheter för en användare.
  * Best-effort: kastar aldrig, och rensar döda tokens.
+ *
+ * sent=false betyder att inget gick iväg (inga APNs-nycklar, notistypen
+ * avstängd, inga tokens eller alla leveranser föll). pid är push_log-id:t som
+ * även följer med enheten som data.pid.
  */
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<PushResult> {
+  let logId: string | null = null;
   try {
     const creds = getCredentials();
     if (!creds) {
       console.warn("[push] APNS_* env saknas – push skickas inte.");
-      return;
+      return { sent: false };
     }
 
     // Respektera användarens notisinställningar (baserat på payload.data.type).
     if (!(await userAllowsNotification(userId, payload.data?.type))) {
-      return;
+      return { sent: false };
     }
 
     const tokens = await prisma.pushToken.findMany({
       where: { userId },
       select: { token: true },
     });
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) return { sent: false };
+
+    // Loggraden skrivs först när vi vet att pushen faktiskt kan gå iväg, och id:t
+    // måste finnas innan sändning eftersom det åker med i data.pid. Misslyckas
+    // loggen skickas pushen ändå (utan pid).
+    const data: Record<string, string> = { ...(payload.data ?? {}) };
+    const type = data.type;
+    if (type) {
+      try {
+        const id = crypto.randomUUID();
+        await prisma.pushLog.create({
+          data: {
+            id,
+            userId,
+            type,
+            angle: payload.angle ?? null,
+            tmdbId: payload.tmdbId ?? null,
+            mediaType: payload.mediaType ?? null,
+          },
+        });
+        logId = id;
+        data.pid = id;
+      } catch (e) {
+        console.warn("[push] push_log misslyckades:", e instanceof Error ? e.message : e);
+      }
+    }
+    if (payload.angle) data.angle = payload.angle;
+
+    // Åtgärdstoken för låsskärmsknapparna — utan hemlighet blir det en vanlig
+    // notis (appen faller då tillbaka på att öppnas).
+    if (payload.category && payload.tmdbId && payload.mediaType) {
+      const act = signPushAction({
+        uid: userId,
+        tmdbId: payload.tmdbId,
+        mediaType: payload.mediaType,
+        ...(logId ? { pid: logId } : {}),
+      });
+      if (act) data.act = act;
+    }
 
     const jwt = getApnsJwt(creds);
 
@@ -231,10 +312,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
     });
 
     const stale: string[] = [];
+    let delivered = 0;
     try {
       await Promise.all(
         tokens.map(async ({ token }) => {
-          const result = await sendToToken(session, creds, jwt, token, payload);
+          const result = await sendToToken(session, creds, jwt, token, payload, data);
+          if (result === "ok") delivered += 1;
           if (result === "stale") stale.push(token);
         })
       );
@@ -247,9 +330,17 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
         .deleteMany({ where: { token: { in: stale } } })
         .catch(() => {});
     }
+
+    if (delivered === 0) {
+      // Ingen levererades — ta bort loggraden så statistiken bara räknar riktiga pushar.
+      if (logId) await prisma.pushLog.delete({ where: { id: logId } }).catch(() => {});
+      return { sent: false };
+    }
+    return { sent: true, ...(logId ? { pid: logId } : {}) };
   } catch (e) {
     // best-effort: push får aldrig påverka anropande flöde
     console.warn("[push] sendPushToUser misslyckades:", e instanceof Error ? e.message : e);
+    return { sent: false };
   }
 }
 
@@ -289,19 +380,46 @@ export async function notifyGroupMatchIfNeeded(
       select: { userId: true },
     });
 
-    // Mottagarens språk, inte avsändarens — se sendLocalizedPushToUser.
+    // Mottagarens språk, inte avsändarens — se sendLocalizedPushToUser. Titeln
+    // hämtas högst en gång per språk i den här omgången (gruppen är oftast
+    // enspråkig) så en match inte ger ett TMDB-anrop per medlem.
+    const profiles = await prisma.profile.findMany({
+      where: { userId: { in: members.map((m) => m.userId) } },
+      select: { userId: true, uiLanguage: true },
+    });
+    const langByUser = new Map(profiles.map((p) => [p.userId, tmdbLanguageFor(p.uiLanguage)]));
+    const briefByLang = new Map<string, Promise<TitleBrief | null>>();
+    const briefFor = (lang: string) => {
+      let p = briefByLang.get(lang);
+      if (!p) {
+        p = fetchTitleBrief(tmdbId, tmdbType, lang);
+        briefByLang.set(lang, p);
+      }
+      return p;
+    };
+
     await Promise.all(
-      members.map(({ userId }) =>
-        sendLocalizedPushToUser(userId, {
-          key: tmdbType === "movie" ? "groupMatchMovie" : "groupMatchSeries",
+      members.map(async ({ userId }) => {
+        const brief = await briefFor(langByUser.get(userId) ?? tmdbLanguageFor(undefined));
+        const base = tmdbType === "movie" ? "groupMatchMovie" : "groupMatchSeries";
+        await sendLocalizedPushToUser(userId, {
+          // Utan titel (TMDB nere) faller vi tillbaka på den generiska texten.
+          key: brief ? `${base}Titled` : base,
+          values: brief ? { title: brief.title } : undefined,
           data: {
             type: "group_match",
             groupCode,
             tmdbId: String(tmdbId),
             tmdbType,
           },
-        })
-      )
+          image: brief?.imageUrl ?? null,
+          // Ingen category: gruppen har redan bestämt sig, inget att spara/avvisa.
+          interruptionLevel: "time-sensitive",
+          threadId: `group-${groupCode}`,
+          tmdbId,
+          mediaType: tmdbType,
+        });
+      })
     );
   } catch (e) {
     console.warn("[push] notifyGroupMatchIfNeeded misslyckades:", e instanceof Error ? e.message : e);
@@ -322,8 +440,8 @@ export async function sendLocalizedPushToUser(
     key: string;
     values?: Record<string, string | number>;
     data?: Record<string, string>;
-  }
-): Promise<void> {
+  } & Omit<PushPayload, "title" | "body" | "data">
+): Promise<PushResult> {
   let locale = DEFAULT_LOCALE;
   try {
     const prof = await prisma.profile.findUnique({
@@ -336,13 +454,16 @@ export async function sendLocalizedPushToUser(
   }
 
   try {
-    const t = await getTranslations({ locale, namespace: `push.${opts.key}` });
-    await sendPushToUser(userId, {
-      title: t("title", opts.values),
-      body: t("body", opts.values),
-      data: opts.data,
+    const { key, values, data, ...rest } = opts;
+    const t = await getTranslations({ locale, namespace: `push.${key}` });
+    return await sendPushToUser(userId, {
+      ...rest,
+      title: t("title", values),
+      body: t("body", values),
+      data,
     });
   } catch (e) {
     console.warn("[push] kunde inte lokalisera notis", opts.key, e instanceof Error ? e.message : e);
+    return { sent: false };
   }
 }

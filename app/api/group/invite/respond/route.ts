@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
         key: "groupInviteAccepted",
         values: { name, code: group.code },
         data: { type: "group_invite_accepted", groupCode: group.code },
+        threadId: `group-${group.code}`,
       });
     }
 

@@ -25,6 +25,9 @@
 // 2026-10-13: flik "Välj åt mig" (PickPanel, /api/admin/pick-stats) — AI-valets
 // användning, upplåsningar och kostnad. Flikraden scrollar i sidled på smala
 // skärmar nu när flikarna är sex.
+//
+// 2026-10-14: flik "Push" (PushPanel, /api/admin/push-stats + push-test) —
+// öppningsgrad per pushtyp/textvinkel och testutskick till egna telefonen.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
@@ -36,6 +39,7 @@ import FunnelPanel, { type FunnelData } from "./FunnelPanel";
 import MailPanel, { MailComposer, type ComposeDraft } from "./MailPanel";
 import AdsPanel from "./AdsPanel";
 import PickPanel from "./PickPanel";
+import PushPanel from "./PushPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -88,7 +92,7 @@ type AdminUser = {
 
 type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
-type Tab = "overview" | "funnel" | "retention" | "users" | "mail" | "pick";
+type Tab = "overview" | "funnel" | "retention" | "users" | "mail" | "pick" | "push";
 type Sort = "newest" | "active" | "ratings";
 
 const RANGES = [7, 30, 90, 365] as const;
@@ -162,7 +166,7 @@ export default function AdminClient() {
   // Djuplänk från push ("Mejl från …") → /admin?tab=mail
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "mail" || t === "users" || t === "funnel" || t === "retention" || t === "pick") setTab(t);
+    if (t === "mail" || t === "users" || t === "funnel" || t === "retention" || t === "pick" || t === "push") setTab(t);
   }, []);
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
 
@@ -375,6 +379,7 @@ export default function AdminClient() {
               ["users", "Användare"],
               ["mail", "Mejl"],
               ["pick", "Välj åt mig"],
+              ["push", "Push"],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -778,6 +783,7 @@ export default function AdminClient() {
         )}
         {tab === "mail" && <MailPanel />}
         {tab === "pick" && <PickPanel />}
+        {tab === "push" && <PushPanel />}
       </div>
 
       {openUser && (

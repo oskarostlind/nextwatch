@@ -137,6 +137,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<Ok | Err>> {
         key: "groupInvite",
         values: { name: fromName },
         data: { type: "group_invite", groupCode, fromUserId },
+        // Inbjudan går ut efter 5 min — därför time-sensitive (bryter igenom fokusläge).
+        interruptionLevel: "time-sensitive",
+        threadId: "group-invites",
       });
     };
 

@@ -40,6 +40,10 @@ function persistSoloDeckSoon() {
   deckWriteTimer = setTimeout(() => {
     deckWriteTimer = null;
     const s = soloState;
+    // En pushad titel kan ligga ensam i leken innan första hämtningen landat —
+    // spara inte det som "lek", då hydreras nästa start med ett enda kort och
+    // en påfyllning som hoppar över sida 1.
+    if (!s.ready) return;
     // Spara HELA leken (båda medietyperna), inte den filtrerade vyn — annars
     // tappas den dolda typen vid omstart. Annonskort hör till en session och
     // ska inte återuppstå ur cachen.
@@ -152,6 +156,18 @@ function hydrateSoloDeck(): SoloDeckState {
   };
 }
 
+/**
+ * Läggs på en lek som byggts om från noll (replace): den pushade titeln ska ligga
+ * först och inte finnas två gånger. Vi tar den nuvarande instansen ur storen
+ * hellre än pinnedSoloCard — den kan ha hunnit berikas (details/providers).
+ */
+function withPinnedFirst(cards: SwipeCard[]): SwipeCard[] {
+  const pinned = pinnedSoloCard;
+  if (!pinned) return cards;
+  const current = soloState.allCards.find((c) => c.id === pinned.id) ?? pinned;
+  return [current, ...cards.filter((c) => c.id !== pinned.id)];
+}
+
 /** Slår ihop utan dubbletter — hydrerad lek och färskt svar kan överlappa. */
 function appendUnique(existing: SwipeCard[], incoming: SwipeCard[]): SwipeCard[] {
   const seen = new Set(existing.map((c) => c.id));
@@ -165,9 +181,27 @@ function appendUnique(existing: SwipeCard[], incoming: SwipeCard[]): SwipeCard[]
  * appliceras — därför slipper varje byte en omhämtning.
  */
 function visibleCards(all: SwipeCard[], filter: SwipeMediaFilter): SwipeCard[] {
-  const filtered = filter === "both" ? all : all.filter((c) => c.kind === "ad" || c.mediaType === filter);
+  const pinnedId = pinnedSoloCard?.id;
+  const filtered =
+    filter === "both"
+      ? all
+      : all.filter((c) => c.kind === "ad" || c.mediaType === filter || c.id === pinnedId);
   return tidyAds(filtered);
 }
+
+/**
+ * Titeln en push-notis pekade på (?pick=…, se app/swipe/page_client.tsx).
+ * Måste deklareras FÖRE `soloState` nedan — hydrateSoloDeck() körs vid modulinit
+ * och går via visibleCards, så en senare deklaration ger TDZ-fel.
+ *
+ * Varför en egen variabel och inte bara "lägg först i allCards": det första
+ * nätverkssvaret (loadSoloPage med replace) ersätter hela leken och hade
+ * annars svalt kortet om detaljsvaret hann före. Och film/serie-filtret får
+ * inte gömma det: användaren tryckte på just den här titeln, då ska den synas
+ * även om profilen bara visar den andra typen (filtret i sig lämnas orört, så
+ * nästa kort följer det som vanligt). Nollas när kortet swipas bort.
+ */
+let pinnedSoloCard: SwipeCard | null = null;
 
 /**
  * Sant efter första swipen i den här sessionen. Före det får leken aldrig
@@ -435,7 +469,7 @@ async function loadSoloPage(targetPage: number, replace: boolean) {
     const known = replace ? new Set<string>() : new Set(soloState.allCards.map((c) => c.id));
     const mapped = withAdsMaybe(fresh.filter((c) => !known.has(c.id)), targetPage);
     soloState = nextSolo({
-      allCards: replace ? mapped : appendUnique(soloState.allCards, mapped),
+      allCards: replace ? withPinnedFirst(mapped) : appendUnique(soloState.allCards, mapped),
       page: targetPage,
       nextTmdbPage: data.nextTmdbPage ?? soloState.nextTmdbPage + 1,
       // Servern gräver nu upp till 40 TMDB-sidor innan den ger upp, så en tom
@@ -498,6 +532,7 @@ export async function ensureSoloDeck(opts?: { force?: boolean }) {
 export async function retrySoloDeck() {
   clearPersistedSoloDeck();
   hydratedNeedsRevalidate = false;
+  pinnedSoloCard = null; // ny lek från noll — ingen gammal push-titel ska följa med
   soloState = nextSolo({ ...emptySolo(), mediaFilter: soloState.mediaFilter });
   emit();
   await loadSoloPage(1, true);
@@ -508,6 +543,8 @@ export function popSoloCard() {
   // leken (id är unikt) — inte allCards[0], som kan vara av den dolda typen.
   const top = soloState.cards[0];
   if (!top) return;
+  // Den pushade titeln är avklarad när den swipas bort — då slutar den gå före filtret.
+  if (pinnedSoloCard?.id === top.id) pinnedSoloCard = null;
   let all = soloState.allCards;
   if (!swipedThisSession) {
     // Annonser som låg före första kortet var dolda (tidyAds) — släng dem så
@@ -530,6 +567,27 @@ export function unshiftSoloCard(card: SwipeCard) {
   persistSoloDeckSoon();
 }
 
+/** Finns kortet redan i solo-leken? (hela leken, även den dolda typen) */
+export function hasSoloCard(id: string): boolean {
+  return soloState.allCards.some((c) => c.id === id);
+}
+
+/**
+ * Lägger en pushad titel först i leken och fäster den (se pinnedSoloCard).
+ * Ligger kortet redan i leken flyttas den befintliga (berikade) instansen i
+ * stället för att ersättas. Rör inte `ready`: ensureSoloDeck tolkar ready +
+ * kort som "färdig lek" och hade annars hoppat över den första hämtningen.
+ */
+export function pinSoloCard(card: SwipeCard) {
+  const pinned = soloState.allCards.find((c) => c.id === card.id) ?? card;
+  pinnedSoloCard = pinned;
+  soloState = nextSolo({
+    allCards: [pinned, ...soloState.allCards.filter((c) => c.id !== pinned.id)],
+  });
+  emit();
+  persistSoloDeckSoon();
+}
+
 export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
   // Berikningen (details/providers) matchar per id, så den körs mot HELA leken —
   // annars skulle ett kort av den dolda typen tappa sin berikning.
@@ -547,6 +605,7 @@ export function updateSoloCards(fn: (cards: SwipeCard[]) => SwipeCard[]) {
  */
 export function dropSoloCard(tmdbId: number, mediaType: SwipeCard["mediaType"]) {
   const id = `${mediaType}_${tmdbId}`;
+  if (pinnedSoloCard?.id === id) pinnedSoloCard = null; // betygsatt på annat håll — ska inte återuppstå
   if (!soloState.allCards.some((c) => c.id === id)) return;
   soloState = nextSolo({ allCards: soloState.allCards.filter((c) => c.id !== id) });
   emit();

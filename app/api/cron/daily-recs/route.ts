@@ -13,18 +13,33 @@
 //      "vi saknar dig"-push (Duolingo-stil), som eskalerar med hur länge
 //      användaren varit borta.
 // Att ändra takten kräver alltså ingen ändring av cron-schemat, bara env.
+//
+// Texten och typen på tipset bestäms av lib/pushRecs (composeRecPush): ett
+// vanligt dagligt tips med växlande vinkel, fredagens tre förslag eller en
+// påminnelse om något som legat länge i watchlisten.
+//
+// Valfritt läge NW_PUSH_HOURLY=1: då ska routen anropas varje timme (GitHub
+// Actions, se .github/workflows/push-cron.yml) och varje användare får sitt tips
+// i sin egen vanliga swipe-timme (lib/pushRecs/timing.ts). Utan env: som förut.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { computeUnifiedRecs } from "@/lib/unifiedRecs";
 import { sendLocalizedPushToUser, sendPushToUser } from "@/lib/push";
 import { refreshPendingReleaseDates } from "@/lib/upcomingTitles";
 import { getTranslations } from "next-intl/server";
 import { normalizeLocale } from "@/lib/i18nConfig";
-import { tmdbLanguageFor } from "@/lib/tmdbLanguage";
+import { fetchTitleBrief } from "@/lib/tmdbTitleBrief";
+import {
+  composeRecPush,
+  hourlyModeEnabled,
+  preferredPushHour,
+  stockholmParts,
+  weeklyPicksDue,
+  type RecPushType,
+} from "@/lib/pushRecs";
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET ?? "";
@@ -65,6 +80,14 @@ function numEnv(name: string, fallback: number): number {
  * 0 = ingen spärr, dvs. gammalt beteende med en push om dagen.
  */
 const REC_PUSH_MIN_HOURS = numEnv("NW_REC_PUSH_MIN_HOURS", 60);
+
+/**
+ * Fredagsundantag från tempospärren. Utan det träffar 60 h-spärren fredagens tre
+ * förslag på måfå (en push torsdag → spärrad fredag). På en fredag får den som
+ * ännu inte fått veckobrevet därför det när sista recs-pushen är minst så här
+ * många timmar gammal. 0 = inget undantag.
+ */
+const WEEKLY_BYPASS_HOURS = numEnv("NW_WEEKLY_BYPASS_HOURS", 20);
 
 /**
  * Trappan för "vi saknar dig"-pushen: antal dygn utan aktivitet som krävs för
@@ -166,10 +189,21 @@ async function sweepReleaseNotifications(): Promise<{
       if (n >= RELEASE_MAX_PER_USER) continue;
       perUser.set(f.userId, n + 1);
       try {
+        const mediaType = f.mediaType === "tv" ? "tv" : "movie";
+        // Bilden är bara en bonus: hämtningen kastar aldrig och null ger en
+        // vanlig textnotis. Språket spelar ingen roll för backdrop/poster.
+        const brief = await fetchTitleBrief(f.tmdbId, mediaType, "sv-SE");
         await sendLocalizedPushToUser(f.userId, {
           key: "release",
           values: { title: f.title },
-          data: { type: "release", tmdbId: String(f.tmdbId), tmdbType: f.mediaType },
+          data: { type: "release", tmdbId: String(f.tmdbId), tmdbType: mediaType },
+          image: brief?.imageUrl ?? null,
+          // Titeln ligger redan i watchlisten (liken skapade bevakningen) →
+          // knapparna "Sett" / "Ta bort".
+          category: "NW_SAVED",
+          threadId: "release",
+          tmdbId: f.tmdbId,
+          mediaType,
         });
         await prisma.releaseFollow.update({
           where: { id: f.id },
@@ -252,7 +286,7 @@ export async function GET(req: Request) {
       lastRecPushSentAt: true,
       lastReEngagementPushAt: true,
       lastReEngagementVariant: true,
-      profile: { select: { region: true, uiLanguage: true } },
+      profile: { select: { uiLanguage: true } },
     },
     orderBy: { lastDailyRecAt: { sort: "asc", nulls: "first" } },
   });
@@ -264,25 +298,35 @@ export async function GET(req: Request) {
   let throttled = 0;
   /** Fick en "vi saknar dig"-push i stället för ett filmtips. */
   let reEngaged = 0;
+  /** Push komponerad men inte skickad (användaren har stängt av dem, eller APNs-env saknas). */
+  let notSent = 0;
+  /** NW_PUSH_HOURLY: inte användarens timme just nu. Inte stämplade, kommer igen. */
+  let hourSkipped = 0;
+  /** Släpptes förbi tempospärren för fredagens tre förslag. */
+  let weeklyBypassed = 0;
+  const byType: Record<string, number> = {};
+  const byAngle: Record<string, number> = {};
+
+  const hourly = hourlyModeEnabled();
+  const currentHour = stockholmParts(new Date(now)).hour;
+  const isFriday = stockholmParts(new Date(now)).weekday === 5;
 
   const started = await mapWithConcurrency(users, CONCURRENCY, deadline, async (user) => {
     // Stämpla oavsett utfall. Stämplar vi bara vid lyckad push fastnar en
     // användare som konsekvent saknar förslag först i kön och blockerar alla
     // andra vid varje körning.
-    await prisma.user
-      .update({ where: { id: user.id }, data: { lastDailyRecAt: new Date() } })
-      .catch(() => {
-        /* best-effort: en missad stämpel ska inte stoppa utskicket */
-      });
+    const stamp = () =>
+      prisma.user
+        .update({ where: { id: user.id }, data: { lastDailyRecAt: new Date() } })
+        .catch(() => {
+          /* best-effort: en missad stämpel ska inte stoppa utskicket */
+        });
 
     try {
-      const region = user.profile?.region || "SE";
-      // Både TMDB-titeln och notistexten på MOTTAGARENS språk — cronen har
-      // ingen cookie att läsa, så språket kommer från profilen.
-      const uiLanguage = normalizeLocale(user.profile?.uiLanguage);
-      const locale = tmdbLanguageFor(uiLanguage);
-
-      // ---- 1) Har vi tappat användaren? Då är ett filmtips fel notis. ----
+      // ---- 0) Vad skulle den här användaren få, om det vore hens timme? ----
+      // Allt i det här steget är billigt (ingen DB, inget TMDB) så att
+      // timgrinden nedan inte behöver köra en enda dyr fråga för användare som
+      // ändå inte ska ha något.
       //
       // lastActiveAt saknas för den som inte varit inne sedan kolumnen kom, och
       // för nyregistrerade som ännu inte hunnit swipa. createdAt som fallback
@@ -293,18 +337,53 @@ export async function GET(req: Request) {
       const reEngageCooldownOver =
         !user.lastReEngagementPushAt ||
         now - user.lastReEngagementPushAt.getTime() >= REENGAGE_MIN_DAYS * DAY_MS;
+      const willReEngage = tier >= 0 && reEngageCooldownOver;
 
+      // Takten på recs-pushen. Måste avgöras FÖRE rekommendationsmotorn: den
+      // kostar ~100 TMDB-anrop, och att räkna fram ett tips vi ändå inte får
+      // skicka är ren kvotförbrukning. Throttlad ≠ misslyckad — räknas separat.
+      const sinceLastRec = user.lastRecPushSentAt ? now - user.lastRecPushSentAt.getTime() : Infinity;
+      const withinThrottle = REC_PUSH_MIN_HOURS > 0 && sinceLastRec < REC_PUSH_MIN_HOURS * HOUR_MS;
+      // Fredagsundantaget kräver också en DB-koll (veckobrev redan skickat?),
+      // som görs först efter timgrinden.
+      const fridayWindow = withinThrottle && isFriday && WEEKLY_BYPASS_HOURS > 0 && sinceLastRec >= WEEKLY_BYPASS_HOURS * HOUR_MS;
+      const hasWork = willReEngage || !withinThrottle || fridayWindow;
+
+      if (!hasWork) {
+        // I timläge hade en stämpel här skrivits för varje användare varje
+        // timme; kön behöver inte roteras av dem som ändå inte har något.
+        if (!hourly) await stamp();
+        throttled++;
+        return;
+      }
+
+      // ---- 1) Timgrind (bara NW_PUSH_HOURLY=1), FÖRE stämpeln ----
+      // En användare som hoppas över här ska ligga kvar först i kön tills hens
+      // timme kommer, inte rotera bakåt.
+      if (hourly && (await preferredPushHour(user.id)) !== currentHour) {
+        hourSkipped++;
+        return;
+      }
+
+      await stamp();
+
+      // Notistexten på MOTTAGARENS språk — cronen har ingen cookie att läsa,
+      // så språket kommer från profilen.
+      const uiLanguage = normalizeLocale(user.profile?.uiLanguage);
+
+      // ---- 2) Har vi tappat användaren? Då är ett filmtips fel notis. ----
       // Ingen inställningsflagga här — produktbeslut 2026-08-20: "vi saknar
       // dig"-pushen är standard för alla. Enda opt-outen är att neka push på
       // OS-nivå (då finns inga tokens och sendPushToUser blir en no-op).
       // NW_REENGAGE_MIN_DAYS=0 är kill switch för hela featuren.
-      if (tier >= 0 && reEngageCooldownOver) {
+      if (willReEngage) {
         const variant = pickVariant(tier, user.lastReEngagementVariant);
         const tRe = await getTranslations({ locale: uiLanguage, namespace: "push.reEngagement" });
         await sendPushToUser(user.id, {
           title: tRe(`variants.${variant}.title`),
           body: tRe(`variants.${variant}.body`),
           data: { type: "re_engagement" },
+          threadId: "reengage",
         });
         await prisma.user
           .update({
@@ -320,58 +399,49 @@ export async function GET(req: Request) {
         return;
       }
 
-      // ---- 2) Takten på recs-pushen. ----
-      //
-      // Måste ligga FÖRE computeUnifiedRecs: det anropet kostar ~100
-      // TMDB-anrop, och att räkna fram ett tips vi ändå inte får skicka är ren
-      // kvotförbrukning. Throttlad ≠ misslyckad — den räknas separat.
-      if (
-        REC_PUSH_MIN_HOURS > 0 &&
-        user.lastRecPushSentAt &&
-        now - user.lastRecPushSentAt.getTime() < REC_PUSH_MIN_HOURS * HOUR_MS
-      ) {
-        throttled++;
-        return;
+      // ---- 3) Fredagsundantaget: spärrad, men veckobrevet är på tur? ----
+      let forceType: RecPushType | undefined;
+      if (withinThrottle) {
+        if (await weeklyPicksDue(user.id, new Date(now))) {
+          forceType = "weekly_picks";
+          weeklyBypassed++;
+        } else {
+          throttled++;
+          return;
+        }
       }
 
-      const result = await computeUnifiedRecs({ uid: user.id, region, locale, groupCode: null, page: 1 });
-
-      if (!result.ok || result.items.length === 0) {
+      // ---- 4) Själva tipset: typ, vinkel och text väljs av komposern. ----
+      const composed = await composeRecPush(user.id, { now: new Date(now), forceType });
+      if (!composed) {
         skipped++;
         return;
       }
 
-      // Utan interaktion är recs-listan stabil → items[0] blev samma titel dag
-      // efter dag. Hoppa över det senast pushade tipset; finns inget annat
-      // (listan med exakt 1 titel) skickas den ändå hellre än ingenting.
-      const pick =
-        result.items.find(
-          (i) => !(i.id === user.lastDailyRecTmdbId && i.tmdbType === user.lastDailyRecMediaType),
-        ) ?? result.items[0];
-      const t = await getTranslations({ locale: uiLanguage, namespace: "push.dailyRec" });
-      const mediaWord = pick.tmdbType === "movie" ? t("movie") : t("series");
-      const titleWithYear = pick.year ? `${pick.title} (${pick.year})` : pick.title;
-
-      await sendPushToUser(user.id, {
-        title: t("title"),
-        body: t("body", { title: titleWithYear, media: mediaWord }),
-        data: { type: "daily_rec", tmdbId: String(pick.id), tmdbType: pick.tmdbType },
-      });
+      const res = await sendPushToUser(user.id, composed.payload);
       await prisma.user
         .update({
           where: { id: user.id },
           data: {
-            lastDailyRecTmdbId: pick.id,
-            lastDailyRecMediaType: pick.tmdbType,
-            // Stämplas BARA här, efter en faktiskt skickad push — det är den
-            // här kolumnen som håller takten nere på 2–3 pushar i veckan.
+            lastDailyRecTmdbId: composed.payload.tmdbId ?? null,
+            lastDailyRecMediaType: composed.payload.mediaType ?? null,
+            // Stämplas efter varje komponerad push (även om användaren stängt av
+            // dem) — det är den här kolumnen som håller takten nere på 2–3
+            // pushar i veckan, och utan den räknas ~100 TMDB-anrop om varje körning.
             lastRecPushSentAt: new Date(),
           },
         })
         .catch(() => {
           /* best-effort — en missad stämpel ger i värsta fall en repris imorgon */
         });
-      notified++;
+
+      if (res.sent) {
+        notified++;
+        byType[composed.type] = (byType[composed.type] ?? 0) + 1;
+        byAngle[composed.angle] = (byAngle[composed.angle] ?? 0) + 1;
+      } else {
+        notSent++;
+      }
     } catch (e) {
       failed++;
       console.warn("[cron/daily-recs] misslyckades för user", user.id, e instanceof Error ? e.message : e);
@@ -392,9 +462,16 @@ export async function GET(req: Request) {
     // flesta är throttlade) omöjlig att skilja från en trasig.
     skipped,
     throttled,
+    notSent,
     failed,
     remaining,
     timedOut: remaining > 0,
+    // Typ- och vinkelfördelning av de recs-pushar som faktiskt gick iväg.
+    byType,
+    byAngle,
+    weeklyBypassed,
+    hourly,
+    hourSkipped,
     // Släpp-svepet räknas separat: det rör bevakade titlar, inte recs-kön.
     releaseNotified: release.sent,
     releaseDatesRefreshed: release.refreshed,

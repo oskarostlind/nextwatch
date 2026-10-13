@@ -963,7 +963,245 @@
     "softAskBody": "Vi säger till när din grupp matchar, när vänner skickar filmtips och när dagens rekommendation landar. Du väljer själv vilka typer i inställningarna.",
     "softAskLater": "Inte nu",
     "softAskTitle": "Vill du få notiser? 🔔",
-    "softAskYes": "Ja, aktivera"
+    "softAskYes": "Ja, aktivera",
+    "recAngles": {
+      "friend": {
+        "v1": {
+          "title": "Vänner med smak 👀",
+          "body": "{friend} har också sparat {title}."
+        },
+        "v2": {
+          "title": "{friend} är på samma spår",
+          "body": "{friend} har {title} på sin lista. Dags för en filmkväll?"
+        },
+        "v3": {
+          "title": "Gemensam smak 🍿",
+          "body": "Du och {friend} verkar gilla {title}. Soffan räcker till två."
+        },
+        "v4": {
+          "title": "{friend} har sparat något 🛋️",
+          "body": "{title} ligger i listan hos {friend}. Se den ihop?"
+        }
+      },
+      "topMatch": {
+        "v1": {
+          "title": "Toppmatch 🔥",
+          "body": "{title} – {evidence}. Det här är din grej."
+        },
+        "v2": {
+          "title": "Gjord för dig 🎯",
+          "body": "{title} träffar på {evidence}."
+        },
+        "v3": {
+          "title": "Vi är rätt säkra på den här 🔥",
+          "body": "{title} matchar din smak: {evidence}."
+        },
+        "v4": {
+          "title": "Toppmatch för dig 🔥",
+          "body": "{evidence} – {title} har det du brukar gilla."
+        }
+      },
+      "person": {
+        "v1": {
+          "title": "Gillar du {person}? 🎬",
+          "body": "Då har vi en till: {title} ({by})."
+        },
+        "v2": {
+          "title": "Mer {person}, tack! 🍿",
+          "body": "{title} ({by}). Du vet vad du gillar."
+        },
+        "v3": {
+          "title": "Vi vet vem du gillar 😏",
+          "body": "{title} ({by}) borde sitta som en smäck."
+        },
+        "v4": {
+          "title": "{person}-alarm 🚨",
+          "body": "{title} ({by}). Du kommer att gilla den här."
+        }
+      },
+      "provider": {
+        "v1": {
+          "title": "Ligger på {service}. Ikväll? 📺",
+          "body": "{title} väntar redan i din {service}-app."
+        },
+        "v2": {
+          "title": "Du har redan {service}",
+          "body": "{title} finns där – ingen ursäkt att inte trycka play."
+        },
+        "v3": {
+          "title": "Redan betald: {service} 💸",
+          "body": "{title} ingår i det du redan betalar för. Använd det!"
+        },
+        "v4": {
+          "title": "Soffan + {service} 🛋️",
+          "body": "{title} ligger redo. Du behöver bara trycka play."
+        }
+      },
+      "rating": {
+        "v1": {
+          "title": "{rating} i betyg 😳",
+          "body": "{title} – och du har inte sett den."
+        },
+        "v2": {
+          "title": "Betyg {rating}. Missat den?",
+          "body": "{title} har väntat på dig länge nu."
+        },
+        "v3": {
+          "title": "Folk älskar den här ⭐",
+          "body": "{title} snittar {rating}. Dags att se varför?"
+        },
+        "v4": {
+          "title": "{rating}/10 – seriöst? 🤯",
+          "body": "{title} har betyg som få andra. Du har inte sett den än."
+        }
+      },
+      "theme": {
+        "v1": {
+          "title": "{theme} + din smak = 🎯",
+          "body": "{title}. Räkna efter, det stämmer."
+        },
+        "v2": {
+          "title": "Du gillar {theme}, eller hur? 👀",
+          "body": "Då borde {title} landa rätt."
+        },
+        "v3": {
+          "title": "Mer {theme} på väg 🍿",
+          "body": "{title} har precis det du brukar fastna för."
+        },
+        "v4": {
+          "title": "Din smak sa {theme}",
+          "body": "Vi lyssnade: {title}."
+        }
+      },
+      "runtime": {
+        "v1": {
+          "title": "Hinns före läggdags 🌙",
+          "body": "{title} – {length}. Kort nog för en vardagskväll."
+        },
+        "v2": {
+          "title": "Kort och gott ⏱️",
+          "body": "{title} tar bara {length}. Ingen ursäkt."
+        },
+        "v3": {
+          "title": "Har du lite tid över? 🕘",
+          "body": "Då har vi {title}: {length}."
+        },
+        "v4": {
+          "title": "Snabbt avklarad ✅",
+          "body": "{title} – {length}. Du hinner till och med diska efter."
+        }
+      },
+      "weekday": {
+        "v1": {
+          "title": "Söndagsserie att fastna i 📺",
+          "body": "{title}. Ett avsnitt till är aldrig bara ett avsnitt."
+        },
+        "v2": {
+          "title": "Söndagskväll = serietid 🛋️",
+          "body": "{title} gör måndagen lite lättare att ta sig an."
+        },
+        "v3": {
+          "title": "Fredag = film 🍿",
+          "body": "{title} – du har förtjänat det."
+        },
+        "v4": {
+          "title": "Fredagskvällens plan är klar",
+          "body": "{title}. Resten är popcorn."
+        },
+        "v5": {
+          "title": "Vardagskväll, lätt val 🛋️",
+          "body": "{title} – ta det lugnt, du har jobbat nog idag."
+        },
+        "v6": {
+          "title": "Mitt i veckan? Perfekt för film",
+          "body": "{title}. Ett bra sätt att varva ner efter dagen."
+        }
+      },
+      "challenge": {
+        "v1": {
+          "title": "Vi slår vad 👀",
+          "body": "Vi slår vad om att du gillar {title}. Bevisa motsatsen."
+        },
+        "v2": {
+          "title": "Utmaning 🥊",
+          "body": "{title}. Ge den tjugo minuter – tycker du fortfarande nej får du rätt."
+        },
+        "v3": {
+          "title": "Vågar du säga nej till den här?",
+          "body": "{title} – vi tror på den. Motbevisa oss."
+        },
+        "v4": {
+          "title": "Du har inte en chans 😏",
+          "body": "{title} är rätt smak för dig. Försök säga emot."
+        }
+      },
+      "generic": {
+        "v1": {
+          "title": "Dagens tips 🎬",
+          "body": "{titleWithYear} – en {media} vi tror du gillar!"
+        },
+        "v2": {
+          "title": "Kvällens {media}? 🍿",
+          "body": "Vi har tänkt åt dig: {titleWithYear}."
+        },
+        "v3": {
+          "title": "Psst… 🎬",
+          "body": "{titleWithYear} – en {media} med din smak skriven över sig."
+        },
+        "v4": {
+          "title": "Lust på något nytt? 🛋️",
+          "body": "Testa {titleWithYear} – vi tror på den."
+        }
+      },
+      "weekly": {
+        "v1": {
+          "title": "Fredagsfilmen? 🍿",
+          "body": "{a}, {b} eller {c} – vilken blir det?"
+        },
+        "v2": {
+          "title": "Helgen är här 🎉",
+          "body": "Tre förslag till soffan: {a}, {b} och {c}."
+        },
+        "v3": {
+          "title": "Fredagsmys-meny 🛋️",
+          "body": "På menyn ikväll: {a}, {b} eller {c}."
+        }
+      },
+      "nudge": {
+        "v1": {
+          "title": "Din lista minns 🛋️",
+          "body": "{title} har legat i din lista i {weeks} veckor. Ikväll kanske?"
+        },
+        "v2": {
+          "title": "Ska den ligga där för evigt?",
+          "body": "{title} har väntat {weeks} veckor på dig. Ge den en chans ikväll!"
+        },
+        "v3": {
+          "title": "Dammiga fynd i listan 🕸️",
+          "body": "{title} sparades för {weeks} veckor sedan. Dags nu?"
+        },
+        "v4": {
+          "title": "Du sparade den av en anledning",
+          "body": "{title} har legat där i {weeks} veckor. Vad väntar du på?"
+        }
+      },
+      "common": {
+        "byDirector": "regi {person}",
+        "withCast": "med {person}",
+        "runtimeMovie": "{minutes} min",
+        "runtimeTv": "{minutes} min per avsnitt",
+        "movie": "film",
+        "series": "serie"
+      }
+    },
+    "groupMatchMovieTitled": {
+      "title": "Match! 🍿",
+      "body": "Ni är överens: {title}. Popcorn?"
+    },
+    "groupMatchSeriesTitled": {
+      "title": "Match! 🍿",
+      "body": "Ni är överens om serien {title}. Dags att bingea?"
+    }
   },
   "report": {
     "alsoBlock": "Blockera användaren också",

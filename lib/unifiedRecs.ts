@@ -75,6 +75,12 @@ export type UnifiedItem = {
    * det finns något konkret att motivera med.
    */
   topMatch?: { evidence: MatchEvidence[] };
+  /**
+   * Hela träfflistan (inkl. genre) mot smaken. Sätts BARA när anroparen ber om
+   * det via `withEvidence` — push-komposern behöver den för varje titel, inte
+   * bara de som slumpen släpper igenom swipe-reasons-grinden.
+   */
+  evidence?: MatchEvidence[];
 };
 
 export type UnifiedRecsOk = {
@@ -126,6 +132,11 @@ export type UnifiedRecsParams = {
    * INTE detta — de ska respektera sitt filter.
    */
   forceAllMedia?: boolean;
+  /**
+   * Låt varje item bära `evidence` oavsett shouldShowSwipeReasons-slumpen.
+   * Opt-in (push-komposern); utan flaggan är svaret oförändrat.
+   */
+  withEvidence?: boolean;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -422,7 +433,7 @@ async function fetchGroupWatchlistCandidates(opts: {
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1, fromTmdbPage, forceAllMedia = false } = params;
+  const { uid, region, locale, groupCode, page = 1, fromTmdbPage, forceAllMedia = false, withEvidence = false } = params;
 
   try {
     // Genre-listorna beror bara på locale — starta dem redan här, parallellt
@@ -1333,6 +1344,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
         vote_average: s.base.vote_average,
         ...(reasons && reasons.length > 0 ? { reasons } : {}),
         ...(isTopMatch ? { topMatch: { evidence: derivedEvidence.slice(0, 3) } } : {}),
+        ...(withEvidence ? { evidence } : {}),
       };
     });
 

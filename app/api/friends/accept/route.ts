@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
     key: "friendAccepted",
     values: { name: accepterName },
     data: { type: "friend_accepted", userId: uid },
+    threadId: "friends",
   });
 
   return json(200, { ok: true, friendship: { userId: a, friendId: b } });

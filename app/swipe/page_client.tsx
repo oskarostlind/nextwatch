@@ -23,6 +23,7 @@ import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
+import { getSoloDeckSnapshot, hasSoloCard, pinSoloCard } from "@/lib/swipeDeckStore";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
 import { goPremium } from "@/lib/premiumPurchase";
 import { trackSwipeForNudge } from "@/lib/signupNudge";
@@ -385,6 +386,36 @@ function MediaFilterPill({
   );
 }
 
+/**
+ * Läser ?pick/&type från adressfältet. Strikt validering — värdena kommer ur en
+ * push-payload via URL:en och går vidare till ett API-anrop.
+ */
+function readPickParams(): { id: number; type: MediaType } | null {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const pick = q.get("pick");
+    const type = q.get("type");
+    if (!pick || !/^\d{1,9}$/.test(pick)) return null;
+    if (type !== "movie" && type !== "tv") return null;
+    const id = Number(pick);
+    return id > 0 ? { id, type } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Tar bort pick/type ur URL:en utan navigering (behåller Next:s history-state). */
+function stripPickParams(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("pick");
+    url.searchParams.delete("type");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    /* URL-städningen är kosmetisk — ignorera */
+  }
+}
+
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
@@ -423,6 +454,48 @@ export default function SwipePageClient({
     if (feedError) funnel("deck_error");
     else if (!hasCards && ready && !loading) funnel("deck_empty");
   }, [feedError, hasCards, ready, loading]);
+
+  // Djuplänk från en titelpush: /swipe?pick=<tmdbId>&type=<movie|tv> (sätts av
+  // PushRegistration). Läser window.location i stället för useSearchParams — det
+  // senare kräver Suspense-gräns och sidan är redan renderad på servern. Gruppläge
+  // behöver ingen egen gren: app/swipe/page.tsx renderar då gruppklienten och den
+  // här komponenten monteras aldrig.
+  // Ingen cancel-flagga i cleanup: dev-StrictMode kör effekten två gånger, och
+  // andra körningen ser redan rensade params — en cancel skulle tappa titeln.
+  // Storefunktionerna är modulnivå och tål att anropas efter avmontering.
+  useEffect(() => {
+    const target = readPickParams();
+    if (!target) return;
+    // Rensa direkt så en refresh/tillbaka inte stoppar in titeln igen.
+    stripPickParams();
+    const id = `${target.type}_${target.id}`;
+    if (hasSoloCard(id)) {
+      // Redan i leken (t.ex. ur cachen): flytta den främst, behåll berikningen.
+      const existing = getSoloDeckSnapshot().allCards.find((c) => c.id === id);
+      if (existing) pinSoloCard(existing);
+      return;
+    }
+    // Annars hämtas detaljerna och kortet byggs i samma form som mapUnifiedItems.
+    // Kapplöpningen mot första lekhämtningen/cache-hydreringen löses i storen
+    // (pinSoloCard + withPinnedFirst), oavsett vilket svar som kommer först.
+    void fetchDetailsWithFallback(target.type, target.id).then((det) => {
+      if (!det || !det.title || det.title === "Untitled") return;
+      pinSoloCard({
+        id,
+        tmdbId: target.id,
+        mediaType: target.type,
+        title: det.title,
+        year: det.year,
+        // Details ger w500; leken använder w780 (se mapUnifiedItems).
+        poster: det.poster ? det.poster.replace("/t/p/w500", "/t/p/w780") : null,
+        backdrop: det.backdrop,
+        genres: det.genres,
+        overview: det.overview,
+        rating: det.rating,
+        trailer: det.trailer,
+      });
+    });
+  }, []);
 
   const undoStackRef = useRef<UndoEntry[]>([]);
 

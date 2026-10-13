@@ -117,6 +117,8 @@ model User {
   aiPickGrants   AiPickGrant[]
   aiPickEvents   AiPickEvent[]
 
+  pushLogs PushLog[]
+
   @@map("users")
 }
 
@@ -667,4 +669,32 @@ model AiPickEvent {
 
   @@index([type, createdAt], map: "idx_ai_pick_events_type_created")
   @@map("ai_pick_events")
+}
+
+/// En rad per skickad push (inte per enhet). Grunden för mätningen i /admin →
+/// Push: öppningsgrad per typ och vinkel, och vad knapparna på låsskärmen
+/// används till. Skrivs av sendPushToUser (lib/push.ts); `id` följer med i
+/// payloaden som data.pid så att öppning (/api/push/opened) och knapptryck
+/// (/api/push/action) kan stämplas på rätt rad. Tabellen skapas av
+/// prisma/sql/2026-10-14_push_log.sql.
+model PushLog {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  /// Samma som payload.data.type: daily_rec, weekly_picks, watchlist_nudge, release, group_match, …
+  type      String
+  /// Textvinkel + variant för recs-pushar, t.ex. "person.v2". null för övriga typer.
+  angle     String?
+  tmdbId    Int?      @map("tmdb_id")
+  mediaType String?   @map("media_type")
+  sentAt    DateTime  @default(now()) @map("sent_at") @db.Timestamptz(6)
+  openedAt  DateTime? @map("opened_at") @db.Timestamptz(6)
+  /// Knapp på låsskärmen: save | nope | seen | remove
+  action    String?
+  actionAt  DateTime? @map("action_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt], map: "idx_push_log_sent")
+  @@index([userId, sentAt], map: "idx_push_log_user_sent")
+  @@map("push_log")
 }

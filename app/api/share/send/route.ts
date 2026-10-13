@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sendLocalizedPushToUser } from "@/lib/push";
+import { fetchTitleBrief } from "@/lib/tmdbTitleBrief";
 import { apiMsg } from "@/lib/apiMessages";
 
 export const runtime = "nodejs";
@@ -69,10 +70,24 @@ export async function POST(req: NextRequest) {
       select: { displayName: true, user: { select: { username: true } } },
     });
     const senderName = sender?.displayName ?? sender?.user?.username ?? "En vän";
+    // Bilden är språkoberoende nog för en notis — en cachad en-US-hämtning räcker.
+    // Misslyckas den skickas tipset ändå, bara utan bild.
+    const brief = await fetchTitleBrief(tmdbId, mediaType, "en-US");
     await sendLocalizedPushToUser(toUserId, {
       key: "shareReceived",
       values: { name: senderName, title },
-      data: { type: "share_received", friendId: me },
+      data: {
+        type: "share_received",
+        friendId: me,
+        tmdbId: String(tmdbId),
+        tmdbType: mediaType,
+      },
+      image: brief?.imageUrl ?? null,
+      // Mottagaren har inte tagit ställning till titeln än → spara/nej-knappar.
+      category: "NW_TITLE",
+      threadId: "shares",
+      tmdbId,
+      mediaType,
     });
   })().catch(() => {});
 

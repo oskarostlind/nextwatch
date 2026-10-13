@@ -1478,13 +1478,24 @@
     "thread": {
       "aria": "Earlier suggestions in this conversation",
       "previous": "Last suggestion:",
-      "newQuestion": "New question",
-      "askAgain": "What are you in the mood for now?",
       "anyQuery": "Pick something for me"
+    },
+    "followUp": {
+      "placeholder": "Follow up… e.g. “shorter” or “seen it”",
+      "aria": "Write a follow-up",
+      "quickAria": "Quick replies",
+      "quick": {
+        "seen": "Seen it",
+        "shorter": "Shorter",
+        "lighter": "Lighter",
+        "similar": "More like that one"
+      },
+      "typingAria": "Finding a new suggestion"
     },
     "history": {
       "open": "Earlier picks",
       "title": "Your picks",
+      "continue": "Continue the chat",
       "back": "Back",
       "today": "Today {time}",
       "yesterday": "Yesterday {time}",

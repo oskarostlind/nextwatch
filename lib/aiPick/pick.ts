@@ -31,7 +31,27 @@ import {
   type MediaFilter,
   type PickCandidate,
 } from "@/lib/aiPick/candidates";
-import { buildSystemPrompt, buildUserMessage, callPickLlm, costUsd, parsePickJson, pickModel, sanitizeUserText } from "@/lib/aiPick/llm";
+import {
+  buildSystemPrompt,
+  buildUserMessage,
+  callPickLlm,
+  costUsd,
+  parsePickJson,
+  pickModel,
+  REASON_MAX,
+  REASON_MAX_FOLLOWUP,
+  sanitizeUserText,
+} from "@/lib/aiPick/llm";
+import {
+  describeWishes,
+  loadConversation,
+  mergeConversationIntent,
+  resolveFocus,
+  type ConvItem,
+  type ConvTurn,
+  type MergedConversation,
+} from "@/lib/aiPick/followup";
+import { markPickSeen } from "@/lib/aiPick/seen";
 import {
   createSelftestRequest,
   finishPickRequest,
@@ -48,6 +68,9 @@ export type NormalizedPickBody = {
   mediaFilter: MediaFilter;
   exclude: number[];
   sessionId: string | null;
+  followUpOf: string | null;
+  focus: { tmdbId: number; mediaType: "movie" | "tv" } | null;
+  markSeen: boolean;
 };
 
 export type RunPickOptions = {
@@ -76,21 +99,40 @@ export type PickDebug = {
   pipeline: Record<string, number | boolean> | null;
   reference: string | null;
   constrained: boolean;
+  followUp: {
+    turns: number;
+    excluded: number;
+    focus: string | null;
+    terms: string[];
+    filter: MediaFilter;
+    reference: string | null;
+    /** "Har sett den": vad som markerades (selftest: vad som SKULLE markeras). */
+    markSeen: { item: string; result: "marked" | "already" | "would_mark" | "failed" } | null;
+  } | null;
 };
 
 export type RunPickResult = { status: number; body: PickResponse; debug: PickDebug };
 
 /** Generiska motiveringar när modellen inte levererade (fallback). */
-const FALLBACK_REASON: Record<AppLocale, { saved: string; fresh: string }> = {
+const FALLBACK_REASON: Record<AppLocale, { saved: string; fresh: string; followSaved: string; followFresh: string }> = {
   sv: {
     saved: "Du har redan sparat den här och den passar fint för ikväll – dags att faktiskt se den.",
     fresh: "Ett starkt val utifrån din smak som passar det du är sugen på just nu.",
+    followSaved: "Okej, då testar vi den här i stället – den ligger redan bland dina sparade och passar det du sa.",
+    followFresh: "Okej, då blir det något annat – den här passar det du sa och din smak.",
   },
   en: {
     saved: "You already saved this one and it fits tonight nicely – time to actually watch it.",
     fresh: "A strong pick based on your taste that fits what you're in the mood for right now.",
+    followSaved: "Okay, let's try this one instead – it's already on your list and fits what you said.",
+    followFresh: "Okay, something different then – this one fits what you said and your taste.",
   },
 };
+
+function itemLabel(i: ConvItem | null): string | null {
+  if (!i) return null;
+  return `${i.mediaType}:${i.tmdbId}${i.title ? ` ${i.title}` : ""}`;
+}
 
 function emptyDebug(): PickDebug {
   return {
@@ -110,6 +152,7 @@ function emptyDebug(): PickDebug {
     pipeline: null,
     reference: null,
     constrained: false,
+    followUp: null,
   };
 }
 
@@ -122,7 +165,16 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
   const debug = emptyDebug();
   const { uid, body, uiLocale, mode } = opts;
 
-  const quota0 = await getPickQuota(uid);
+  const [quota0, conversation] = await Promise.all([
+    getPickQuota(uid),
+    body.sessionId
+      ? loadConversation(uid, body.sessionId).catch((err) => {
+          // Utan historiken blir det en vanlig fråga — hellre det än ett fel.
+          console.error("[aiPick] kunde inte läsa samtalet", err);
+          return { turns: [] as ConvTurn[], shownIds: [] as number[] };
+        })
+      : Promise.resolve({ turns: [] as ConvTurn[], shownIds: [] as number[] }),
+  ]);
   if (!quota0) {
     // Ingen användarrad bakom cookien (anonym besökare).
     return { status: 401, body: { ok: false, error: "disabled" }, debug };
@@ -134,6 +186,45 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     debug.error = "ANTHROPIC_API_KEY saknas";
     return { status: 503, body: { ok: false, error: "unavailable", quota: quota0 }, debug };
+  }
+
+  // Följdfråga: tolka meddelandet i samtalets sammanhang (lib/aiPick/followup.ts).
+  const turns = conversation.turns;
+  const focus = resolveFocus(turns, body.followUpOf, body.focus);
+  const merged: MergedConversation | null =
+    turns.length > 0
+      ? mergeConversationIntent({ turns, prompt: body.prompt, chips: body.chips, clientFilter: body.mediaFilter, focus })
+      : null;
+  const exclude = Array.from(new Set([...body.exclude, ...conversation.shownIds]));
+  if (merged) {
+    const ref = merged.reference;
+    debug.followUp = {
+      turns: turns.length,
+      excluded: exclude.length,
+      focus: itemLabel(focus),
+      terms: merged.intent.terms,
+      filter: merged.filter,
+      reference: ref ? (ref.kind === "known" ? `known ${itemLabel(ref.item)}` : `text "${ref.ref.query}"`) : null,
+      markSeen: null,
+    };
+  }
+
+  // "Har sett den" (+ markSeen från klienten): spara som swipens "Sett".
+  // Före debiteringen och oberoende av den — det är ett faktum om användaren,
+  // inte en del av valet. selftest sparar ALDRIG, rapporterar bara.
+  if (body.markSeen && focus) {
+    const label = itemLabel(focus) ?? "";
+    if (mode === "selftest") {
+      if (debug.followUp) debug.followUp.markSeen = { item: label, result: "would_mark" };
+    } else {
+      try {
+        const r = await markPickSeen(uid, focus);
+        if (debug.followUp) debug.followUp.markSeen = { item: label, result: r };
+      } catch (err) {
+        console.error("[aiPick] markSeen misslyckades", err);
+        if (debug.followUp) debug.followUp.markSeen = { item: label, result: "failed" };
+      }
+    }
   }
 
   const reserveInput = {
@@ -166,8 +257,26 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       mediaFilter: body.mediaFilter,
       chips: body.chips,
       prompt: body.prompt,
-      exclude: body.exclude,
+      exclude,
       priority,
+      followUp: merged
+        ? {
+            intent: merged.intent,
+            filter: merged.filter,
+            titleRef: merged.reference?.kind === "text" ? merged.reference.ref : null,
+            knownRef:
+              merged.reference?.kind === "known"
+                ? {
+                    tmdbId: merged.reference.item.tmdbId,
+                    mediaType: merged.reference.item.mediaType,
+                    // Titeln saknas bara om historiken rensats — etiketten måste
+                    // ändå vara icke-tom, annars tappar kandidaterna "similar to".
+                    title: merged.reference.item.title ?? "the previous suggestion",
+                    year: merged.reference.item.year,
+                  }
+                : null,
+          }
+        : undefined,
     });
 
     // v2: poolen är mjuk och bred — under MIN_POOL (3) ska i praktiken aldrig hända.
@@ -189,7 +298,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     debug.reference = set.reference ? `${set.reference.mediaType}:${set.reference.tmdbId} ${set.reference.title}` : null;
 
     const byKey = new Map(set.candidates.map((c) => [c.key, c] as const));
-    const system = buildSystemPrompt({ uiLocale, priority });
+    const system = buildSystemPrompt({ uiLocale, priority, followUp: merged !== null });
     const user = buildUserMessage({
       clock: stockholmClock(),
       mediaFilter: set.effectiveFilter,
@@ -199,6 +308,14 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       candidates: set.candidates,
       constrained: set.constrained,
       reference: set.reference,
+      conversation: merged
+        ? {
+            turns,
+            focus,
+            seen: merged.seenItem,
+            wishes: describeWishes(merged.intent, merged.filter),
+          }
+        : null,
     });
 
     const llm = await callPickLlm(system, user);
@@ -214,7 +331,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     let error: string | null = null;
 
     if (llm.ok) {
-      const parsed = parsePickJson(llm.text, new Set(byKey.keys()));
+      const parsed = parsePickJson(llm.text, new Set(byKey.keys()), merged ? REASON_MAX_FOLLOWUP : REASON_MAX);
       if ("error" in parsed) {
         error = `invalid_output:${parsed.error} :: ${llm.text.slice(0, 300)}`;
       } else {
@@ -236,7 +353,14 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       debug.usedFallback = true;
       pick = fb.pick;
       alternatives = fb.alternatives;
-      reason = pick.fromSaved ? FALLBACK_REASON[uiLocale].saved : FALLBACK_REASON[uiLocale].fresh;
+      const fr = FALLBACK_REASON[uiLocale];
+      reason = merged
+        ? pick.fromSaved
+          ? fr.followSaved
+          : fr.followFresh
+        : pick.fromSaved
+          ? fr.saved
+          : fr.fresh;
     }
     // Alltid två alternativ när poolen räcker — modellens giltiga först.
     alternatives = fillAlternatives(pick, alternatives, set.candidates, set.rank);
@@ -291,6 +415,9 @@ export function normalizePickBody(b: {
   mediaFilter?: MediaFilter;
   exclude?: number[];
   sessionId?: string;
+  followUpOf?: string;
+  focus?: { tmdbId: number; mediaType: "movie" | "tv" };
+  markSeen?: boolean;
 }): NormalizedPickBody {
   const prompt = sanitizeUserText(b.prompt ?? "", 300);
   return {
@@ -299,5 +426,11 @@ export function normalizePickBody(b: {
     mediaFilter: b.mediaFilter ?? "both",
     exclude: Array.from(new Set((b.exclude ?? []).filter((n) => Number.isInteger(n) && n > 0))).slice(0, 100),
     sessionId: b.sessionId && /^[A-Za-z0-9_-]{1,64}$/.test(b.sessionId) ? b.sessionId : null,
+    followUpOf: b.followUpOf && /^[A-Za-z0-9_-]{1,64}$/.test(b.followUpOf) ? b.followUpOf : null,
+    focus:
+      b.focus && Number.isInteger(b.focus.tmdbId) && b.focus.tmdbId > 0 && (b.focus.mediaType === "movie" || b.focus.mediaType === "tv")
+        ? { tmdbId: b.focus.tmdbId, mediaType: b.focus.mediaType }
+        : null,
+    markSeen: b.markSeen === true,
   };
 }

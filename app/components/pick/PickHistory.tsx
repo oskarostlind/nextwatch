@@ -8,11 +8,12 @@
 // kvar när man går in i en session och tillbaka.
 //
 // Allt här är läsning: att öppna tjänsten eller spara i listan kostar aldrig
-// ett val. "Rensa historik" tömmer bara det som visas — kvoten räknas på
+// ett val. "Fortsätt chatten" i en session öppnar den i den levande tråden
+// (samma sessionId) — först nästa meddelande kostar ett val. "Rensa historik" tömmer bara det som visas — kvoten räknas på
 // status/källa/tid och påverkas inte (se DELETE /api/pick/history).
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { History as HistoryIcon, Loader2 } from "lucide-react";
+import { History as HistoryIcon, Loader2, MessageCircle } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import type { PickHistoryEntry, PickHistorySession, PickItem } from "@/lib/aiPick/types";
 import { clearPickHistory, getPickHistory } from "@/lib/aiPick/client";
@@ -156,8 +157,11 @@ export function usePickHistory(): PickHistoryState {
 
 /* ---------- hjälpare ---------- */
 
-function entryAsk(entry: PickHistoryEntry, prev: PickHistoryEntry | undefined): AskEcho {
-  // Samma fråga som turen innan = användaren tryckte "Visa något annat".
+export function entryAsk(entry: PickHistoryEntry, prev: PickHistoryEntry | undefined): AskEcho {
+  // Följdfråga utan text = "Visa något annat" (sedan följdfrågorna skickas den
+  // tom; servern tolkar den i samtalets sammanhang).
+  if (prev && !entry.prompt && entry.chips.length === 0) return { kind: "another" };
+  // Äldre rader: samma fråga som turen innan = "Visa något annat".
   if (
     prev &&
     (prev.prompt ?? "") === (entry.prompt ?? "") &&
@@ -419,6 +423,7 @@ export function HistoryDetail({
   onSave,
   onOpenService,
   onAltSelect,
+  onContinue,
 }: {
   session: PickHistorySession;
   isSaved: (item: PickItem) => boolean;
@@ -426,6 +431,8 @@ export function HistoryDetail({
   onSave: (item: PickItem) => void;
   onOpenService: (item: PickItem, provider: string) => void;
   onAltSelect: (alt: PickItem) => void;
+  /** Saknas för sessioner som inte går att fortsätta (rader utan sessionId). */
+  onContinue?: () => void;
 }) {
   const t = useTranslations("pick");
   return (
@@ -443,6 +450,16 @@ export function HistoryDetail({
           />
         </section>
       ))}
+      {onContinue ? (
+        <button
+          type="button"
+          onClick={onContinue}
+          className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 text-[15px] font-semibold text-neutral-950 transition hover:bg-cyan-300 active:scale-[0.98] ${focusRing}`}
+        >
+          <MessageCircle className="h-5 w-5" aria-hidden />
+          {t("history.continue")}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,11 +1,17 @@
 // app/api/pick/selftest/route.ts
 //
 // GET /api/pick/selftest?uid=…&prompt=…&chips=light,short&media=both&exclude=1,2&lang=sv&session=abc
+//     [&followUpOf=<requestId>&focus=tv:1408&markSeen=1]
 //
 // Kör HELA "Välj åt mig"-pipelinen för en användare utan att debitera
 // (loggas med source 'selftest') och returnerar PickResponse + debug
 // (kandidatantal sparade/färska, modell, tokens, kostnad, latens, fallback).
 // Fungerar oavsett PICK_ROLLOUT. Utan uid används ADMIN_EMAIL-användaren.
+//
+// Följdfrågor: kör först med &session=X, sedan med samma session och t.ex.
+// &prompt=kortare — selftest-raderna räknas som turer i samtalet (debug.followUp
+// visar sammanslagna önskemål, uteslutna id:n och referens). &markSeen=1
+// sparar ALDRIG här — debug.followUp.markSeen säger bara vad som skulle markeras.
 //
 // Skyddad med CRON_SECRET — samma mönster som app/api/cron/*:
 //   curl -H "Authorization: Bearer $CRON_SECRET" \
@@ -27,6 +33,12 @@ function isAuthorized(req: Request): boolean {
   const header = req.headers.get("x-cron-secret") ?? "";
   const authHeader = req.headers.get("authorization") ?? "";
   return header === secret || authHeader === `Bearer ${secret}`;
+}
+
+/** "tv:1408" / "movie:603" → focus. */
+function parseFocus(v: string | null): { tmdbId: number; mediaType: "movie" | "tv" } | undefined {
+  const m = (v ?? "").match(/^(movie|tv):(\d{1,9})$/);
+  return m ? { mediaType: m[1] as "movie" | "tv", tmdbId: Number(m[2]) } : undefined;
 }
 
 function csv(v: string | null): string[] {
@@ -58,6 +70,9 @@ export async function GET(req: Request) {
     mediaFilter: sp.get("media") ?? sp.get("mediaFilter") ?? undefined,
     exclude: csv(sp.get("exclude")).map(Number),
     sessionId: sp.get("session") || undefined,
+    followUpOf: sp.get("followUpOf") || undefined,
+    focus: parseFocus(sp.get("focus")),
+    markSeen: sp.get("markSeen") === "1" || sp.get("markSeen") === "true" ? true : undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "bad_request", issues: parsed.error.issues }, { status: 400 });

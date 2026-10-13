@@ -1478,13 +1478,24 @@
     "thread": {
       "aria": "Tidigare förslag i den här konversationen",
       "previous": "Förra förslaget:",
-      "newQuestion": "Ny fråga",
-      "askAgain": "Vad är du sugen på nu?",
       "anyQuery": "Välj något åt mig"
+    },
+    "followUp": {
+      "placeholder": "Följ upp… t.ex. ”kortare” eller ”har sett den”",
+      "aria": "Skriv en följdfråga",
+      "quickAria": "Snabbsvar",
+      "quick": {
+        "seen": "Har sett den",
+        "shorter": "Kortare",
+        "lighter": "Lättare",
+        "similar": "Mer som den"
+      },
+      "typingAria": "Letar fram ett nytt förslag"
     },
     "history": {
       "open": "Tidigare val",
       "title": "Dina val",
+      "continue": "Fortsätt chatten",
       "back": "Tillbaka",
       "today": "Idag {time}",
       "yesterday": "Igår {time}",

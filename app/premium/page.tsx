@@ -84,6 +84,9 @@ export default function PremiumPage() {
           <li className="flex items-start gap-2">
             <span className="text-emerald-400">✓</span> {t("bulletTaste")}
           </li>
+          <li className="flex items-start gap-2">
+            <span className="text-emerald-400">✓</span> {t("bulletPick")}
+          </li>
         </ul>
         <Button onClick={buy} disabled={loading} className="w-full">
           {loading

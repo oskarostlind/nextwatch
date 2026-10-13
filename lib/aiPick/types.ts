@@ -44,7 +44,20 @@ export type PickRequestBody = {
   mediaFilter?: "both" | "movie" | "tv";
   exclude?: number[];           // tmdb ids already shown this session ("Visa något annat")
   sessionId?: string;           // client-generated id per sheet "conversation" (≤64 chars, [A-Za-z0-9_-])
+  /**
+   * Följdfrågor ("fortsätt chatten"): servern läser sessionens tidigare 'ok'-
+   * turer, utesluter allt som redan visats och tolkar texten i sammanhanget.
+   */
+  followUpOf?: string;          // requestId för turen användaren svarar på
+  /** Titeln som visas i huvudplatsen just nu (kan vara ett inbytt alternativ). */
+  focus?: { tmdbId: number; mediaType: "movie" | "tv" };
+  /** "Har sett den": markera fokus-titeln som sedd (som swipens "Sett"). */
+  markSeen?: boolean;
 };
+
+/** Snabbsvaren under en följdfråga (event-meta). */
+export type PickQuickReply = "seen" | "shorter" | "lighter" | "similar";
+export const PICK_QUICK_REPLIES: readonly PickQuickReply[] = ["seen", "shorter", "lighter", "similar"] as const;
 
 export type PickResponse =
   | {
@@ -61,13 +74,13 @@ export type PickResponse =
 export type PickEventType =
   | "open" | "chip" | "submit" | "open_service" | "save" | "another" | "alt_select"
   | "paywall_view" | "ad_start" | "ad_complete" | "ad_fail" | "upsell_view" | "upsell_click" | "close"
-  | "history_open" | "history_entry_open";
+  | "history_open" | "history_entry_open" | "followup" | "history_continue";
 
 /** Runtime-lista över tillåtna händelsetyper (vitlistan i /api/pick/event). */
 export const PICK_EVENT_TYPES: readonly PickEventType[] = [
   "open", "chip", "submit", "open_service", "save", "another", "alt_select",
   "paywall_view", "ad_start", "ad_complete", "ad_fail", "upsell_view", "upsell_click", "close",
-  "history_open", "history_entry_open",
+  "history_open", "history_entry_open", "followup", "history_continue",
 ] as const;
 
 /* ---------------- Historik ("chattarna", v2) ---------------- */

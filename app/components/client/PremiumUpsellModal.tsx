@@ -26,7 +26,7 @@ import { UPSELL_EVENT, maybeTriggerAdUpsell, markUpsellSatisfied } from "@/lib/a
 import { useTranslations } from "next-intl";
 
 /** Samma fyra förmåner som /premium, i samma ordning. */
-const BENEFIT_KEYS = ["bulletAdFree", "bulletSwipes", "bulletGroups", "bulletTaste"] as const;
+const BENEFIT_KEYS = ["bulletAdFree", "bulletSwipes", "bulletGroups", "bulletTaste", "bulletPick"] as const;
 
 export default function PremiumUpsellModal() {
   const t = useTranslations("upsell");

@@ -8,10 +8,20 @@
 // färsk i bakgrunden.
 //
 // Ett öppnat ark = en "konversation" (sessionId skickas med varje förfrågan).
-// Varje svar blir en tur i tråden: det aktuella förslaget visas fullt, de två
-// närmast föregående som hopfällda rader ("Förra förslaget: …") ovanför — lugnt,
-// men det känns som ett samtal. Äldre konversationer finns i historiken
-// (klockan i rubriken), som läses från /api/pick/history.
+// Efter första svaret blir arket en chatt: användarens bubbla (höger) → AI:ns
+// svar (motiveringen) → kortet med två alternativ. De två närmast föregående
+// turerna ligger som hopfällda rader ("Förra förslaget: …") ovanför. Längst ned
+// sitter en fast skrivrad + en rad små snabbsvar ("Har sett den", "Kortare",
+// "Lättare", "Mer som den") — varje följdfråga skickas med samma sessionId och
+// tolkas av servern i samtalets sammanhang (lib/aiPick/followup.ts). Varje nytt
+// förslag kostar ett val, precis som första. "Fortsätt chatten" i historiken
+// laddar en gammal session i tråden och fortsätter den.
+//
+// Tangentbordet (iOS-WebView): arket följer window.visualViewport — overlayn
+// får visuella viewportens höjd/offset så att arket (och skrivraden) ligger
+// precis ovanför tangentbordet i stället för att knuffas ut ur bild, och
+// arkets maxhöjd krymper med den. Utan visualViewport faller det tillbaka på
+// dvh + scrollIntoView vid fokus.
 //
 // Ägarens prioritet: AI:n ska helst välja något användaren REDAN gillat men
 // inte sett. Därför visas "Du gillade den för 3 veckor sedan" tydligt när valet
@@ -49,7 +59,6 @@ import {
   Clock,
   Crown,
   History as HistoryIcon,
-  PenLine,
   PlayCircle,
   RefreshCw,
   Shuffle,
@@ -60,13 +69,21 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import type { PickChipId, PickHistorySession, PickItem, PickQuota, PickRequestBody } from "@/lib/aiPick/types";
+import type {
+  PickChipId,
+  PickHistorySession,
+  PickItem,
+  PickQuickReply,
+  PickQuota,
+  PickRequestBody,
+} from "@/lib/aiPick/types";
 import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
 import { isNativeIos } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
 import {
+  AiReply,
   AskBubble,
   askText,
   focusRing,
@@ -74,9 +91,16 @@ import {
   PickCard,
   Poster,
   Pulse,
+  TypingReply,
   type AskEcho,
 } from "@/app/components/pick/PickParts";
-import { HistoryDetail, HistoryList, sessionLabel, usePickHistory } from "@/app/components/pick/PickHistory";
+import {
+  entryAsk,
+  HistoryDetail,
+  HistoryList,
+  sessionLabel,
+  usePickHistory,
+} from "@/app/components/pick/PickHistory";
 
 type View = "ask" | "loading" | "result" | "paywall" | "error" | "history" | "historyDetail";
 type ErrorKind = "no_candidates" | "unavailable" | "disabled";
@@ -109,10 +133,31 @@ const VIEW_FADE = { duration: 0.16, ease: "easeOut" as const };
 /** Hur många tidigare turer som syns hopfällda ovanför det aktuella förslaget. */
 const THREAD_ROWS = 2;
 
+/** Snabbsvaren under tråden — max fyra, i den här ordningen. */
+const QUICK_REPLIES: readonly PickQuickReply[] = ["seen", "shorter", "lighter", "similar"];
+
+/** pendingScroll-värde: scrolla så att den aktuella turen börjar överst. */
+const SCROLL_TO_CURRENT = -1;
+/** pendingScroll-värde: längst ned (t.ex. medan ett följdsvar laddar). */
+const SCROLL_TO_END = -2;
+
+/** Scrollar tråden till den aktuella turen (data-pick-current) eller till slutet. */
+function scrollThread(el: HTMLDivElement | null, to: "current" | "end", smooth: boolean) {
+  if (!el) return;
+  let top = el.scrollHeight;
+  if (to === "current") {
+    const anchor = el.querySelector<HTMLElement>("[data-pick-current]");
+    if (!anchor) return;
+    top = anchor.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8;
+  }
+  el.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
+}
+
 /**
  * Sätter scrollytans position när en ny vy monteras (AnimatePresence
  * mode="wait" monterar den först när den gamla tonat ut). Används för att
- * historiklistan ska ligga kvar där man var när man går tillbaka från en session.
+ * historiklistan ska ligga kvar där man var när man går tillbaka från en session,
+ * och för att tråden ska öppna på den aktuella turen.
  */
 function ScrollRestore({
   target,
@@ -123,10 +168,50 @@ function ScrollRestore({
 }) {
   useLayoutEffect(() => {
     if (pending.current === null || !target.current) return;
-    target.current.scrollTop = pending.current;
+    if (pending.current === SCROLL_TO_CURRENT) scrollThread(target.current, "current", false);
+    else if (pending.current === SCROLL_TO_END) scrollThread(target.current, "end", false);
+    else target.current.scrollTop = pending.current;
     pending.current = null;
   }, [pending, target]);
   return null;
+}
+
+type ViewportBox = { top: number; height: number; keyboard: boolean };
+
+/**
+ * Den visuella viewporten medan arket är öppet. På iOS krymper den när
+ * tangentbordet visas (layout-viewporten gör det inte) — arket placeras i den
+ * så att skrivraden hamnar ovanför tangentbordet. Zoom är låst i appen
+ * (app/layout.tsx), så en mindre visuell viewport betyder tangentbord.
+ */
+function useViewportBox(active: boolean): ViewportBox | null {
+  const [box, setBox] = useState<ViewportBox | null>(null);
+  useEffect(() => {
+    if (!active || typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const keyboard = window.innerHeight - vv.height > 120;
+        setBox((prev) =>
+          prev && prev.top === vv.offsetTop && prev.height === vv.height && prev.keyboard === keyboard
+            ? prev
+            : { top: vv.offsetTop, height: vv.height, keyboard }
+        );
+      });
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [active]);
+  return active ? box : null;
 }
 
 /* ---------- arket ---------- */
@@ -156,6 +241,11 @@ export default function PickSheet({
   const [quota, setQuota] = useState<PickQuota | null>(initialQuota);
   const [errorKind, setErrorKind] = useState<ErrorKind>("unavailable");
   const [text, setText] = useState("");
+  // Skrivraden under tråden (följdfrågor)
+  const [reply, setReply] = useState("");
+  const replyRef = useRef<HTMLInputElement>(null);
+  const [scrollTick, setScrollTick] = useState<{ to: "current" | "end"; n: number } | null>(null);
+  const viewport = useViewportBox(open);
 
   // Tråden
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -222,6 +312,8 @@ export default function PickSheet({
     setUnlocked(null);
     setAdError(false);
     setText("");
+    setReply("");
+    setScrollTick(null);
 
     const q = initialQuota;
     setQuota(q);
@@ -274,7 +366,11 @@ export default function PickSheet({
 
   /* ----- förfrågan ----- */
   const run = useCallback(
-    async (query: Query, ask: AskEcho) => {
+    async (
+      query: Query,
+      ask: AskEcho,
+      opts: { markSeen?: boolean; restoreText?: string } = {}
+    ) => {
       if (quota && quota.totalLeft <= 0) {
         goPaywall(quota);
         return;
@@ -283,11 +379,14 @@ export default function PickSheet({
       if (ask.kind !== "another") lastAsk.current = ask;
       requestSeq.current += 1;
       const seq = requestSeq.current;
+      const followUp = turns.length > 0 ? turns[turns.length - 1] : null;
       setNudge(false);
       setUnlocked(null);
       setPendingAsk(ask);
       setExpandedTurn(null);
-      pendingScroll.current = 0;
+      // Följdfråga: tråden ligger kvar och bubblan + "skriver …" syns längst ned.
+      pendingScroll.current = followUp ? SCROLL_TO_END : 0;
+      if (followUp) setScrollTick((p) => ({ to: "end", n: (p?.n ?? 0) + 1 }));
       go("loading");
 
       const body: PickRequestBody = { mediaFilter: query.mediaFilter };
@@ -295,6 +394,13 @@ export default function PickSheet({
       if (query.chips?.length) body.chips = query.chips;
       if (shownIds.current.length) body.exclude = [...shownIds.current];
       if (sessionId.current) body.sessionId = sessionId.current;
+      if (followUp) {
+        // Servern läser sessionens turer själv; det här säger bara vilken tur
+        // och vilken titel ("den") meddelandet syftar på.
+        if (!followUp.id.startsWith("local-")) body.followUpOf = followUp.id;
+        body.focus = { tmdbId: followUp.main.tmdbId, mediaType: followUp.main.mediaType };
+        if (opts.markSeen) body.markSeen = true;
+      }
 
       const res = await requestPick(body);
       if (seq !== requestSeq.current) return;
@@ -320,12 +426,18 @@ export default function PickSheet({
           setNudge(true);
           trackPickEvent("upsell_view", { from: "result" });
         }
-        pendingScroll.current = 0;
+        pendingScroll.current = SCROLL_TO_CURRENT;
+        setScrollTick((p) => ({ to: "current", n: (p?.n ?? 0) + 1 }));
         go("result");
         return;
       }
 
       setPendingAsk(null);
+      // Texten användaren skrev ska inte försvinna för att svaret uteblev.
+      if (opts.restoreText) {
+        const restore = opts.restoreText;
+        setReply((r) => r || restore);
+      }
       switch (res.error) {
         case "no_quota":
           goPaywall(res.quota ?? quota);
@@ -341,8 +453,15 @@ export default function PickSheet({
       }
       go("error");
     },
-    [go, goPaywall, quota]
+    [go, goPaywall, quota, turns]
   );
+
+  /* ----- scroll i tråden när en tur kommer/laddar (vyn monteras inte om) ----- */
+  useEffect(() => {
+    if (!scrollTick) return;
+    const id = window.requestAnimationFrame(() => scrollThread(scrollRef.current, scrollTick.to, true));
+    return () => window.cancelAnimationFrame(id);
+  }, [scrollTick]);
 
   const current = turns.length > 0 ? turns[turns.length - 1] : null;
 
@@ -359,16 +478,61 @@ export default function PickSheet({
     void run({ prompt, mediaFilter }, { kind: "prompt", text: prompt });
   };
 
-  const onAnother = () => {
-    trackPickEvent("another", current ? { tmdbId: current.main.tmdbId } : undefined);
-    void run(lastQuery.current ?? { mediaFilter }, { kind: "another" });
+  /** Tillbaka från paywall/fel: till tråden (längst ned) om det finns en, annars frågan. */
+  const backToThread = () => {
+    pendingScroll.current = current ? SCROLL_TO_END : 0;
+    go(current ? "result" : "ask");
   };
 
-  const onNewQuestion = () => {
-    setExpandedTurn(null);
-    setText("");
-    pendingScroll.current = 0;
-    go("ask");
+  /** Filtret följdfrågor skickas med: konversationens, annars swipens. */
+  const followFilter = () => lastQuery.current?.mediaFilter ?? mediaFilter;
+
+  // "Visa något annat" = en följdfråga utan text — servern tar önskemålen ur
+  // samtalet och utesluter allt som redan visats.
+  const onAnother = () => {
+    trackPickEvent("another", current ? { tmdbId: current.main.tmdbId } : undefined);
+    void run({ mediaFilter: followFilter() }, { kind: "another" });
+  };
+
+  /** Skrivraden eller ett snabbsvar. */
+  const sendFollowUp = (raw: string, quick?: PickQuickReply) => {
+    const prompt = raw.trim().slice(0, 300);
+    if (!prompt || viewRef.current === "loading") return;
+    if (quota && quota.totalLeft <= 0) {
+      goPaywall(quota); // texten ligger kvar i skrivraden
+      return;
+    }
+    trackPickEvent("followup", quick ? { quick } : { len: prompt.length });
+    if (!quick) setReply("");
+    // Fäll ned tangentbordet så att svaret syns i hela arket.
+    replyRef.current?.blur();
+    void run(
+      { prompt, mediaFilter: followFilter() },
+      { kind: "prompt", text: prompt },
+      { markSeen: quick === "seen", restoreText: quick ? undefined : prompt }
+    );
+  };
+
+  const onReplySubmit = (e: FormEvent) => {
+    e.preventDefault();
+    sendFollowUp(reply);
+  };
+
+  const onReplyFocus = () => {
+    // När tangentbordet är uppe: håll slutet av tråden (kortet man svarar på)
+    // precis ovanför skrivraden. scrollIntoView är reserven utan visualViewport.
+    window.setTimeout(() => {
+      scrollThread(scrollRef.current, "end", true);
+      replyRef.current?.scrollIntoView({ block: "nearest" });
+    }, 280);
+  };
+
+  const onReplyBlur = () => {
+    // iOS kan lämna layout-viewporten förskjuten efter tangentbordet trots
+    // overflow:hidden på body — återställ (sidan bakom ska aldrig scrolla här).
+    window.setTimeout(() => {
+      if (window.scrollY !== 0 && !document.activeElement?.closest("input,textarea")) window.scrollTo(0, 0);
+    }, 120);
   };
 
   /** Byt in ett alternativ i en tur (aktuell eller uppfälld äldre). */
@@ -446,13 +610,48 @@ export default function PickSheet({
     go("historyDetail");
   };
 
+  /**
+   * "Fortsätt chatten": lägg sessionens turer i tråden och återanvänd dess
+   * sessionId — servern läser samma turer och utesluter allt som visats, så
+   * nästa meddelande fortsätter samtalet. Kostar inget förrän man skickar.
+   */
+  const continueSession = (s: PickHistorySession) => {
+    if (s.entries.length === 0 || !/^[A-Za-z0-9_-]{1,64}$/.test(s.sessionId)) return;
+    trackPickEvent("history_continue", { entries: s.entries.length });
+    requestSeq.current += 1;
+    sessionId.current = s.sessionId;
+    const restored: Turn[] = s.entries.map((e, i) => ({
+      id: e.requestId,
+      ask: entryAsk(e, s.entries[i - 1]),
+      pick: e.pick,
+      main: e.pick,
+      alts: e.alternatives.slice(0, 2),
+      reason: e.reason,
+    }));
+    shownIds.current = Array.from(
+      new Set(s.entries.flatMap((e) => [e.pick, ...e.alternatives].map((x) => x.tmdbId)))
+    );
+    const last = s.entries[s.entries.length - 1];
+    lastQuery.current = { mediaFilter: last.mediaFilter };
+    lastAsk.current = restored[restored.length - 1].ask;
+    setTurns(restored);
+    setPendingAsk(null);
+    setExpandedTurn(null);
+    setDetail(null);
+    setReply("");
+    setUnlocked(null);
+    historyReturn.current = "result";
+    pendingScroll.current = SCROLL_TO_CURRENT;
+    go("result");
+  };
+
   const onBack = () => {
     if (viewRef.current === "historyDetail") {
       pendingScroll.current = listScroll.current;
       go("history");
       return;
     }
-    pendingScroll.current = 0;
+    pendingScroll.current = historyReturn.current === "result" ? SCROLL_TO_CURRENT : 0;
     go(historyReturn.current);
   };
 
@@ -469,7 +668,9 @@ export default function PickSheet({
     if (ok) {
       trackPickEvent("ad_complete", { premium: Boolean(quota?.premium) });
       setUnlocked(fresh?.rewardPicks ?? quota?.rewardPicks ?? 3);
-      go("ask");
+      // Mitt i en konversation: tillbaka till tråden (skrivraden står kvar).
+      pendingScroll.current = current ? SCROLL_TO_END : 0;
+      go(current ? "result" : "ask");
     } else {
       trackPickEvent("ad_fail", { premium: Boolean(quota?.premium) });
       setAdError(true);
@@ -552,11 +753,10 @@ export default function PickSheet({
       </ul>
     );
 
+  // Första frågan. När tråden har turer används skrivraden i stället.
   const askView = (
     <div className="space-y-4">
-      {threadRows(turns.slice(-THREAD_ROWS))}
-
-      <p className="text-sm leading-relaxed text-white/55">{turns.length > 0 ? t("thread.askAgain") : t("subtitle")}</p>
+      <p className="text-sm leading-relaxed text-white/55">{t("subtitle")}</p>
 
       {unlocked !== null ? (
         <p role="status" className="rounded-xl bg-white/[0.06] px-3 py-2 text-sm text-white/85">
@@ -646,61 +846,132 @@ export default function PickSheet({
     </div>
   );
 
-  const resultView = current ? (
+  const unlockedLine =
+    unlocked !== null ? (
+      <p role="status" className="rounded-xl bg-white/[0.06] px-3 py-2 text-sm text-white/85">
+        {t("paywall.unlocked", { count: unlocked })}
+      </p>
+    ) : null;
+
+  // Tråden: hopfällda tidigare turer → (aktuell tur | bubbla + "skriver …").
+  // Samma vy (nyckel "thread") under laddning och svar, så att inget monteras
+  // om mellan en följdfråga och dess svar.
+  const following = view === "loading" && pendingAsk !== null;
+  const threadView = (
     <div className="space-y-3">
-      {threadRows(turns.slice(-(THREAD_ROWS + 1), -1))}
-      <AskBubble text={askText(current.ask, t)} />
+      {following ? threadRows(turns.slice(-THREAD_ROWS)) : threadRows(turns.slice(-(THREAD_ROWS + 1), -1))}
 
-      <PickCard
-        size="full"
-        titleId="pick-result-title"
-        main={current.main}
-        pickKey={itemKey(current.pick)}
-        reason={current.reason}
-        alts={current.alts}
-        onAltSelect={(alt) => swapInTurn(current.id, alt)}
-        saved={isSaved(current.main)}
-        saving={savingKey === itemKey(current.main)}
-        onSave={(it) => void saveItem(it, "thread")}
-        onOpenService={(it, p) => openService(it, p, "thread")}
-      />
+      {following && pendingAsk ? (
+        <div className="space-y-3" aria-busy="true">
+          <AskBubble text={askText(pendingAsk, t)} lines={3} />
+          <TypingReply label={t("followUp.typingAria")} />
+          <div className="flex gap-3">
+            <Pulse className="aspect-[2/3] w-16 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-2 pt-1">
+              <Pulse className="h-5 w-3/4" />
+              <Pulse className="h-3.5 w-1/2" />
+              <Pulse className="mt-3 h-11 w-full rounded-2xl" />
+            </div>
+          </div>
+        </div>
+      ) : current ? (
+        <div data-pick-current className="space-y-3">
+          <AskBubble text={askText(current.ask, t)} lines={3} />
+          <AiReply text={current.reason} />
+          <PickCard
+            size="full"
+            titleId="pick-result-title"
+            main={current.main}
+            pickKey={itemKey(current.pick)}
+            reason={current.reason}
+            reasonInline={false}
+            alts={current.alts}
+            onAltSelect={(alt) => swapInTurn(current.id, alt)}
+            saved={isSaved(current.main)}
+            saving={savingKey === itemKey(current.main)}
+            onSave={(it) => void saveItem(it, "thread")}
+            onOpenService={(it, p) => openService(it, p, "thread")}
+          />
 
-      <div className="flex items-center justify-center gap-1">
-        <button
-          type="button"
-          onClick={onAnother}
-          className={`flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          {t("another")}
-        </button>
-        <span className="text-white/20" aria-hidden>
-          ·
-        </span>
-        <button
-          type="button"
-          onClick={onNewQuestion}
-          className={`flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
-        >
-          <PenLine className="h-3.5 w-3.5" aria-hidden />
-          {t("thread.newQuestion")}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onAnother}
+            className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-white/60 transition hover:text-white ${focusRing}`}
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            {t("another")}
+          </button>
 
-      {quotaLine}
+          {quotaLine}
 
-      {nudge && !premium ? (
-        <button
-          type="button"
-          onClick={() => onPremium("result")}
-          className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-center text-xs text-white/45 transition hover:text-white/75 ${focusRing}`}
-        >
-          <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {t("premiumNudge", { count: monthly })}
-        </button>
+          {nudge && !premium ? (
+            <button
+              type="button"
+              onClick={() => onPremium("result")}
+              className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-center text-xs text-white/45 transition hover:text-white/75 ${focusRing}`}
+            >
+              <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {t("premiumNudge", { count: monthly })}
+            </button>
+          ) : null}
+        </div>
       ) : null}
+
+      {unlockedLine}
     </div>
-  ) : null;
+  );
+
+  // Skrivraden + snabbsvaren, fast längst ned i arket så länge tråden visas.
+  const loadingReply = view === "loading";
+  const composer = (
+    <div
+      className="shrink-0 border-t border-white/[0.06] px-4 pt-2"
+      style={{
+        paddingBottom: viewport?.keyboard ? 8 : "calc(env(safe-area-inset-bottom) + 10px)",
+      }}
+    >
+      <div
+        role="group"
+        aria-label={t("followUp.quickAria")}
+        className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {QUICK_REPLIES.map((q) => (
+          <button
+            key={q}
+            type="button"
+            disabled={loadingReply}
+            onClick={() => sendFollowUp(t(`followUp.quick.${q}`), q)}
+            className={`min-h-10 shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-3.5 text-[13px] font-medium text-white/65 transition hover:bg-white/[0.07] hover:text-white/85 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 ${focusRing}`}
+          >
+            {t(`followUp.quick.${q}`)}
+          </button>
+        ))}
+      </div>
+      <form onSubmit={onReplySubmit} className="flex items-center gap-2">
+        <input
+          ref={replyRef}
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          onFocus={onReplyFocus}
+          onBlur={onReplyBlur}
+          maxLength={300}
+          enterKeyHint="send"
+          autoComplete="off"
+          placeholder={t("followUp.placeholder")}
+          aria-label={t("followUp.aria")}
+          className="h-11 min-w-0 flex-1 text-ellipsis rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[16px] text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+        />
+        <button
+          type="submit"
+          disabled={!reply.trim() || loadingReply}
+          aria-label={t("send")}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-neutral-950 transition hover:bg-cyan-300 active:scale-95 disabled:bg-white/10 disabled:text-white/35 disabled:active:scale-100 ${focusRing}`}
+        >
+          <ArrowUp className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+        </button>
+      </form>
+    </div>
+  );
 
   const canAd = native;
   const rewardsLeft = quota?.rewardsLeftToday ?? 1;
@@ -761,7 +1032,7 @@ export default function PickSheet({
         {current ? (
           <button
             type="button"
-            onClick={() => go("result")}
+            onClick={backToThread}
             className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
           >
             {t("error.back")}
@@ -803,7 +1074,7 @@ export default function PickSheet({
             </button>
             <button
               type="button"
-              onClick={() => go(current ? "result" : "ask")}
+              onClick={backToThread}
               className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
             >
               {t("error.back")}
@@ -822,7 +1093,7 @@ export default function PickSheet({
             {errorKind === "unavailable" ? (
               <button
                 type="button"
-                onClick={() => go("ask")}
+                onClick={backToThread}
                 className={`flex min-h-12 w-full items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-white transition hover:bg-white/10 ${focusRing}`}
               >
                 {t("error.retry")}
@@ -831,7 +1102,7 @@ export default function PickSheet({
             {current ? (
               <button
                 type="button"
-                onClick={() => go("result")}
+                onClick={backToThread}
                 className={`mx-auto flex min-h-11 items-center rounded-xl px-3 text-sm text-white/55 transition hover:text-white ${focusRing}`}
               >
                 {t("error.back")}
@@ -861,32 +1132,37 @@ export default function PickSheet({
       onSave={(it) => void saveItem(it, "history")}
       onOpenService={(it, p) => openService(it, p, "history")}
       onAltSelect={(alt) => trackPickEvent("alt_select", { tmdbId: alt.tmdbId, fromSaved: alt.fromSaved, from: "history" })}
+      onContinue={/^[A-Za-z0-9_-]{1,64}$/.test(detail.sessionId) ? () => continueSession(detail) : undefined}
     />
   ) : (
     historyView
   );
 
-  const body =
-    view === "ask"
+  // Tråden (laddning + svar) när det finns turer; första frågans laddning har
+  // sin egen vy med statusraderna.
+  const inThread = (view === "loading" || view === "result") && turns.length > 0;
+
+  const body = inThread
+    ? threadView
+    : view === "ask"
       ? askView
       : view === "loading"
         ? loadingView
-        : view === "result"
-          ? resultView
-          : view === "paywall"
-            ? paywallView
-            : view === "history"
-              ? historyView
-              : view === "historyDetail"
-                ? detailView
+        : view === "paywall"
+          ? paywallView
+          : view === "history"
+            ? historyView
+            : view === "historyDetail"
+              ? detailView
+              : view === "result"
+                ? threadView
                 : errorView;
 
-  const viewKey =
-    view === "result" && current
-      ? `result-${current.id}-${itemKey(current.main)}`
-      : view === "historyDetail" && detail
-        ? `detail-${detail.sessionId}`
-        : view;
+  const viewKey = inThread
+    ? "thread"
+    : view === "historyDetail" && detail
+      ? `detail-${detail.sessionId}`
+      : view;
 
   const headerTitle =
     view === "history"
@@ -898,7 +1174,13 @@ export default function PickSheet({
   return createPortal(
     <AnimatePresence>
       {open ? (
-        <div key="pick-sheet" data-blocking-sheet className="fixed inset-0 z-[65] flex items-end justify-center">
+        <div
+          key="pick-sheet"
+          data-blocking-sheet
+          className="fixed inset-0 z-[65] flex items-end justify-center"
+          // Följ den visuella viewporten (tangentbordet på iOS), se useViewportBox.
+          style={viewport ? { top: viewport.top, height: viewport.height, bottom: "auto" } : undefined}
+        >
           <motion.button
             type="button"
             tabIndex={-1}
@@ -916,7 +1198,16 @@ export default function PickSheet({
             aria-modal="true"
             aria-labelledby="pick-sheet-title"
             tabIndex={-1}
-            className="relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-[28px] border-t border-white/10 bg-neutral-900 shadow-[0_-18px_60px_rgba(0,0,0,0.6)] outline-none"
+            className={`relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-[28px] border-t border-white/10 bg-neutral-900 shadow-[0_-18px_60px_rgba(0,0,0,0.6)] outline-none ${
+              inThread ? "h-[88dvh]" : ""
+            }`}
+            // Med tangentbordet uppe: arket får hela den synliga höjden (minus
+            // en liten glipa) i stället för 88dvh, som på iOS inte krymper.
+            style={
+              viewport?.keyboard
+                ? { maxHeight: viewport.height - 8, ...(inThread ? { height: viewport.height - 8 } : null) }
+                : undefined
+            }
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -982,7 +1273,9 @@ export default function PickSheet({
 
             <div
               ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-1"
+              className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 ${
+                inThread ? "pb-4" : "pb-[calc(env(safe-area-inset-bottom)+20px)]"
+              }`}
             >
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -997,6 +1290,8 @@ export default function PickSheet({
                 </motion.div>
               </AnimatePresence>
             </div>
+
+            {inThread ? composer : null}
           </motion.div>
         </div>
       ) : null}

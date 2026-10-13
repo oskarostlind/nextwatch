@@ -2,7 +2,8 @@
 
 // "Välj åt mig" — delade byggstenar för arket (PickSheet) och historiken
 // (PickHistory): affisch, valkortet med motivering + knappar, "Eller kanske"-
-// raderna och användarens fråga som en liten pratbubbla.
+// raderna, användarens fråga som en liten pratbubbla och AI:ns svar (i den
+// aktuella turen står motiveringen som ett chattsvar ovanför kortet).
 //
 // Kortet finns i två storlekar: "full" för det aktuella förslaget och
 // "compact" för äldre förslag (uppfällda rader i tråden och historiken). Båda
@@ -10,7 +11,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Bookmark, BookmarkCheck, Heart, Info, PlayCircle } from "lucide-react";
+import { Bookmark, BookmarkCheck, Heart, Info, PlayCircle, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { PickChipId, PickItem } from "@/lib/aiPick/types";
 import { providerWatchUrl } from "@/lib/watchLinks";
@@ -111,6 +112,35 @@ export function AskBubble({ text, lines = 1 }: { text: string; lines?: 1 | 3 }) 
   );
 }
 
+/** AI:ns svar i tråden — vänsterställd text, ingen bubbla (lugnare). */
+export function AiReply({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <div className="flex items-start gap-2">
+      <Sparkles className="mt-[5px] h-3.5 w-3.5 shrink-0 text-cyan-300/70" aria-hidden />
+      <p className="min-w-0 flex-1 text-[15px] leading-relaxed text-white/85">{text}</p>
+    </div>
+  );
+}
+
+/** "Skriver …" medan ett följdsvar hämtas. */
+export function TypingReply({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="flex items-center gap-2">
+      <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-300/70" aria-hidden />
+      <span className="inline-flex items-center gap-1 rounded-2xl rounded-bl-md bg-white/[0.06] px-3 py-2.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/55 motion-reduce:animate-none"
+            style={{ animationDelay: `${i * 0.2}s` }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 /* ---------- små byggstenar ---------- */
 
 export function Poster({
@@ -204,6 +234,11 @@ export type PickCardProps = {
   onOpenService: (item: PickItem, provider: string) => void;
   size?: "full" | "compact";
   titleId?: string;
+  /**
+   * false: motiveringen visas utanför kortet (som AI:ns chattsvar i tråden) —
+   * kortet visar då ingen text för originalvalet (sammanfattningen bakom "Visa info").
+   */
+  reasonInline?: boolean;
 };
 
 export function PickCard({
@@ -218,6 +253,7 @@ export function PickCard({
   onOpenService,
   size = "full",
   titleId,
+  reasonInline = true,
 }: PickCardProps) {
   const t = useTranslations("pick");
   const [infoOpen, setInfoOpen] = useState(false);
@@ -269,7 +305,9 @@ export function PickCard({
       </div>
 
       {isOriginal && reason ? (
-        <p className={`leading-relaxed text-white/80 ${full ? "text-[15px]" : "text-sm"}`}>{reason}</p>
+        reasonInline ? (
+          <p className={`leading-relaxed text-white/80 ${full ? "text-[15px]" : "text-sm"}`}>{reason}</p>
+        ) : null
       ) : main.overview ? (
         <p className={`line-clamp-3 leading-relaxed text-white/70 ${full ? "text-[15px]" : "text-sm"}`}>
           {main.overview}

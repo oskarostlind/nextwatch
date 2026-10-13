@@ -149,12 +149,43 @@ const SURPRISE_RE = rx("överrask|surprise|något nytt|something new|random|slum
 const MOVIE_RE = /film|movie/iu;
 const TV_RE = /serie|series|tv[- ]?show|avsnitt|episod|säsong|season|binge/iu;
 
-const LIGHT_GENRES = { movie: [35, 10749, 10751], tv: [35, 10751] };
-const THRILL_GENRES = { movie: [53, 27, 80, 9648], tv: [80, 9648, 10759, 10765] };
-const LIGHT_AVOID = { movie: [27, 53], tv: [] as number[] };
+export const LIGHT_GENRES = { movie: [35, 10749, 10751], tv: [35, 10751] };
+export const THRILL_GENRES = { movie: [53, 27, 80, 9648], tv: [80, 9648, 10759, 10765] };
+export const LIGHT_AVOID = { movie: [27, 53], tv: [] as number[] };
 
-const SHORT_MOVIE_MAX = 90; // chippet heter "Max 90 min" — håll siffrorna lika
-const SHORT_TV_MAX = 35;
+export const SHORT_MOVIE_MAX = 90; // chippet heter "Max 90 min" — håll siffrorna lika
+export const SHORT_TV_MAX = 35;
+
+/** Fritextens film/serie-ledtråd (null = ingen eller båda). */
+export function mediaHintOf(text: string | null | undefined): MediaType | null {
+  const t = (text ?? "").toLowerCase();
+  if (!t) return null;
+  const m = MOVIE_RE.test(t);
+  const s = TV_RE.test(t);
+  if (m && !s) return "movie";
+  if (s && !m) return "tv";
+  return null;
+}
+
+export type GenreIntent = { movie: number[]; tv: number[]; labels: string[]; anyTv: boolean; wantsFamily: boolean };
+
+/** Bara de uttryckligen nämnda genrerna (ingen stämning, ingen speltid). */
+export function explicitGenres(text: string | null | undefined): GenreIntent {
+  const t = (text ?? "").toLowerCase();
+  const out: GenreIntent = { movie: [], tv: [], labels: [], anyTv: false, wantsFamily: false };
+  if (!t) return out;
+  for (const rule of GENRE_RULES) {
+    if (!rule.re.test(t)) continue;
+    out.labels.push(rule.label);
+    out.movie.push(...rule.movie);
+    out.tv.push(...rule.tv);
+    if (rule.tv.length > 0) out.anyTv = true;
+    if (rule.label === "family" || rule.label === "animation") out.wantsFamily = true;
+  }
+  out.movie = uniq(out.movie);
+  out.tv = out.anyTv ? uniq(out.tv) : [];
+  return out;
+}
 
 function uniq(nums: number[]): number[] {
   return Array.from(new Set(nums));
@@ -187,20 +218,13 @@ const EPISODE_RE = /avsnitt|episod|episode/iu;
 export function parseIntent(prompt: string | null | undefined, chips: readonly PickChipId[] = []): PickIntent {
   const text = (prompt ?? "").toLowerCase();
   const chipSet = new Set(chips);
-  const terms: string[] = [];
 
-  const movieGenres: number[] = [];
-  const tvGenres: number[] = [];
-  let anyTvMapped = false;
-  let wantsFamily = false;
-  for (const rule of GENRE_RULES) {
-    if (!text || !rule.re.test(text)) continue;
-    terms.push(rule.label);
-    movieGenres.push(...rule.movie);
-    tvGenres.push(...rule.tv);
-    if (rule.tv.length > 0) anyTvMapped = true;
-    if (rule.label === "family" || rule.label === "animation") wantsFamily = true;
-  }
+  const g = explicitGenres(text);
+  const terms: string[] = [...g.labels];
+  const movieGenres: number[] = [...g.movie];
+  const tvGenres: number[] = [...g.tv];
+  let anyTvMapped = g.anyTv;
+  const wantsFamily = g.wantsFamily;
 
   const light = chipSet.has("light") || (text !== "" && LIGHT_RE.test(text));
   const thrilling = chipSet.has("thrilling") || (text !== "" && THRILL_RE.test(text));
@@ -241,14 +265,6 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
   }
   if (surprise) terms.push("surprise");
 
-  let mediaHint: MediaType | null = null;
-  if (text) {
-    const m = MOVIE_RE.test(text);
-    const t = TV_RE.test(text);
-    if (m && !t) mediaHint = "movie";
-    else if (t && !m) mediaHint = "tv";
-  }
-
   return {
     movieGenres: uniq(movieGenres),
     // Saknar ALLA nämnda genrer en TV-motsvarighet (t.ex. bara "historisk")
@@ -261,7 +277,7 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
     light,
     thrilling,
     surprise,
-    mediaHint,
+    mediaHint: mediaHintOf(text),
     wantsFamily,
     terms,
   };
@@ -1002,6 +1018,18 @@ export type BuildCandidatesInput = {
   prompt: string | null;
   exclude: number[];
   priority: SavedPriority;
+  /**
+   * Följdfråga i en konversation (lib/aiPick/followup.ts): önskemålen är redan
+   * sammanslagna över hela samtalet. Saknas → allt tolkas ur prompt/chips.
+   */
+  followUp?: {
+    intent: PickIntent;
+    filter: MediaFilter;
+    /** Fritextreferens ("tycker om House") — söks upp som vanligt. */
+    titleRef: TitleReference | null;
+    /** Känd referens ("mer som den" = förra förslaget) — ingen sökning. */
+    knownRef: CandidateReference | null;
+  };
 };
 
 /** Titeln användaren sa att den gillar, upplöst mot TMDB. */
@@ -1210,10 +1238,22 @@ async function resolveReference(
   const type = hit.media_type;
   const title = (type === "movie" ? hit.title : hit.name) || hit.original_title || hit.original_name || ref.query;
   const year = yearOf(type === "movie" ? hit.release_date : hit.first_air_date);
-  const label = `${title}${year ? ` (${year})` : ""}`;
+  return referenceItems({ tmdbId: hit.id, mediaType: type, title, year }, tmdbLocale);
+}
+
+/**
+ * recommendations + similar för en redan känd titel (2 cachade anrop). Används
+ * direkt av följdfrågan "mer som den" — titeln är förra förslaget, ingen sökning.
+ */
+async function referenceItems(
+  ref: CandidateReference,
+  tmdbLocale: string,
+): Promise<{ ref: CandidateReference; items: LiteItem[] }> {
+  const type = ref.mediaType;
+  const label = `${ref.title}${ref.year ? ` (${ref.year})` : ""}`;
   const [recs, similar] = await Promise.all([
-    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${hit.id}/recommendations`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
-    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${hit.id}/similar`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
+    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${ref.tmdbId}/recommendations`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
+    tmdbJson<{ results?: TmdbListResult[] }>(`/${type}/${ref.tmdbId}/similar`, { language: tmdbLocale, page: 1 }, DETAILS_REVALIDATE_S),
   ]);
   // Varva: recommendations (beteendebaserat, oftast bäst) först i varje par.
   const a = (recs?.results ?? []).filter((r) => Number.isFinite(r.id) && !r.adult);
@@ -1223,19 +1263,21 @@ async function resolveReference(
     if (a[i]) items.push(toLite(a[i], type, items.length, label));
     if (b[i]) items.push(toLite(b[i], type, items.length, label));
   }
-  return { ref: { tmdbId: hit.id, mediaType: type, title, year }, items };
+  return { ref, items };
 }
 
 /* ---------------- Huvudfunktion ---------------- */
 
 export async function buildCandidates(input: BuildCandidatesInput): Promise<CandidateSet | null> {
   const t0 = Date.now();
-  const intent = parseIntent(input.prompt, input.chips);
-  const filter = effectiveMediaFilter(input.mediaFilter, intent);
+  const fu = input.followUp ?? null;
+  const intent = fu ? fu.intent : parseIntent(input.prompt, input.chips);
+  const filter = fu ? fu.filter : effectiveMediaFilter(input.mediaFilter, intent);
   const wantType = (t: string) => filter === "both" || t === filter;
   const excludeIds = new Set(input.exclude);
   const constrained = intentHasConstraints(intent);
-  const titleRef = extractTitleReference(input.prompt);
+  const titleRef = fu ? fu.titleRef : extractTitleReference(input.prompt);
+  const knownRef = fu?.knownRef ?? null;
 
   const [profile, watch, ratings, stats] = await Promise.all([
     prisma.profile.findUnique({
@@ -1357,9 +1399,11 @@ export async function buildCandidates(input: BuildCandidatesInput): Promise<Cand
     return { lists, calls };
   })();
 
-  const similarPromise = titleRef
-    ? resolveReference(titleRef, titleRef.mediaHint ?? (filter !== "both" ? filter : null), input.tmdbLocale).catch(() => null)
-    : Promise.resolve(null);
+  const similarPromise = knownRef
+    ? referenceItems(knownRef, input.tmdbLocale).catch(() => null)
+    : titleRef
+      ? resolveReference(titleRef, titleRef.mediaHint ?? (filter !== "both" ? filter : null), input.tmdbLocale).catch(() => null)
+      : Promise.resolve(null);
 
   const liteEnrichedPromise = Promise.all([discoverPromise, similarPromise]).then(async ([disc, sim]) => {
     const refKey = sim ? candidateKey(sim.ref.mediaType, sim.ref.tmdbId) : null;

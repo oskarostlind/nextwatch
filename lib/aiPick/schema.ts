@@ -30,6 +30,19 @@ export const pickRequestSchema = z.object({
     .max(PICK_SESSION_ID_MAX)
     .regex(/^[A-Za-z0-9_-]+$/)
     .optional(),
+  followUpOf: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional(),
+  focus: z
+    .object({
+      tmdbId: z.number().int().positive(),
+      mediaType: z.enum(["movie", "tv"]),
+    })
+    .optional(),
+  markSeen: z.boolean().optional(),
 });
 
 /** GET /api/pick/history — `before` (ISO) + `limit` (1..30, default 15). */

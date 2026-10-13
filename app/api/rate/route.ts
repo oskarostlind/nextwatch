@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { prisma } from "../../../lib/prisma";
 import { getSwipeAllowance, swipeLimitPayload } from "../../../lib/swipeLimit";
-import { recordSwipeGenres } from "../../../lib/genreStats";
+import { saveSwipeDecision } from "../../../lib/swipeDecision";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Decision = "like"|"dislike"|"skip"|"seen";
-
-function newId() { return Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2); }
 
 export async function POST(req: Request) {
   try {
@@ -28,19 +25,10 @@ export async function POST(req: Request) {
       return NextResponse.json(await swipeLimitPayload(allowance), { status: 429 });
     }
 
-    // OBS: rating röres INTE här. Tidigare nollades den vid varje swipe, vilket
-    // raderade nysatta betyg i sett-flödet: swipen skjuter /api/rate parallellt
-    // med att betygsmodalen sparar via /api/ratings/save, och när det här
-    // anropet (efter swipegräns-kollen) landade sist vann rating: null.
-    // Betyget ägs av betygsflödena — ett svep ändrar bara beslutet.
-    await prisma.rating.upsert({
-      where: { userId_tmdbId_mediaType: { userId: uid, tmdbId, mediaType } },
-      update: { decision, decidedAt: new Date() },
-      create: { id: newId(), userId: uid, tmdbId, mediaType, decision },
-    });
-
-    // Beteendebaserad genrestatistik (lib/genreStats.ts) — fire-and-forget.
-    void recordSwipeGenres({ userId: uid, tmdbId, mediaType, decision });
+    // Samma skrivning som "Har sett den" i Välj åt mig (lib/swipeDecision.ts):
+    // upsert av beslutet — rating rörs INTE (se kommentaren där) — plus
+    // genrestatistiken fire-and-forget.
+    await saveSwipeDecision({ userId: uid, tmdbId, mediaType, decision });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

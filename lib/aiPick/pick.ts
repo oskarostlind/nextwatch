@@ -10,7 +10,8 @@
 // 'no_candidates'/'error' annars. Bara 'ok' förbrukar.
 //
 // Fallback: misslyckas LLM-anropet eller är svaret ogiltigt väljs
-// deterministiskt med samma SAVED-först-prioritet som prompten, med en
+// deterministiskt med samma rangordning som urvalet (önskemål nu > kvalitet >
+// smak > SAVED-bonus vid stark passform > speltid), med en
 // generisk lokaliserad motivering. Användaren fick ett val → status 'ok', men
 // felet loggas i `error`.
 //
@@ -98,6 +99,10 @@ export type PickDebug = {
   effectiveFilter: MediaFilter | null;
   pipeline: Record<string, number | boolean> | null;
   reference: string | null;
+  /** Upplösta favoriter ("Inception (2010)") som gäller samtalet. */
+  loved: string[];
+  /** Speltidstaket luckrades upp hit (för få bra träffar), annars null. */
+  runtimeRelaxedTo: number | null;
   constrained: boolean;
   followUp: {
     turns: number;
@@ -151,6 +156,8 @@ function emptyDebug(): PickDebug {
     effectiveFilter: null,
     pipeline: null,
     reference: null,
+    loved: [],
+    runtimeRelaxedTo: null,
     constrained: false,
     followUp: null,
   };
@@ -204,7 +211,12 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       focus: itemLabel(focus),
       terms: merged.intent.terms,
       filter: merged.filter,
-      reference: ref ? (ref.kind === "known" ? `known ${itemLabel(ref.item)}` : `text "${ref.ref.query}"`) : null,
+      reference: [
+        merged.knownRef ? `known ${itemLabel(merged.knownRef)}` : null,
+        merged.refQueries.length ? `refs ${merged.refQueries.map((r) => `"${r.query}"`).join(", ")}` : null,
+      ]
+        .filter(Boolean)
+        .join("; ") || (ref ? `text "${ref.kind === "text" ? ref.ref.query : ""}"` : null),
       markSeen: null,
     };
   }
@@ -263,18 +275,19 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
         ? {
             intent: merged.intent,
             filter: merged.filter,
-            titleRef: merged.reference?.kind === "text" ? merged.reference.ref : null,
-            knownRef:
-              merged.reference?.kind === "known"
-                ? {
-                    tmdbId: merged.reference.item.tmdbId,
-                    mediaType: merged.reference.item.mediaType,
-                    // Titeln saknas bara om historiken rensats — etiketten måste
-                    // ändå vara icke-tom, annars tappar kandidaterna "similar to".
-                    title: merged.reference.item.title ?? "the previous suggestion",
-                    year: merged.reference.item.year,
-                  }
-                : null,
+            // Favoriterna från HELA samtalet ("Mina favoriter är X, Y och Z" i tur 1
+            // gäller fortfarande i tur 3).
+            refs: merged.refQueries,
+            knownRef: merged.knownRef
+              ? {
+                  tmdbId: merged.knownRef.tmdbId,
+                  mediaType: merged.knownRef.mediaType,
+                  // Titeln saknas bara om historiken rensats — etiketten måste
+                  // ändå vara icke-tom, annars tappar kandidaterna "similar to".
+                  title: merged.knownRef.title ?? "the previous suggestion",
+                  year: merged.knownRef.year,
+                }
+              : null,
           }
         : undefined,
     });
@@ -296,6 +309,8 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     debug.pipeline = { ...set.debug };
     debug.constrained = set.constrained;
     debug.reference = set.reference ? `${set.reference.mediaType}:${set.reference.tmdbId} ${set.reference.title}` : null;
+    debug.loved = set.lovedTitles.map((l) => `${l.title}${l.year ? ` (${l.year})` : ""}`);
+    debug.runtimeRelaxedTo = set.runtimeRelaxedTo;
 
     const byKey = new Map(set.candidates.map((c) => [c.key, c] as const));
     const system = buildSystemPrompt({ uiLocale, priority, followUp: merged !== null });
@@ -308,12 +323,16 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
       candidates: set.candidates,
       constrained: set.constrained,
       reference: set.reference,
+      // Favoriterna (hela samtalet) + ev. uppluckrad speltid — se llm.ts.
+      lovedTitles: set.lovedTitles,
+      runtimeRelaxedTo: set.runtimeRelaxedTo,
       conversation: merged
         ? {
             turns,
             focus,
             seen: merged.seenItem,
-            wishes: describeWishes(merged.intent, merged.filter),
+            // set.intent = de sammanslagna önskemålen inkl. ev. uppluckrad speltid.
+            wishes: describeWishes(set.intent, set.effectiveFilter),
           }
         : null,
     });

@@ -567,6 +567,9 @@ function regionProviders(d: TmdbDetailsRaw, region: string): CandidateProvider[]
   return out.sort((a, b) => a.prio - b.prio).map(({ id, name, logoPath }) => ({ id, name, logoPath }));
 }
 
+// Bokstäver utanför latin (CJK, hangul, kyrilliska …) — se fetchCandidate.
+const NON_LATIN = /[^\p{Script=Latin}\p{N}\p{P}\p{S}\s]/u;
+
 async function fetchCandidate(
   input: DetailsInput,
   tmdbLocale: string,
@@ -579,8 +582,20 @@ async function fetchCandidate(
     DETAILS_REVALIDATE_S,
   );
   if (!d || !d.id) return null;
-  const title = (input.mediaType === "movie" ? d.title : d.name) ?? "";
+  let title = (input.mediaType === "movie" ? d.title : d.name) ?? "";
   if (!title) return null;
+  // TMDB faller tillbaka på originaltiteln när svensk översättning saknas —
+  // för anime/k-drama blir det 鬼滅の刃 i stället för Demon Slayer. Prova den
+  // engelska titeln (cachad) när titeln inte är i latinskt alfabet.
+  if (NON_LATIN.test(title) && tmdbLocale !== "en-US") {
+    const en = await tmdbJson<TmdbDetailsRaw>(
+      `/${input.mediaType}/${input.tmdbId}`,
+      { language: "en-US" },
+      DETAILS_REVALIDATE_S,
+    );
+    const enTitle = (input.mediaType === "movie" ? en?.title : en?.name) ?? "";
+    if (enTitle && !NON_LATIN.test(enTitle)) title = enTitle;
+  }
   const providers = regionProviders(d, region);
   const overview = (d.overview ?? "").trim();
   return {

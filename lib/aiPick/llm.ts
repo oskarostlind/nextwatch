@@ -46,7 +46,10 @@ export function costUsd(inputTokens: number, outputTokens: number): number {
 }
 
 export const LLM_TIMEOUT_MS = 12_000;
-export const LLM_MAX_TOKENS = 600;
+// Haiku 5.5 tänker adaptivt och tankeblocket räknas mot max_tokens — med 600
+// tog tänkandet hela budgeten (stop_reason=max_tokens, tom text) i prod-testet.
+// effort "low" minimerar tänkandet; taket ger marginal om det ändå sker.
+export const LLM_MAX_TOKENS = 2000;
 export const REASON_MAX = 200;
 
 /* ======================================================================
@@ -333,6 +336,7 @@ export async function callPickLlm(system: string, user: string): Promise<LlmCall
       body: JSON.stringify({
         model,
         max_tokens: LLM_MAX_TOKENS,
+        output_config: { effort: process.env.PICK_EFFORT || "low" },
         system,
         messages: [{ role: "user", content: user }],
       }),

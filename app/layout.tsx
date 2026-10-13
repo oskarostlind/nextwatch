@@ -12,6 +12,7 @@ import IphoneAppBar from "./components/client/IphoneAppBar";
 import AcquisitionBeacon from "./components/client/AcquisitionBeacon";
 import ActivityBeacon from "./components/client/ActivityBeacon";
 import FunnelTracker from "./components/client/FunnelTracker";
+import VersionWatcher from "./components/client/VersionWatcher";
 import { adsFeatureEnabled, adsenseClientId } from "@/lib/ads";
 import { bcp47 } from "@/lib/i18nConfig";
 import { APP_STORE_ID, SITE_URL } from "@/lib/seo";
@@ -115,6 +116,8 @@ export default async function RootLayout({
           <ActivityBeacon />
           {/* Första-besöks-tratten — var nya användare tappar. Se lib/funnel.ts. */}
           <FunnelTracker />
+          {/* Ny deploy → ladda om gamla klienter när appen/fliken väcks. */}
+          <VersionWatcher />
 
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />

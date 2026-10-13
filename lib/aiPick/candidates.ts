@@ -289,10 +289,14 @@ export function intentHasGenreFilter(intent: PickIntent, mediaType?: MediaType):
   return intent.movieGenres.length > 0 || intent.tvGenres.length > 0;
 }
 
-/** Effektivt film/serie-filter: explicit filter vinner, annars fritextens ledtråd. */
+/**
+ * Effektivt film/serie-filter. Det användaren SKRIVER vinner över swipe-vyns
+ * filter: "Kan du rekommendera en film?" med Serier valt i swipen gav en serie
+ * (prod 2026-10-13). mediaHintOf ger bara en typ när texten nämner exakt en av
+ * dem, så "favoritfilmer … ge mig en serie" faller tillbaka på filtret.
+ */
 export function effectiveMediaFilter(filter: MediaFilter, intent: PickIntent): MediaFilter {
-  if (filter !== "both") return filter;
-  return intent.mediaHint ?? "both";
+  return intent.mediaHint ?? filter;
 }
 
 type IntentCheckable = Pick<PickCandidate, "mediaType" | "genreIds" | "runtimeMin">;

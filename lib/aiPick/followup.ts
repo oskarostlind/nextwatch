@@ -295,7 +295,9 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
       maxTv = minOrNull(maxTv, base.maxRuntimeTv);
     }
 
-    if (base.mediaHint) media = { type: base.mediaHint, explicit: sig.mediaSwitch !== null };
+    // Skriven typ vinner alltid över swipe-filtret (se effectiveMediaFilter) —
+    // även i första meddelandet, inte bara vid "hellre en film".
+    if (base.mediaHint) media = { type: base.mediaHint, explicit: true };
 
     const tref = extractTitleReference(m.prompt);
     if (tref) reference = { kind: "text", ref: tref };

@@ -8,6 +8,10 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Byggets commit bakas in i klienten så att VersionWatcher kan jämföra mot
+  // /api/version och ladda om en gammal klient (iOS-appen hålls öppen i dagar
+  // och laddar annars aldrig in nya deployer).
+  env: { NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "" },
   // Tab-tillbaka-navigering serveras ur klientens router-cache i 60s i stället
   // för en ny serverrendering (Next 15 defaultar staleTimes.dynamic till 0, så
   // varje flik-tryck gick till servern). Varje flik re-hämtar ändå sin data

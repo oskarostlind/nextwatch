@@ -40,6 +40,7 @@ import {
   SHORT_MOVIE_MAX,
   SHORT_TV_MAX,
   MOOD_GENRES,
+  moodAvoidCompatible,
   withoutReferences,
   type Mood,
   type GenreIntent,
@@ -290,6 +291,8 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
   const refLists: RefQuery[][] = [];
   const followTerms = new Set<string>();
   let newestBase: PickIntent = parseIntent(null, []);
+  /** "Klassiker"/ett årtionde någon gång i samtalet → gamla titlar straffas inte. */
+  let wantsClassic = false;
   let newestSig: FollowUpSignals = parseFollowUp(null);
 
   for (let k = 0; k < msgs.length; k++) {
@@ -301,6 +304,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     const base = parseIntent(stripped, m.chips);
     newestBase = base;
     newestSig = sig;
+    if (base.wantsClassic) wantsClassic = true;
 
     const g = explicitGenres(text);
     if (g.labels.length > 0) {
@@ -374,12 +378,20 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
   let avoidMovieGenres: number[] = [];
   let avoidTvGenres: number[] = [];
   let wantsFamily = false;
+  let strictAvoid = false;
   const terms: string[] = [];
   if (g && !moodWins) {
     movieGenres = [...g.movie];
     tvGenres = [...g.tv];
     wantsFamily = g.wantsFamily;
     terms.push(...g.labels);
+    // Stämning i SAMMA meddelande som genren ("feel-good and funny") styr vad
+    // som undviks, så länge den inte krockar med genren ("mysig skräck").
+    if (md && moodAt === genreAt && moodAvoidCompatible(MOOD_GENRES[md].avoid, [...g.movie, ...g.tv])) {
+      avoidMovieGenres = [...MOOD_GENRES[md].avoid.movie];
+      avoidTvGenres = [...MOOD_GENRES[md].avoid.tv];
+      strictAvoid = md === "light";
+    }
   } else if (md) {
     // Stämningen (även en äldre som bara följts av speltidsändringar) styr
     // genrerna och vad som aldrig får föreslås.
@@ -388,6 +400,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     tvGenres = [...mg.genres.tv];
     avoidMovieGenres = [...mg.avoid.movie];
     avoidTvGenres = [...mg.avoid.tv];
+    strictAvoid = md === "light";
   }
   if (md) terms.push(md);
   const mx = maxMovie;
@@ -397,6 +410,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
   const runtimeSoft = (mx != null || mt != null) && !runtimeExplicit && Math.max(moodAt, genreAt) > runtimeAt;
   if (mx != null || mt != null) terms.push(`maxM${mx ?? "-"}/T${mt ?? "-"}${runtimeSoft ? "~" : ""}`);
   if (newestBase.surprise) terms.push("surprise");
+  if (wantsClassic) terms.push("classic");
   const sig = newestSig;
   if (sig.lighter) followTerms.add("fu:lighter");
   if (sig.darker) followTerms.add("fu:darker");
@@ -420,6 +434,8 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     light: md === "light",
     thrilling: md === "thrilling",
     mindbend: md === "mindbend",
+    strictAvoid,
+    wantsClassic,
     surprise: newestBase.surprise,
     mediaHint: med?.type ?? null,
     wantsFamily,
@@ -568,11 +584,12 @@ export function describeWishes(intent: PickIntent, filter: MediaFilter): string 
       t !== "light" &&
       t !== "thrilling" &&
       t !== "mindbend" &&
+      t !== "classic" &&
       t !== "surprise" &&
       t !== "short",
   );
   if (genres.length) parts.push(`genre: ${genres.join(" or ")}`);
-  if (intent.light) parts.push("mood: light / feel-good (no horror/thriller)");
+  if (intent.light) parts.push("mood: light / feel-good (no horror, thriller or war)");
   if (intent.thrilling) parts.push("mood: dark / thrilling (no comedy, family or romance)");
   if (intent.mindbend) parts.push("mood: mind-bending / twisty (mystery, thriller, sci-fi; no comedy, family, romance or animation)");
   const rt = (max: number, relaxed: number | null, unit: string) =>

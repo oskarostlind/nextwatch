@@ -55,7 +55,10 @@ export function costUsd(inputTokens: number, outputTokens: number): number {
   return (inputTokens * pIn) / 1e6 + (outputTokens * pOut) / 1e6;
 }
 
-export const LLM_TIMEOUT_MS = 12_000;
+// 15 s: prompten växte med <loves> + fler kandidater och en prod-eval
+// 2026-10-13 slog i 12 s-taket en gång (→ generisk reservmotivering).
+// Rutten har maxDuration 30 och kandidatbygget tar normalt några sekunder.
+export const LLM_TIMEOUT_MS = 15_000;
 // Haiku 5.5 tänker adaptivt och tankeblocket räknas mot max_tokens — med 600
 // tog tänkandet hela budgeten (stop_reason=max_tokens, tom text) i prod-testet.
 // effort "low" minimerar tänkandet; taket ger marginal om det ändå sker.

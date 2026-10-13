@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems } from "../lib/nav";
+import { sidebarItems } from "../lib/nav";
 import { useTranslations } from "next-intl";
 
 export default function Sidebar() {
@@ -17,7 +17,7 @@ export default function Sidebar() {
         NextWatch
       </div>
       <nav className="flex-1 space-y-2 px-4">
-        {navItems.map((item) => {
+        {sidebarItems.map((item) => {
           const Icon = item.icon;
           const active =
             pathname === item.href ||

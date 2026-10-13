@@ -448,9 +448,14 @@ export default function GroupSwipePage({ code }: { code: string }) {
       {/* Lyssnar på "nw:admob-ad-shown" — utan den visas interstitials i
           gruppläget men aldrig uppföljande upsell (premium / +swipes-video). */}
       <PremiumUpsellModal />
-      <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
+      {/* Kort + knappar: samma geometri som solo (app/swipe/page_client.tsx, se
+          kommentaren där). Ytterytan styr höjden; den inre (overflow-hidden)
+          slutar 38 px ovanför botten = knapparnas halva höjd + luft, så kortets
+          underkant hamnar mitt i knapparna och kortet aldrig klipps bakom dem. */}
+      <div className="relative min-h-0 flex-1">
+      <div className="absolute inset-x-0 top-0 bottom-[38px] overflow-hidden">
         {cards[0] ? (
-          <div className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">
+          <div className="absolute inset-x-1 top-2 bottom-0 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden">
             {stackIndices.map((idx) => {
               const card = cards[idx];
               if (!card) return null;
@@ -514,6 +519,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                         flipped={flippedId === card.id}
                         interactive
                         onFlip={() => setFlippedId((p) => (p === card.id ? null : card.id))}
+                        dockInset
                       />
                     </motion.div>
 
@@ -550,7 +556,7 @@ export default function GroupSwipePage({ code }: { code: string }) {
                     filter: "brightness(0.88)",
                   }}
                 >
-                  <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} />
+                  <StaticCard card={card} flipped={false} interactive={false} onFlip={() => {}} dockInset />
                 </div>
               );
             })}
@@ -582,19 +588,19 @@ export default function GroupSwipePage({ code }: { code: string }) {
         )}
       </div>
 
-      <div>
+      {/* Knapparna grenslar kortets underkant; raden släpper igenom pekaren
+          så drag bredvid knapparna når kortet. Info-knappen är borta — ett
+          tryck på kortet vänder det. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex h-[60px] items-center justify-center">
         <ActionDock
           disabled={!cards[0] || showLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
           // så knappen känns som ett bestämt kast i stället för en avspelning.
           onNope={() => void swipeOut("left", -900)}
-          onInfo={() => {
-            const c = cards[0];
-            if (c) setFlippedId((p) => (p === c.id ? null : c.id));
-          }}
           onUndo={handleUndo}
           onLike={() => void swipeOut("right", 900)}
         />
+      </div>
       </div>
 
       <RatingModal

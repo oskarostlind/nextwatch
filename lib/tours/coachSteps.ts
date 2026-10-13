@@ -5,7 +5,7 @@
 // beskriver faktiskt är på skärmen.
 import type { CoachTourStep } from "./types";
 
-/** Ersätter den gamla femstegskedjan över tabbraden med EN ruta. */
+/** Ersätter den gamla stegkedjan över tabbraden med EN ruta (fyra flikar + avataren). */
 export const NAV_TOUR_STEPS: CoachTourStep[] = [
   {
     mode: "coach",
@@ -19,6 +19,8 @@ export const NAV_TOUR_STEPS: CoachTourStep[] = [
       { icon: "group", key: "navTour.s0.group" },
       { icon: "discover", key: "navTour.s0.discover" },
       { icon: "watchlist", key: "navTour.s0.watchlist" },
+      // Profil är ingen flik sedan 2026-10-13 — raden beskriver avataren uppe
+      // till höger på swipe-skärmen (copyn säger det, ikonen är densamma).
       { icon: "profile", key: "navTour.s0.profile" },
     ],
   },

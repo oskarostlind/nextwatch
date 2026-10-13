@@ -15,6 +15,7 @@ import { Button, Card, PageHeader, SegmentedTabs, fieldClass, dateFieldClass } f
 import { sanitizeUsernameInput, usernameValidOrEmpty } from "@/lib/usernameClient";
 import { AVATARS } from "@/lib/avatars";
 import Avatar from "@/app/components/ui/Avatar";
+import BackButton from "@/app/components/navigation/BackButton";
 import { openSubscriptionManagement } from "@/lib/premiumPurchase";
 import { adPrivacyOptionsRequired, showAdPrivacyOptions } from "@/lib/admobAds";
 import { getBillingStatus } from "@/lib/billingStore";
@@ -626,6 +627,8 @@ export default function ProfileClient({ initial }: Props) {
 
   return (
     <main className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 py-6">
+      {/* Profil är ingen flik längre (nås via avataren på swipe-skärmen) — egen väg tillbaka. */}
+      <BackButton className="-mt-3 mb-1" />
       <PageHeader eyebrow={t("eyebrow")} title={t("tabProfile")} right={<LogoutButton />} />
 
       {/* Gäster: permanent väg till konto (osynligt för alla andra). */}

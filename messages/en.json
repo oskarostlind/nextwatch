@@ -637,6 +637,7 @@
     "discover": "Discover",
     "group": "Group",
     "profile": "Profile",
+    "profileAndSettings": "Profile and settings",
     "swipe": "Recommendations",
     "watchlist": "Watchlist"
   },
@@ -719,6 +720,7 @@
     "bulletAdFree": "Completely ad-free",
     "bulletGroups": "Groups of up to 20 people — free fits 3",
     "bulletSwipes": "Unlimited swipes — free includes 100 per day",
+    "bulletPick": "Pick for me: 20 AI picks a month – let NextWatch choose tonight's movie",
     "bulletTaste": "Your taste profile: see which themes, directors and actors your swipes point to",
     "buyCta": "Get Premium – SEK 19/month",
     "checkoutFailed": "Couldn't start the payment.",
@@ -1217,10 +1219,10 @@
     },
     "navTour": {
       "s0": {
-        "body": "Five tabs along the bottom — that's the whole app.",
+        "body": "Four tabs along the bottom — and your profile behind the avatar, top right.",
         "discover": "Discover — browse freely by genre",
         "group": "Group — swipe with friends and match",
-        "profile": "Profile — services, language and your account",
+        "profile": "Avatar, top right — profile, services, language and your account",
         "swipe": "Swipe — your personal feed",
         "title": "Finding your way around",
         "watchlist": "Watchlist — everything you liked and rated"
@@ -1424,5 +1426,79 @@
     "saved": "Done! Your picks now match your services.",
     "error": "Couldn't save. Try again.",
     "skip": "Skip – change later in Profile"
+  },
+  "pick": {
+    "launcherAria": "Pick for me – let AI choose something to watch",
+    "coachmark": "New: let AI pick for you",
+    "coachmarkDismiss": "New: let AI pick for you. Tap to dismiss.",
+    "title": "Pick for me",
+    "subtitle": "Tell us what you're in the mood for. We start with what you've already saved.",
+    "close": "Close",
+    "chipsAria": "Quick picks",
+    "chips": {
+      "light": "Something light",
+      "short": "Max 90 min",
+      "thrilling": "Thrilling",
+      "surprise": "Surprise me"
+    },
+    "inputPlaceholder": "What are you in the mood for?",
+    "inputAria": "Describe what you're in the mood for",
+    "send": "Send",
+    "loadingAria": "Picking for you",
+    "loading": {
+      "saved": "Checking your saved titles…",
+      "taste": "Weighing in your taste…",
+      "services": "Checking what's on your services…",
+      "almost": "Almost there…"
+    },
+    "liked": {
+      "fromSaved": "From your saved titles",
+      "today": "You liked it today",
+      "yesterday": "You liked it yesterday",
+      "days": "You liked it {count} days ago",
+      "weeks": "You liked it {count, plural, one {a week} other {# weeks}} ago",
+      "months": "You liked it {count, plural, one {a month} other {# months}} ago",
+      "years": "You liked it {count, plural, one {a year} other {# years}} ago"
+    },
+    "likedMarker": "Liked",
+    "runtime": "{min} min",
+    "runtimeHm": "{h} h {m} min",
+    "runtimeEpisode": "{min} min/episode",
+    "providersAria": "Available on",
+    "openIn": "Open in {service}",
+    "showInfo": "Show info",
+    "hideInfo": "Hide info",
+    "save": "Save to my list",
+    "saved": "Saved to your list",
+    "savedToast": "Saved to your list",
+    "saveFailed": "Couldn't save. Try again.",
+    "another": "Show me something else",
+    "alternatives": "Or maybe",
+    "altAria": "Show {title} instead",
+    "quotaLeft": "{count, plural, =0 {That was your last pick} one {You have 1 pick left} other {You have # picks left}}",
+    "premiumNudge": "With Premium you get {count} picks a month, no ads",
+    "paywall": {
+      "title": "Let NextWatch pick",
+      "bodyFree": "Tell us what you're in the mood for and we'll pick a title – ideally something you liked but haven't watched yet.",
+      "bodyPremiumUsed": "You've used your {count} picks this month.",
+      "resetNote": "Your picks refill on the 1st of every month.",
+      "watchAd": "Watch a short ad → {count} picks",
+      "watchAdBusy": "Loading video…",
+      "adFailed": "The video couldn't be shown right now. Try again in a moment.",
+      "rewardLimit": "You've watched the maximum number of ads for today. Come back tomorrow.",
+      "premiumCta": "Premium · {count} picks a month, no ads · SEK 19/month",
+      "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
+    },
+    "error": {
+      "noCandidatesTitle": "Nothing fits right now",
+      "noCandidatesBody": "Try broadening: search both movies and series, or add more services in your profile.",
+      "tryBoth": "Search movies and series",
+      "editServices": "Change services",
+      "back": "Back",
+      "unavailableTitle": "That didn't work right now",
+      "unavailableBody": "We couldn't pick anything right now. Try again in a moment – no pick was used.",
+      "disabledBody": "This feature isn't available right now.",
+      "retry": "Try again"
+    }
   }
 }

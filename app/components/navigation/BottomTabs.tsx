@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { navItems } from "../lib/nav";
-import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { useSocial } from "../client/SocialProvider";
 import { useShareThreads } from "@/lib/threadsStore";
@@ -14,12 +13,12 @@ export default function BottomTabs() {
   const pathname = usePathname();
   const t = useTranslations("nav");
 
-  // Optimistisk aktiv-pill: flytta pillen redan vid trycket i stället för när
+  // Optimistisk aktiv-markering: flytta den redan vid trycket i stället för när
   // navigeringen är klar — fliken KÄNNS omedelbar även om RSC-svaret dröjer.
   //
   // Sätts på click, INTE på pointerdown: ett pointerdown som aldrig blir ett
   // tryck (fingret dras bort igen, eller tabbraden nuddas av misstag) startar
-  // ingen navigering, så pathname ändras aldrig och pillen skulle bli kvar på
+  // ingen navigering, så pathname ändras aldrig och markeringen skulle bli kvar på
   // fel flik tills nästa navigering. click fyras bara vid ett fullbordat tryck
   // och ligger ändå före routerns arbete, så hela vinsten är kvar.
   const [pending, setPending] = useState<string | null>(null);
@@ -37,16 +36,14 @@ export default function BottomTabs() {
     social.pendingIn.length + social.invitesIncoming.length + unseenChats;
 
   return (
-    // Behåller ditt z-20 och backdrop-blur
-    <div className="sticky bottom-0 z-20 border-t border-neutral-800/80 bg-neutral-900/70 backdrop-blur">
-      {/* Justera grid och padding för att få plats med den växande pill-fliken.
-        Flexbox är ofta lättare än grid här eftersom barnen ändrar storlek.
-      */}
+    // Platt, tyst chrome (2026-10-13): bakgrunden smälter in i sidan och bara en
+    // hårfin kant skiljer raden från innehållet — fyra ikoner, inte fyra knappar.
+    <div className="sticky bottom-0 z-20 border-t border-white/[0.04] bg-neutral-950/90 backdrop-blur">
       <div
         // Målet för nav-hinten (lib/tours/coachSteps.ts NAV_TOUR_STEPS) — hela
-        // raden pekas ut i EN ruta i stället för fem modaler i rad.
+        // raden pekas ut i EN ruta i stället för en modal per flik.
         data-tour="nav-tabs"
-        className="mx-auto flex max-w-3xl items-center justify-around gap-1 px-2 py-2 pb-[calc(env(safe-area-inset-bottom)+8px)]"
+        className="mx-auto flex max-w-3xl items-center justify-around px-2 pt-1 pb-[calc(env(safe-area-inset-bottom)+4px)]"
       >
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -67,33 +64,35 @@ export default function BottomTabs() {
               prefetch={true}
               onClick={(e) => {
                 // Modifierat klick (öppna i ny flik på webben) navigerar inte
-                // i den här vyn — då ska pillen inte flytta sig heller.
+                // i den här vyn — då ska markeringen inte flytta sig heller.
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                 setPending(item.href);
               }}
               aria-label={t(item.labelKey)}
               aria-current={active ? "page" : undefined}
-              className="group relative flex h-12 w-12 items-center justify-center rounded-full transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+              // 44 px hög och 64 px bred: tryckytan är större än ikonen så
+              // tummen inte behöver sikta, fast raden ser smalare ut.
+              className="group relative flex h-11 w-16 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
             >
-              {/* Animering för den aktiva bakgrunden ("pillen") – ikon-only, ingen text.
-                  Kritiskt dämpad fjäder — snärtig utan studs. */}
-              {active && (
-                <motion.div
-                  layoutId="activeTabPill"
-                  className="absolute inset-0 rounded-full bg-white"
-                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                />
-              )}
-
               <Icon
+                aria-hidden
                 className={[
-                  "relative z-10 h-6 w-6 transition-[color,transform] duration-100 group-active:scale-90",
-                  active ? "text-neutral-900" : "text-neutral-400 hover:text-neutral-300",
+                  "h-6 w-6 transition-[color,transform] duration-100 group-active:scale-90",
+                  active ? "text-white" : "text-neutral-500 hover:text-neutral-300",
                 ].join(" ")}
               />
 
+              {/* Aktiv flik = vit ikon + en liten prick under. Ingen pill och
+                  ingen layoutId-animation: markeringen ska synas, inte röra sig. */}
+              <span
+                aria-hidden
+                className={`absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-white transition-opacity duration-150 ${
+                  active ? "opacity-100" : "opacity-0"
+                }`}
+              />
+
               {item.href === "/group" && groupBadge > 0 && (
-                <span className="absolute right-1 top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold tabular-nums text-black">
+                <span className="absolute left-1/2 top-0.5 z-20 ml-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold tabular-nums text-black">
                   {groupBadge > 9 ? "9+" : groupBadge}
                 </span>
               )}

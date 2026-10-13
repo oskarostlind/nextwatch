@@ -21,6 +21,10 @@
 //     steg och var de som aldrig kom tillbaka lämnade (lib/funnel.ts).
 //   - "← Appen" i toppen — /admin har ingen app-chrome (AppShell) att gå
 //     tillbaka med.
+//
+// 2026-10-13: flik "Välj åt mig" (PickPanel, /api/admin/pick-stats) — AI-valets
+// användning, upplåsningar och kostnad. Flikraden scrollar i sidled på smala
+// skärmar nu när flikarna är sex.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
@@ -31,6 +35,7 @@ import RetentionPanel, { pct, type RetentionData } from "./RetentionPanel";
 import FunnelPanel, { type FunnelData } from "./FunnelPanel";
 import MailPanel, { MailComposer, type ComposeDraft } from "./MailPanel";
 import AdsPanel from "./AdsPanel";
+import PickPanel from "./PickPanel";
 import { acquisitionLabel } from "@/lib/acquisition";
 
 type Stats = {
@@ -83,7 +88,7 @@ type AdminUser = {
 
 type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
 
-type Tab = "overview" | "funnel" | "retention" | "users" | "mail";
+type Tab = "overview" | "funnel" | "retention" | "users" | "mail" | "pick";
 type Sort = "newest" | "active" | "ratings";
 
 const RANGES = [7, 30, 90, 365] as const;
@@ -157,7 +162,7 @@ export default function AdminClient() {
   // Djuplänk från push ("Mejl från …") → /admin?tab=mail
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "mail" || t === "users" || t === "funnel" || t === "retention") setTab(t);
+    if (t === "mail" || t === "users" || t === "funnel" || t === "retention" || t === "pick") setTab(t);
   }, []);
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
 
@@ -361,7 +366,7 @@ export default function AdminClient() {
             Appen
           </a>
         </div>
-        <div className="mt-3 grid grid-cols-5 gap-1 rounded-xl bg-white/[0.06] p-1">
+        <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl bg-white/[0.06] p-1 [scrollbar-width:none]">
           {(
             [
               ["overview", "Översikt"],
@@ -369,13 +374,14 @@ export default function AdminClient() {
               ["retention", "Retention"],
               ["users", "Användare"],
               ["mail", "Mejl"],
+              ["pick", "Välj åt mig"],
             ] as const
           ).map(([k, label]) => (
             <button
               key={k}
               type="button"
               onClick={() => setTab(k)}
-              className={`truncate rounded-lg px-0.5 py-2 text-[13px] font-semibold transition sm:text-sm ${
+              className={`flex-1 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-semibold transition sm:text-sm ${
                 tab === k ? "bg-white text-neutral-950" : "text-white/60 hover:text-white"
               }`}
             >
@@ -771,6 +777,7 @@ export default function AdminClient() {
           </>
         )}
         {tab === "mail" && <MailPanel />}
+        {tab === "pick" && <PickPanel />}
       </div>
 
       {openUser && (

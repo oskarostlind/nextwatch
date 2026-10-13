@@ -15,7 +15,9 @@
 // och förstörde upplevelsen oavsett placering — intäkten motiverade den inte.
 //
 // Gate: bara native iOS (isNativeIos), aldrig för premium, aldrig under ett
-// aktivt 24h-fönster. Samtycke före första annonsen: UMP-formuläret (GDPR)
+// aktivt 24h-fönster. Undantag: den FRIVILLIGA belöningsvideon för AI-val
+// (watchRewardedForPicks) får även premium se — den initierar bara SDK:t och
+// lämnar `eligible` (= interstitials) orört. Samtycke före första annonsen: UMP-formuläret (GDPR)
 // när det krävs, sedan ATT — nekad spårning ger icke-personaliserade annonser
 // (npa), aldrig en blockerad app.
 //
@@ -31,6 +33,7 @@
 import { isNativeIos } from "@/lib/premiumPurchase";
 import { adEveryFromEnv } from "@/lib/ads";
 import { funnel } from "@/lib/funnel";
+import { claimPickReward } from "@/lib/aiPick/client";
 
 const TEST_IDS = {
   interstitial: "ca-app-pub-3940256099942544/4411468910",
@@ -252,32 +255,25 @@ async function fetchIsPremium(): Promise<boolean> {
   }
 }
 
+/* ---------- SDK + samtycke (delas av interstitial- och rewarded-vägen) ---------- */
+
+/** AdMob.initialize() + UMP + ATT är gjorda (oberoende av premium/eligible). */
+let sdkReady = false;
+let sdkInFlight: Promise<boolean> | null = null;
+
 /**
- * Initierar AdMob + samtycke. Idempotent och billig att anropa flera gånger.
- * Returnerar om annonser alls är aktuella (native + ej premium).
- *
- * Utan `force` händer ingenting förrän enheten är nära första annonsen
- * (registerSwipeForAds anropar igen då) — så att GDPR-rutan och ATT-frågan
- * inte möter en ny användare innan första kortet. `force` används när en
- * annons behövs direkt (belöningsvideon i dagsgränsväggen).
+ * Startar AdMob-SDK:t och frågar samtycke (UMP + ATT). Rör INTE `eligible` —
+ * det är `eligible` som styr interstitials, så den här kan anropas för en
+ * premiumanvändare (frivillig belöningsvideo för AI-val) utan att
+ * interstitials slås på för hen. Kastar aldrig; false = SDK:t gick inte att
+ * starta.
  */
-export async function initAdMobIfEligible(force = false): Promise<boolean> {
-  if (!isNativeIos()) return false;
-  if (initialized) return eligible;
-  if (!force && !pastStartStretch(CONSENT_LEAD_SWIPES)) return false;
-  if (initInFlight) return initInFlight;
+async function initSdkAndConsent(): Promise<boolean> {
+  if (sdkReady) return true;
+  if (sdkInFlight) return sdkInFlight;
 
-  initInFlight = (async () => {
+  sdkInFlight = (async () => {
     try {
-      if (await fetchIsPremium()) {
-        eligible = false;
-        initialized = true;
-        // Vanligaste förklaringen till "jag ser inga annonser" när allt annat
-        // är rätt: testkontot har blivit premium av ett tidigare köp.
-        adDebug("AdMob av: kontot är premium");
-        return false;
-      }
-
       const { AdMob } = await plugin();
       await AdMob.initialize();
 
@@ -312,6 +308,50 @@ export async function initAdMobIfEligible(force = false): Promise<boolean> {
         npa = att.status !== "authorized";
       } catch {
         npa = true;
+      }
+
+      sdkReady = true;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      sdkInFlight = null;
+    }
+  })();
+
+  return sdkInFlight;
+}
+
+/**
+ * Initierar AdMob + samtycke. Idempotent och billig att anropa flera gånger.
+ * Returnerar om annonser alls är aktuella (native + ej premium).
+ *
+ * Utan `force` händer ingenting förrän enheten är nära första annonsen
+ * (registerSwipeForAds anropar igen då) — så att GDPR-rutan och ATT-frågan
+ * inte möter en ny användare innan första kortet. `force` används när en
+ * annons behövs direkt (belöningsvideon i dagsgränsväggen).
+ */
+export async function initAdMobIfEligible(force = false): Promise<boolean> {
+  if (!isNativeIos()) return false;
+  if (initialized) return eligible;
+  if (!force && !pastStartStretch(CONSENT_LEAD_SWIPES)) return false;
+  if (initInFlight) return initInFlight;
+
+  initInFlight = (async () => {
+    try {
+      if (await fetchIsPremium()) {
+        eligible = false;
+        initialized = true;
+        // Vanligaste förklaringen till "jag ser inga annonser" när allt annat
+        // är rätt: testkontot har blivit premium av ett tidigare köp.
+        adDebug("AdMob av: kontot är premium");
+        return false;
+      }
+
+      if (!(await initSdkAndConsent())) {
+        eligible = false;
+        initialized = true;
+        return false;
       }
 
       swipesSinceAd = loadNumber(COUNTER_KEY);
@@ -458,12 +498,29 @@ export function registerSwipeForAds(): void {
 /* ---------- Rewarded ---------- */
 
 /**
- * Visar en belöningsvideo och resolvar true om användaren tittade klart
- * (Rewarded-eventet fyrade). Enda belöningen är +swipes (/api/swipe/bonus),
- * erbjuds i dagsgränsväggen och i premium-CTA:n efter en annons.
+ * Init för en FRIVILLIG belöningsvideo som även premium får se (AI-val:
+ * premium fyller på efter sina 20/månad). Gratisanvändare går den vanliga
+ * vägen (initAdMobIfEligible(true), som också gör dem eligible för
+ * interstitials precis som +swipes-videon gjort hela tiden). För premium
+ * returnerar initAdMobIfEligible false och `eligible` förblir false — då
+ * startas bara SDK:t + samtycket, så interstitials förblir avstängda.
  */
-async function showRewardedVideo(): Promise<boolean> {
-  if (!(await initAdMobIfEligible(true))) return false;
+export async function initAdMobForRewarded(): Promise<boolean> {
+  if (!isNativeIos()) return false;
+  if (await initAdMobIfEligible(true)) return true;
+  return initSdkAndConsent();
+}
+
+/**
+ * Visar en belöningsvideo och resolvar true om användaren tittade klart
+ * (Rewarded-eventet fyrade). Belöningar: +swipes (/api/swipe/bonus, erbjuds i
+ * dagsgränsväggen och i premium-CTA:n efter en annons) och +AI-val
+ * (/api/pick/reward, "Välj åt mig"-arket — `allowPremium`, se
+ * initAdMobForRewarded).
+ */
+async function showRewardedVideo(opts: { allowPremium?: boolean } = {}): Promise<boolean> {
+  const ready = opts.allowPremium ? await initAdMobForRewarded() : await initAdMobIfEligible(true);
+  if (!ready) return false;
   try {
     const { AdMob, RewardAdPluginEvents } = await plugin();
 
@@ -518,6 +575,23 @@ export async function watchRewardedForSwipes(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/* ---------- Rewarded: +AI-val ("Välj åt mig") ---------- */
+
+/**
+ * Samma belöningsenhet som +swipes (ingen ny annonsenhet). Löser in
+ * +rewardPicks via /api/pick/reward när Rewarded-eventet fyrat. Fungerar även
+ * för premium (se initAdMobForRewarded) — det är ett uttryckligt val av
+ * användaren, inte en annons vi tvingar på hen. Resolvar true först när servern
+ * beviljat valen; anroparen hämtar om kvoten (getPickStatus) efteråt.
+ */
+export async function watchRewardedForPicks(): Promise<boolean> {
+  const ok = await showRewardedVideo({ allowPremium: true });
+  if (!ok) return false;
+  const res = await claimPickReward();
+  if (!res.ok) adDebug(`AI-val-belöning nekades av servern (${res.error ?? "okänt"})`);
+  return res.ok;
 }
 
 /* ---------- Samtycke: ändra/återkalla (GDPR) ---------- */

@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CalendarClock, ChevronUp, Eye, Heart, Send, Settings, X } from "lucide-react";
+import { CalendarClock, ChevronUp, Eye, Heart, Send, X } from "lucide-react";
 import {
   animate,
   motion,
@@ -18,6 +18,7 @@ import {
   type MotionValue,
 } from "framer-motion";
 import ActionDock from "@/app/components/ui/ActionDock";
+import ProfileAvatarButton, { type AvatarButtonUser } from "@/app/components/navigation/ProfileAvatarButton";
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
@@ -50,6 +51,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { funnel, funnelSwipe } from "@/lib/funnel";
 import { recordLike } from "@/lib/engagement";
 import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
+import PickLauncher from "@/app/components/pick/PickLauncher";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -386,7 +388,10 @@ function MediaFilterPill({
 // Skydd mot refresh-loop om servern av någon anledning fortsätter rendera solo-vyn.
 let groupRefreshAttempted = false;
 
-export default function SwipePageClient({ needsProviders = false }: { needsProviders?: boolean } = {}) {
+export default function SwipePageClient({
+  needsProviders = false,
+  me = null,
+}: { needsProviders?: boolean; me?: AvatarButtonUser | null } = {}) {
   const t = useTranslations("swipe");
   const router = useRouter();
   const { showPaidOptions, mediaFilter } = useSwipeSettings();
@@ -845,25 +850,28 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
         sizes="(max-width: 768px) 100vw, 600px"
       />
 
-      {/* Toppraden: film/serie-filtret bor här (flyttat från profilen — valet
-          hör hemma där man ser effekten), resten av det som styr förslagen
-          (tjänster, genrer) nås via kugghjulet. I gruppläge styr gruppens egna
-          inställningar, så pillen visas bara solo. */}
-      <div className="relative flex shrink-0 items-center justify-end px-3 pt-2">
+      {/* Toppraden: [Välj åt mig] · Båda/Film/Serier (centrerad) · avatar.
+          Film/serie-filtret bor här (flyttat från profilen — valet hör hemma där
+          man ser effekten). Avataren leder till profilen, där resten av det som
+          styr förslagen (tjänster, genrer) finns — och sedan 2026-10-13 är den
+          vägen dit på mobilen, eftersom Profil inte längre är en flik. I gruppläge
+          styr gruppens egna inställningar, så pillen visas bara solo.
+          Pillen är absolut centrerad, så sidornas bredd påverkar inte den. */}
+      <div className="relative flex shrink-0 items-center px-3 pt-2">
+        {/* 40×40-platsen till vänster: tom ruta reserverar bredden även när
+            knappen inte renderas (utrullningen avstängd), så raden inte hoppar. */}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+          <PickLauncher />
+        </div>
         {mode === "individual" && (
           <MediaFilterPill
             value={mediaFilter}
             onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
           />
         )}
-        <button
-          type="button"
-          onClick={() => router.push("/profile")}
-          aria-label={t("settingsAria")}
-          className="rounded-full p-2 text-white/50 transition hover:bg-white/5 hover:text-white/80"
-        >
-          <Settings className="h-5 w-5" />
-        </button>
+        <div className="ml-auto">
+          <ProfileAvatarButton me={me} />
+        </div>
       </div>
 
       <MatchOverlay
@@ -898,10 +906,20 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
         </div>
       )}
 
-      {/* Kort-yta: flex-1 + min-h-0 + overflow-hidden => flexbox styr höjden och kortet kan aldrig växa förbi ytan och klippas bakom ikon-raden.
+      {/* Kort + knappar ("två lager, inte tre", 2026-10-13): kortet växer ända ner
+          och knapparna grenslar dess underkant i stället för att ha en egen rad.
+          Ytterytan: flex-1 + min-h-0 => flexbox styr höjden. Den har bara absoluta
+          barn, så innehållet kan aldrig trycka upp den.
+          Inre ytan (overflow-hidden) slutar 38 px ovanför ytterytans botten =
+          knapparnas halva höjd (30) + luft mot tabbraden (8). Kortet går ända ner
+          till den inre ytans botten, så dess underkant hamnar exakt mitt i
+          knapparna, och kortet kan aldrig växa förbi ytan och klippas bakom dem.
+          overflow-hidden sitter på den inre ytan och inte den yttre, så
+          knapparnas skugga inte klipps.
           OBS: kort-wrappern är absolut positionerad (inte h-full) eftersom procenthöjder
           kollapsar till 0 när förfäderna bara har min-h + flex-1 (indefinit höjd). */}
-      <div className="relative min-h-0 flex-1 overflow-hidden pb-1">
+      <div className="relative min-h-0 flex-1">
+      <div className="absolute inset-x-0 top-0 bottom-[38px] overflow-hidden">
       {feedLoading ? (
         <div className="absolute inset-0 flex items-center justify-center">
           {/* Samma geometri som kortet (2/3, max 420 px, rounded-2xl) — övergången
@@ -917,7 +935,7 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
         </div>
       ) : cards[0] || leaving.length > 0 ? (
           <div
-            className="absolute inset-x-1 inset-y-2 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden"
+            className="absolute inset-x-1 top-2 bottom-0 isolate mx-auto max-w-[min(100%,420px)] overflow-hidden"
           >
           {/* Bakifrån och fram: kort 3, 2, toppkortet, och överst de som är på
               väg ut. ALLA ritas av DeckCard med kortets id som nyckel, så ett
@@ -978,19 +996,20 @@ export default function SwipePageClient({ needsProviders = false }: { needsProvi
       )}
       </div>
 
-      <div>
+      {/* Knapparna: 60 px hög rad vars mitt ligger på kortets underkant (se
+          ovan). pointer-events-none på raden — ett drag som börjar bredvid
+          knapparna hamnar på kortet under; bara knapparna själva tar tryck.
+          Info-knappen är borta: ett tryck på kortet vänder det redan. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex h-[60px] items-center justify-center">
         <ActionDock
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
           // så knappen känns som ett bestämt kast i stället för en avspelning.
           onNope={() => swipeOut("left", -900)}
-          onInfo={() => {
-            const c = cards[0];
-            if (c) setFlippedId((p) => (p === c.id ? null : c.id));
-          }}
           onUndo={handleUndo}
           onLike={() => swipeOut("right", 900)}
         />
+      </div>
       </div>
 
       <ShareTitleModal open={shareItem !== null} item={shareItem} onClose={() => setShareItem(null)} />
@@ -1098,6 +1117,7 @@ const DeckCard = memo(function DeckCard({
           interactive={Boolean(top)}
           onFlip={top?.onFlip ?? noop}
           onShare={top?.onShare}
+          dockInset
         />
         <div
           aria-hidden
@@ -1183,6 +1203,7 @@ export function StaticCard({
   onFlip,
   interactive = true,
   onShare,
+  dockInset = false,
 }: {
   card: Card;
   flipped: boolean;
@@ -1190,6 +1211,12 @@ export function StaticCard({
   onFlip: () => void;
   /** Öppnar "Tipsa en vän" för kortet. Bara meningsfullt på toppkortet. */
   onShare?: (card: Card) => void;
+  /**
+   * Swipe-knapparna (ActionDock) grenslar kortets underkant och täcker de
+   * nedersta ~30 px. Lyfter titel, betyg och baksidans knapprad ovanför dem.
+   * Av som standard — swipe-guiden återanvänder kortet utan knappar.
+   */
+  dockInset?: boolean;
 }) {
   // Baksidan (backdrop-bild, tjänster, knappar) byggs bara för toppkortet, och
   // först när det legat still en stund — eller direkt om kortet vänds. Förr
@@ -1207,7 +1234,7 @@ export function StaticCard({
   if (card.kind === "ad") {
     return (
       <div className="relative h-full max-h-full w-full min-h-0">
-        <AdCard adId={card.id} />
+        <AdCard adId={card.id} dockInset={dockInset} />
       </div>
     );
   }
@@ -1223,11 +1250,11 @@ export function StaticCard({
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
-          <Front card={card} flipped={flipped} />
+          <Front card={card} flipped={flipped} dockInset={dockInset} />
         </div>
         {showBack ? (
           <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-            <Back card={card} onShare={onShare} />
+            <Back card={card} onShare={onShare} dockInset={dockInset} />
           </div>
         ) : null}
       </div>
@@ -1237,7 +1264,7 @@ export function StaticCard({
 
 /* ---------- Annonskort (AdSense på webb, AdMob på iOS i Fas 2) ---------- */
 
-function AdCard({ adId }: { adId: string }) {
+function AdCard({ adId, dockInset = false }: { adId: string; dockInset?: boolean }) {
   const t = useTranslations("swipe");
   const client = adsenseClientId();
   const slot = adsenseSlotId();
@@ -1254,7 +1281,11 @@ function AdCard({ adId }: { adId: string }) {
   }, [client, slot, adId]);
 
   return (
-    <div className="relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-neutral-950">
+    // dockInset: annonsytan slutar ovanför swipe-knapparna — en annons under en
+    // knapp ger felklick (och bryter mot AdSense-reglerna om placering).
+    <div
+      className={`relative flex h-full w-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-neutral-950 ${dockInset ? "pb-12" : ""}`}
+    >
       <div className="absolute left-3 top-3 z-10 rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-white/60">
         Annons
       </div>
@@ -1311,7 +1342,7 @@ function UpcomingBadge({ className = "" }: { className?: string }) {
   );
 }
 
-function Front({ card, flipped }: { card: Card; flipped: boolean }) {
+function Front({ card, flipped, dockInset = false }: { card: Card; flipped: boolean; dockInset?: boolean }) {
   const t = useTranslations("swipe");
   const locale = useLocale();
   const isUpcoming = card.kind === "upcoming";
@@ -1364,8 +1395,15 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
-        <div className="h-28 bg-gradient-to-t from-black/90 to-transparent" />
+      {/* Med dockInset ligger knapparna över de nedersta ~30 px: titeln lyfts
+          44 px (pb 16 → 60) och skrimmet blir högre och mörkare, så texten
+          läses lika bra en bit upp på postern. */}
+      <div className={`pointer-events-none absolute inset-x-0 bottom-0 p-4 ${dockInset ? "pb-[3.75rem]" : ""}`}>
+        <div
+          className={`bg-gradient-to-t to-transparent ${
+            dockInset ? "h-40 from-black/95 via-black/70" : "h-28 from-black/90"
+          }`}
+        />
         <div className="-mt-24 px-1">
           <div className="text-lg font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
             {card.title}
@@ -1383,7 +1421,11 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
           byggt på en handfull förhandsröster) innan premiären, och "★ 0.0" ser
           ut som ett underkännande. Premiärdatumet är kortets siffra i stället. */}
       {!isUpcoming && typeof card.rating === "number" ? (
-        <div className="absolute bottom-2 right-2 rounded-md bg-black/70 px-2 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40">
+        <div
+          className={`absolute right-2 rounded-md bg-black/70 px-2 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-400/40 ${
+            dockInset ? "bottom-[3.25rem]" : "bottom-2"
+          }`}
+        >
           ★ {card.rating.toFixed(1)}
         </div>
       ) : null}
@@ -1391,7 +1433,15 @@ function Front({ card, flipped }: { card: Card; flipped: boolean }) {
   );
 }
 
-function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void }) {
+function Back({
+  card,
+  onShare,
+  dockInset = false,
+}: {
+  card: Card;
+  onShare?: (card: Card) => void;
+  dockInset?: boolean;
+}) {
   const t = useTranslations("swipe");
   const tw = useTranslations("watch");
   const locale = useLocale();
@@ -1535,8 +1585,10 @@ function Back({ card, onShare }: { card: Card; onShare?: (card: Card) => void })
         </div>
       ) : null}
 
+      {/* pb-14 med dockInset: "Kolla nu"/trailer/tipsa får inte hamna under
+          swipe-knapparna, som grenslar kortets underkant. */}
       <div
-        className="flex shrink-0 flex-wrap gap-2 px-3 pb-3 pt-1"
+        className={`flex shrink-0 flex-wrap gap-2 px-3 pt-1 ${dockInset ? "pb-14" : "pb-3"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {!isUpcoming && card.providers !== undefined && !paidOnly ? (

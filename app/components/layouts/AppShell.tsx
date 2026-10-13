@@ -42,10 +42,10 @@ const PUBLIC_ROUTES = [
 
 /**
  * Utrymme så scrollande innehåll inte hamnar under den fasta BottomTabs-raden.
- * Höjden ska matcha tab-raden (py-2 + h-12 + pb med safe-area i BottomTabs), inte dubbleras med swipe-knapparnas egna padding.
+ * Höjden ska matcha tab-raden (pt-1 + h-11 + pb-1 med safe-area i BottomTabs = 52 px), inte dubbleras med swipe-knapparnas egna padding.
  */
 const MAIN_BOTTOM_PADDING =
-  "pb-[calc(env(safe-area-inset-bottom)+4rem)]";
+  "pb-[calc(env(safe-area-inset-bottom)+3.25rem)]";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
@@ -109,7 +109,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Toast />
         </div>
 
-        {/* Nav-hinten: EN ruta som listar alla fem flikar. Sedan 2026-10-12 bara
+        {/* Nav-hinten: EN ruta som listar alla flikar (+ avataren). Sedan 2026-10-12 bara
             via Profil → Genomgång (manualOnly): den lades ovanpå nya användares
             första riktiga kort, även för dem som hoppat över swipe-guiden. */}
         {signedIn ? (

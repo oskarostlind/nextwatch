@@ -112,6 +112,11 @@ model User {
   releaseFollows  ReleaseFollow[]
   activityDays    UserActivityDay[]
 
+  // "Välj åt mig" (AI-val) — se lib/aiPick/*.
+  aiPickRequests AiPickRequest[]
+  aiPickGrants   AiPickGrant[]
+  aiPickEvents   AiPickEvent[]
+
   @@map("users")
 }
 
@@ -587,4 +592,72 @@ model FunnelEvent {
   @@id([deviceId, name])
   @@index([name, createdAt], map: "idx_funnel_events_name_created_at")
   @@map("funnel_events")
+}
+
+/// "Välj åt mig" (AI-val): en rad per förfrågan. Kvoten räknas ur raderna
+/// (lib/aiPick/quota.ts) — bara status 'ok' förbrukar. 'pending' är en
+/// kortlivad reservation mot dubbeltryck som alltid skrivs om till
+/// ok/error/no_candidates; äldre än 2 min räknas inte. source: 'premium' |
+/// 'credit' | 'selftest'. Se prisma/sql/2026-10-13_ai_pick.sql.
+model AiPickRequest {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  source          String
+  status          String
+  prompt          String?
+  chips           Json?
+  mediaFilter     String?  @map("media_filter")
+  pickTmdbId      Int?     @map("pick_tmdb_id")
+  pickMediaType   String?  @map("pick_media_type")
+  /// Valet kom ur användarens egna sparade likes (watchlist).
+  pickFromSaved   Boolean? @map("pick_from_saved")
+  /// Hur många sparade likes som fanns i kandidatmängden till modellen.
+  savedCandidates Int?     @map("saved_candidates")
+  /// [{tmdbId, mediaType, fromSaved}]
+  alternatives    Json?
+  model           String?
+  inputTokens     Int?     @map("input_tokens")
+  outputTokens    Int?     @map("output_tokens")
+  costUsd         Float?   @map("cost_usd")
+  latencyMs       Int?     @map("latency_ms")
+  error           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt], map: "idx_ai_pick_requests_user_created")
+  @@index([createdAt], map: "idx_ai_pick_requests_created")
+  @@map("ai_pick_requests")
+}
+
+/// Intjänade AI-val (rewarded video, +NW_PICK_REWARD_PICKS per rad). Saldot =
+/// summa picks − antal 'ok'-förfrågningar med source 'credit' (all tid).
+/// Beviljas server-side av /api/pick/reward, max NW_PICK_REWARD_MAX_PER_DAY
+/// per kalenderdygn (Europe/Stockholm).
+model AiPickGrant {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  picks     Int
+  source    String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt], map: "idx_ai_pick_grants_user_created")
+  @@map("ai_pick_grants")
+}
+
+/// UI-händelser för "Välj åt mig" (öppna, chip, annons, upsell …) till /admin.
+/// Typerna vitlistas i /api/pick/event.
+model AiPickEvent {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  type      String
+  meta      Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, createdAt], map: "idx_ai_pick_events_type_created")
+  @@map("ai_pick_events")
 }

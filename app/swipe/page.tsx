@@ -13,7 +13,9 @@ export default async function Page() {
   }
   const profile = await prisma.profile.findUnique({
     where: { userId: uid },
-    select: { userId: true, providers: true },
+    // avatarId/updatedAt: avataren uppe till höger (ProfileAvatarButton) — tas
+    // i samma fråga i stället för en extra /api/profile-hämtning på klienten.
+    select: { userId: true, providers: true, avatarId: true, updatedAt: true },
   });
   if (!profile) {
     redirect("/onboarding?next=/swipe");
@@ -29,7 +31,14 @@ export default async function Page() {
     <>
       {/* Profil utan tjänster (typiskt gäst som hoppade över onboardingen) →
           ProviderPromptSheet frågar efter några swipes. */}
-      <Client needsProviders={!Array.isArray(profile.providers) || profile.providers.length === 0} />
+      <Client
+        needsProviders={!Array.isArray(profile.providers) || profile.providers.length === 0}
+        me={{
+          userId: profile.userId,
+          avatarId: profile.avatarId ?? null,
+          updatedAt: profile.updatedAt ? profile.updatedAt.toISOString() : null,
+        }}
+      />
       <SwipeGestureTour />
     </>
   );

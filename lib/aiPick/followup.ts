@@ -41,6 +41,8 @@ import {
   SHORT_TV_MAX,
   MOOD_GENRES,
   moodAvoidCompatible,
+  moodAvoidFor,
+  softLightOf,
   withoutReferences,
   type Mood,
   type GenreIntent,
@@ -183,15 +185,25 @@ export const SHORTER_FACTOR = { movie: 0.875, tv: 0.75 } as const;
 export function tightenRuntime(current: number | null, focusRuntime: number | null, type: MediaType): number {
   const base = Math.min(current ?? Infinity, focusRuntime && focusRuntime > 0 ? focusRuntime : Infinity);
   if (!Number.isFinite(base)) return type === "movie" ? SHORT_MOVIE_MAX : SHORT_TV_MAX;
+  // Avsnitt på ≤ 25 min blir inte kortare på riktigt (Death Note, 22 min) —
+  // behåll längden som tak i stället för att hitta på ett snävare golv.
+  if (type === "tv" && base <= TV_SHORT_ENOUGH) return base;
   let cap = Math.round((base * SHORTER_FACTOR[type]) / 5) * 5;
   if (cap >= base) cap = Math.floor((base - 5) / 5) * 5;
   return Math.max(SHORTER_FLOOR[type], cap);
 }
 
-/** Taket för uppluckring efter "kortare": 5 min under utgångsläget (det som visades). */
-export function shorterCeil(current: number | null, focusRuntime: number | null): number | null {
+/** Avsnittslängd som redan är "kort": "kortare" behåller den som tak. */
+export const TV_SHORT_ENOUGH = 25;
+
+/**
+ * Taket för uppluckring efter "kortare": 5 min under utgångsläget (det som
+ * visades). Serier med ≤ 25 min avsnitt: själva längden (inget längre).
+ */
+export function shorterCeil(current: number | null, focusRuntime: number | null, type: MediaType = "movie"): number | null {
   const base = Math.min(current ?? Infinity, focusRuntime && focusRuntime > 0 ? focusRuntime : Infinity);
-  return Number.isFinite(base) ? base - 5 : null;
+  if (!Number.isFinite(base)) return null;
+  return type === "tv" && base <= TV_SHORT_ENOUGH ? base : base - 5;
 }
 
 function minOrNull(a: number | null, b: number | null): number | null {
@@ -276,6 +288,7 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
   let genres: GenreIntent | null = null;
   let genreAt = -1;
   let mood: Mood | null = null;
+  let softLight = false;
   let moodAt = -1;
   let maxMovie: number | null = null;
   let maxTv: number | null = null;
@@ -316,6 +329,9 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     if (sig.lighter && !sig.darker) mm = "light";
     else if (sig.darker && !sig.lighter) mm = "thrilling";
     if (mm) {
+      // Mjukt lätt ("inte för tungt", "lättare", "mysig") håller i sig så länge
+      // stämningen är lätt — ett senare "roligare" gör det inte tillåtande igen.
+      softLight = mm === "light" && (softLightOf(text) || (mood === "light" && softLight));
       mood = mm;
       moodAt = k;
     }
@@ -333,8 +349,8 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
       // "kortare" träffar även parseIntents kort-ord — följdtolkningen vinner.
       const fm = prev?.mediaType === "movie" ? prev.runtimeMin : null;
       const ft = prev?.mediaType === "tv" ? prev.runtimeMin : null;
-      ceilMovie = shorterCeil(maxMovie, fm);
-      ceilTv = shorterCeil(maxTv, ft);
+      ceilMovie = shorterCeil(maxMovie, fm, "movie");
+      ceilTv = shorterCeil(maxTv, ft, "tv");
       maxMovie = tightenRuntime(maxMovie, fm, "movie");
       maxTv = tightenRuntime(maxTv, ft, "tv");
       runtimeAt = k;
@@ -358,6 +374,9 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     // Skriven typ vinner alltid över swipe-filtret (se effectiveMediaFilter) —
     // även i första meddelandet, inte bara vid "hellre en film".
     if (base.mediaHint) media = { type: base.mediaHint, explicit: true };
+    // "Kortare"/"längre" utan nämnd typ syftar på titeln som visas: en serie
+    // med 22-minutersavsnitt ska ge kortare AVSNITT, aldrig en film på 113 min.
+    else if ((sig.shorter || sig.longer) && prev && !media) media = { type: prev.mediaType, explicit: false };
 
     if (refs.length > 0) {
       refLists.push(refs);
@@ -388,18 +407,20 @@ export function mergeConversationIntent(input: MergeInput): MergedConversation {
     // Stämning i SAMMA meddelande som genren ("feel-good and funny") styr vad
     // som undviks, så länge den inte krockar med genren ("mysig skräck").
     if (md && moodAt === genreAt && moodAvoidCompatible(MOOD_GENRES[md].avoid, [...g.movie, ...g.tv])) {
-      avoidMovieGenres = [...MOOD_GENRES[md].avoid.movie];
-      avoidTvGenres = [...MOOD_GENRES[md].avoid.tv];
+      const av = moodAvoidFor(md, softLight, [...g.movie, ...g.tv]);
+      avoidMovieGenres = av.movie;
+      avoidTvGenres = av.tv;
       strictAvoid = md === "light";
     }
   } else if (md) {
     // Stämningen (även en äldre som bara följts av speltidsändringar) styr
     // genrerna och vad som aldrig får föreslås.
     const mg = MOOD_GENRES[md];
+    const av = moodAvoidFor(md, softLight, []);
     movieGenres = [...mg.genres.movie];
     tvGenres = [...mg.genres.tv];
-    avoidMovieGenres = [...mg.avoid.movie];
-    avoidTvGenres = [...mg.avoid.tv];
+    avoidMovieGenres = av.movie;
+    avoidTvGenres = av.tv;
     strictAvoid = md === "light";
   }
   if (md) terms.push(md);
@@ -589,7 +610,10 @@ export function describeWishes(intent: PickIntent, filter: MediaFilter): string 
       t !== "short",
   );
   if (genres.length) parts.push(`genre: ${genres.join(" or ")}`);
-  if (intent.light) parts.push("mood: light / feel-good (no horror, thriller or war)");
+  if (intent.light) {
+    const crime = intent.avoidMovieGenres.includes(80) || intent.avoidTvGenres.includes(80);
+    parts.push(`mood: light / feel-good (no horror, thriller, war${crime ? " or crime" : ""})`);
+  }
   if (intent.thrilling) parts.push("mood: dark / thrilling (no comedy, family or romance)");
   if (intent.mindbend) parts.push("mood: mind-bending / twisty (mystery, thriller, sci-fi; no comedy, family, romance or animation)");
   const rt = (max: number, relaxed: number | null, unit: string) =>

@@ -198,9 +198,22 @@ const GENRE_RULES: GenreRule[] = [
   { label: "music", re: rx("musikal|musical|musik|music"), movie: [10402], tv: [] },
 ];
 
-const LIGHT_RE = rx(
-  "mysig|myspys|feelgood|feel-good|feel good|lättsam|lätt\\b|cozy|cosy|light|chill|avslappnad|uplifting|rolig|funny|laugh|skratt|humor",
+/**
+ * "Mjukt" lätt: inget tungt, mörkt eller kriminellt ("inte för tungt",
+ * "lättare", "mysig", "feelgood"). Bara "rolig/funny" är det inte — en
+ * krimkomedi är fortfarande rolig.
+ */
+const SOFT_LIGHT_RE = rx(
+  "mysig|myspys|feelgood|feel-good|feel good|lättsam|lätt\\b|lättare|lättsammare|gladare|mysigare|cozy|cosy|light\\b|lighter|chill|avslappnad|uplifting|happier|inte (?:för|så|alltför|lika) tung|mindre tung|nothing (?:too )?heavy|not (?:too|so) heavy|less heavy|less dark",
 );
+const FUNNY_RE = rx("rolig|funny|laugh|skratt|humor");
+const LIGHT_RE = { test: (t: string) => SOFT_LIGHT_RE.test(t) || FUNNY_RE.test(t) };
+
+/** Lätt stämning av det mjuka slaget (se SOFT_LIGHT_RE) — då undviks även krim. */
+export function softLightOf(text: string | null | undefined): boolean {
+  const t = (text ?? "").toLowerCase();
+  return t !== "" && SOFT_LIGHT_RE.test(t);
+}
 const CLASSIC_RE = rx("klassiker|klassisk|gammal|gamla|äldre|svartvit|classic|old\\b|older|retro|black and white|\\d0-?talet|\\d0s\\b|19\\d\\d");
 const THRILL_RE = rx(
   "spännande|spänning|mörk|obehag|intensiv|psykologisk|nervkittlande|nervig|thrilling|dark|intense|suspense|psychological|disturbing|gritty|tense",
@@ -220,6 +233,20 @@ export const LIGHT_GENRES = { movie: [35, 10749, 10751], tv: [35, 10751] };
 export const THRILL_GENRES = { movie: [53, 9648, 80], tv: [80, 9648, 10759] };
 /** Lätt/rolig: aldrig skräck, thriller eller krig (hård lista, se strictAvoid). */
 export const LIGHT_AVOID = { movie: [27, 53, 10752], tv: [10768] };
+/**
+ * Mjukt lätt ("inte för tungt", "lättare", "mysig") undviker dessutom krim —
+ * The End of the F***ing World (komedi/drama/krim) är inte "lättare".
+ */
+export const SOFT_LIGHT_EXTRA_AVOID = { movie: [80], tv: [80] };
+
+/** "Undvik"-listan för en stämning (mjukt lätt = + krim, om krim inte uttryckligen nämnts). */
+export function moodAvoidFor(mood: Mood, softLight: boolean, explicit: number[]): { movie: number[]; tv: number[] } {
+  const base = MOOD_GENRES[mood].avoid;
+  if (mood !== "light" || !softLight || explicit.some((x) => SOFT_LIGHT_EXTRA_AVOID.movie.includes(x))) {
+    return { movie: [...base.movie], tv: [...base.tv] };
+  }
+  return { movie: uniq([...base.movie, ...SOFT_LIGHT_EXTRA_AVOID.movie]), tv: uniq([...base.tv, ...SOFT_LIGHT_EXTRA_AVOID.tv]) };
+}
 /** "Mörkt och spännande" ska aldrig ge en komedi, familjefilm eller romcom. */
 export const THRILL_AVOID = { movie: [35, 10751, 10749], tv: [35, 10751, 10762] };
 /** Mind-bending = mysterium + thriller + sci-fi (serier: mysterium, sci-fi & fantasy, krim). */
@@ -328,8 +355,9 @@ export function parseIntent(prompt: string | null | undefined, chips: readonly P
   // nämnd genre: "feel-good and funny" (komedi) undviker skräck, men "mysig
   // skräck" och "mörk komedi" gör det inte.
   const avoidApplies = !!moodGenres && moodAvoidCompatible(moodGenres.avoid, [...g.movie, ...g.tv]);
-  const avoidMovieGenres = avoidApplies && moodGenres ? [...moodGenres.avoid.movie] : [];
-  const avoidTvGenres = avoidApplies && moodGenres ? [...moodGenres.avoid.tv] : [];
+  const moodAvoid = avoidApplies && mood ? moodAvoidFor(mood, softLightOf(text), [...g.movie, ...g.tv]) : null;
+  const avoidMovieGenres = moodAvoid ? moodAvoid.movie : [];
+  const avoidTvGenres = moodAvoid ? moodAvoid.tv : [];
   const wantsClassic = text !== "" && CLASSIC_RE.test(text);
   if (wantsClassic) terms.push("classic");
 
@@ -787,13 +815,13 @@ export type FallbackOptions = {
 
 /**
  * Gamla titlar för allmänna frågor: serie med premiär före 1985 −2.5 (Doctor
- * Who 1963 för "korta avsnitt, drama, gillar House"), film före 1970 −1,
- * före 1985 −0.4 (en klassiker som Chinatown kan fortfarande vinna på kvalitet).
+ * Who 1963 för "korta avsnitt, drama, gillar House"), film före 1960 −2
+ * (The 39 Steps 1935 som alternativ), 1960–69 −1, 1970–84 −0.4 (en klassiker som Chinatown kan fortfarande vinna på kvalitet).
  */
 export function agePenaltyFor(c: { mediaType: MediaType; year: number | null }): number {
   if (c.year == null) return 0;
   if (c.mediaType === "tv") return c.year < 1985 ? 2.5 : 0;
-  return c.year < 1970 ? 1 : c.year < 1985 ? 0.4 : 0;
+  return c.year < 1960 ? 2 : c.year < 1970 ? 1 : c.year < 1985 ? 0.4 : 0;
 }
 
 export const HORROR_GENRE = 27;

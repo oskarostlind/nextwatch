@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Bookmark, BookmarkCheck, Heart, Info, PlayCircle, Sparkles } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronRight, Heart, Info, PlayCircle, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { PickChipId, PickItem } from "@/lib/aiPick/types";
 import { providerWatchUrl } from "@/lib/watchLinks";
@@ -187,6 +187,7 @@ function LikedMarker() {
 
 /** "Eller kanske" — kompakta rader; ett tryck byter plats med huvudförslaget. */
 export function AltRows({ alts, onSelect }: { alts: PickItem[]; onSelect: (alt: PickItem) => void }) {
+  // onSelect öppnar detaljarket (PickDetailSheet) när kortet har onOpenDetail.
   const t = useTranslations("pick");
   if (alts.length === 0) return null;
   return (
@@ -209,6 +210,7 @@ export function AltRows({ alts, onSelect }: { alts: PickItem[]; onSelect: (alt: 
                   {meta ? <span className="block truncate text-xs text-white/45">{meta}</span> : null}
                 </span>
                 {alt.fromSaved ? <LikedMarker /> : null}
+                <ChevronRight className="h-4 w-4 shrink-0 text-white/25" aria-hidden />
               </button>
             </li>
           );
@@ -239,6 +241,12 @@ export type PickCardProps = {
    * kortet visar då ingen text för originalvalet (sammanfattningen bakom "Visa info").
    */
   reasonInline?: boolean;
+  /**
+   * Öppnar detaljarket (dela/spara/betygsätt/trailer). När den finns är
+   * affisch + titel klickbara och "Eller kanske"-raderna öppnar arket i stället
+   * för att byta plats med huvudförslaget.
+   */
+  onOpenDetail?: (item: PickItem) => void;
 };
 
 export function PickCard({
@@ -254,6 +262,7 @@ export function PickCard({
   size = "full",
   titleId,
   reasonInline = true,
+  onOpenDetail,
 }: PickCardProps) {
   const t = useTranslations("pick");
   const [infoOpen, setInfoOpen] = useState(false);
@@ -271,7 +280,25 @@ export function PickCard({
 
   return (
     <div className={full ? "space-y-3" : "space-y-2.5"}>
-      <div className={`flex ${full ? "gap-4" : "gap-3"}`}>
+      <div
+        className={`flex ${full ? "gap-4" : "gap-3"} ${
+          onOpenDetail ? `-m-1 cursor-pointer rounded-2xl p-1 transition hover:bg-white/[0.04] active:scale-[0.99] ${focusRing}` : ""
+        }`}
+        {...(onOpenDetail
+          ? {
+              role: "button",
+              tabIndex: 0,
+              "aria-label": t("detail.openAria", { title: main.title }),
+              onClick: () => onOpenDetail(main),
+              onKeyDown: (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpenDetail(main);
+                }
+              },
+            }
+          : {})}
+      >
         <Poster
           src={main.poster}
           title={main.title}
@@ -292,6 +319,12 @@ export function PickCard({
             {main.title}
           </h3>
           {meta ? <p className="mt-1 text-[13px] leading-snug text-white/50">{meta}</p> : null}
+          {onOpenDetail ? (
+            <p className="mt-1.5 inline-flex items-center gap-0.5 text-[12px] font-medium text-cyan-300/80">
+              {t("detail.more")}
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </p>
+          ) : null}
           {logos.length > 0 ? (
             <ul aria-label={t("providersAria")} className="mt-2 flex flex-wrap gap-1.5">
               {logos.map((p) => (
@@ -370,7 +403,7 @@ export function PickCard({
         </button>
       </div>
 
-      <AltRows alts={alts} onSelect={onAltSelect} />
+      <AltRows alts={alts} onSelect={onOpenDetail ?? onAltSelect} />
     </div>
   );
 }

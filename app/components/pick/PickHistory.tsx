@@ -384,6 +384,7 @@ function HistoryEntryCard({
   onSave,
   onOpenService,
   onAltSelect,
+  onOpenDetail,
 }: {
   entry: PickHistoryEntry;
   isSaved: (item: PickItem) => boolean;
@@ -391,6 +392,7 @@ function HistoryEntryCard({
   onSave: (item: PickItem) => void;
   onOpenService: (item: PickItem, provider: string) => void;
   onAltSelect: (alt: PickItem) => void;
+  onOpenDetail?: (item: PickItem) => void;
 }) {
   const [main, setMain] = useState<PickItem>(entry.pick);
   const [alts, setAlts] = useState<PickItem[]>(() => entry.alternatives.slice(0, 2));
@@ -412,6 +414,7 @@ function HistoryEntryCard({
       saving={savingKey === itemKey(main)}
       onSave={onSave}
       onOpenService={onOpenService}
+      onOpenDetail={onOpenDetail}
     />
   );
 }
@@ -423,6 +426,7 @@ export function HistoryDetail({
   onSave,
   onOpenService,
   onAltSelect,
+  onOpenDetail,
   onContinue,
 }: {
   session: PickHistorySession;
@@ -431,6 +435,7 @@ export function HistoryDetail({
   onSave: (item: PickItem) => void;
   onOpenService: (item: PickItem, provider: string) => void;
   onAltSelect: (alt: PickItem) => void;
+  onOpenDetail?: (item: PickItem) => void;
   /** Saknas för sessioner som inte går att fortsätta (rader utan sessionId). */
   onContinue?: () => void;
 }) {
@@ -447,6 +452,7 @@ export function HistoryDetail({
             onSave={onSave}
             onOpenService={onOpenService}
             onAltSelect={onAltSelect}
+            onOpenDetail={onOpenDetail}
           />
         </section>
       ))}

@@ -74,13 +74,15 @@ export type PickResponse =
 export type PickEventType =
   | "open" | "chip" | "submit" | "open_service" | "save" | "another" | "alt_select"
   | "paywall_view" | "ad_start" | "ad_complete" | "ad_fail" | "upsell_view" | "upsell_click" | "close"
-  | "history_open" | "history_entry_open" | "followup" | "history_continue";
+  | "history_open" | "history_entry_open" | "followup" | "history_continue"
+  | "detail_open" | "share_open" | "rate" | "trailer";
 
 /** Runtime-lista över tillåtna händelsetyper (vitlistan i /api/pick/event). */
 export const PICK_EVENT_TYPES: readonly PickEventType[] = [
   "open", "chip", "submit", "open_service", "save", "another", "alt_select",
   "paywall_view", "ad_start", "ad_complete", "ad_fail", "upsell_view", "upsell_click", "close",
   "history_open", "history_entry_open", "followup", "history_continue",
+  "detail_open", "share_open", "rate", "trailer",
 ] as const;
 
 /* ---------------- Historik ("chattarna", v2) ---------------- */

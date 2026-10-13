@@ -1474,7 +1474,7 @@
     "saveFailed": "Kunde inte spara. Försök igen.",
     "another": "Visa något annat",
     "alternatives": "Eller kanske",
-    "altAria": "Visa {title} i stället",
+    "altAria": "Mer om {title}",
     "thread": {
       "aria": "Tidigare förslag i den här konversationen",
       "previous": "Förra förslaget:",
@@ -1536,6 +1536,18 @@
       "unavailableBody": "Vi kunde inte välja något just nu. Försök igen om en liten stund – inget val drogs.",
       "disabledBody": "Funktionen är inte tillgänglig just nu.",
       "retry": "Försök igen"
+    },
+    "detail": {
+      "openAria": "Visa mer om {title}",
+      "more": "Mer info · dela · betygsätt",
+      "save": "Spara",
+      "saved": "Sparad",
+      "share": "Tipsa en vän",
+      "rate": "Betygsätt",
+      "yourRating": "Ditt betyg: {rating}",
+      "rateHeading": "Har du sett den? Vad tyckte du?",
+      "rated": "Betyg {rating} sparat",
+      "rateFailed": "Kunde inte spara betyget. Försök igen."
     }
   }
 }

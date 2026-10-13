@@ -37,8 +37,11 @@
 //     Premium-CTA visas alltid för gratisanvändare (på webben är den enda vägen).
 //   - Premium: 20 val/månad. Slut → belöningsvideo som påfyllnad (iOS), annars
 //     bara beskedet att månaden nollställs.
-// Premium-CTA:n leder till /premium (inte direkt till köpet) — där finns
-// pris/period/förnyelse-texten som App Review kräver vid köptillfället (3.1.2c).
+// Premium-CTA:n: på webben → /premium (Stripe). I iOS-appen startar knappen i
+// paywall-vyn Apple-köpet direkt via goPremium() (samma som PremiumUpsellModal)
+// — /premium i appen upplevdes som "webbens premium". Pris/period/förnyelse
+// (upsell.legal) står under knappen vid köptillfället (3.1.2c); nudgen under
+// ett förslag öppnar därför paywall-vyn i appen i stället för att köpa direkt.
 
 import {
   useCallback,
@@ -79,7 +82,7 @@ import type {
 } from "@/lib/aiPick/types";
 import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
-import { isNativeIos } from "@/lib/premiumPurchase";
+import { goPremium, isNativeIos } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
 import {
@@ -94,6 +97,7 @@ import {
   TypingReply,
   type AskEcho,
 } from "@/app/components/pick/PickParts";
+import PickDetailSheet, { type PickDetailFrom } from "@/app/components/pick/PickDetailSheet";
 import {
   entryAsk,
   HistoryDetail,
@@ -226,6 +230,7 @@ export default function PickSheet({
   initialQuota: PickQuota | null;
 }) {
   const t = useTranslations("pick");
+  const tu = useTranslations("upsell");
   const locale = useLocale();
   const router = useRouter();
   const { mediaFilter } = useSwipeSettings();
@@ -592,6 +597,14 @@ export default function PickSheet({
   const openService = (item: PickItem, provider: string, from: "thread" | "history") =>
     trackPickEvent("open_service", { tmdbId: item.tmdbId, provider, fromSaved: item.fromSaved, from });
 
+  /* ----- detaljarket (dela/spara/betygsätt) — kostar aldrig ett val ----- */
+  const [detailItem, setDetailItem] = useState<{ item: PickItem; from: PickDetailFrom } | null>(null);
+  const openDetail = (item: PickItem, from: PickDetailFrom) => {
+    trackPickEvent("detail_open", { tmdbId: item.tmdbId, fromSaved: item.fromSaved, from });
+    setDetailItem({ item, from });
+  };
+  const closeDetail = useCallback(() => setDetailItem(null), []);
+
   /* ----- historik ----- */
   const openHistory = () => {
     const v = viewRef.current;
@@ -677,8 +690,24 @@ export default function PickSheet({
     }
   };
 
+  const [buying, setBuying] = useState(false);
   const onPremium = (from: "paywall" | "result") => {
     trackPickEvent("upsell_click", { from });
+    if (native) {
+      // Nudgen → paywall-vyn (där står pris/förnyelse-texten), aldrig köp direkt.
+      if (from === "result") {
+        goPaywall(quota);
+        return;
+      }
+      if (buying) return;
+      setBuying(true);
+      // Apple IAP i appen. Lyckat köp → /premium/success; avbrutet → kvar här.
+      void goPremium().finally(() => {
+        setBuying(false);
+        void getPickStatus({ fresh: true }).then((q) => q && setQuota(q));
+      });
+      return;
+    }
     onClose();
     router.push("/premium");
   };
@@ -744,6 +773,7 @@ export default function PickSheet({
                     saving={savingKey === itemKey(tn.main)}
                     onSave={(it) => void saveItem(it, "thread")}
                     onOpenService={(it, p) => openService(it, p, "thread")}
+                    onOpenDetail={(it) => openDetail(it, "thread")}
                   />
                 </div>
               ) : null}
@@ -891,6 +921,7 @@ export default function PickSheet({
             saving={savingKey === itemKey(current.main)}
             onSave={(it) => void saveItem(it, "thread")}
             onOpenService={(it, p) => openService(it, p, "thread")}
+            onOpenDetail={(it) => openDetail(it, "thread")}
           />
 
           <button
@@ -1021,11 +1052,15 @@ export default function PickSheet({
             }`}
           >
             <Crown className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{t("paywall.premiumCta", { count: monthly })}</span>
+            <span>{buying ? tu("opening") : t("paywall.premiumCta", { count: monthly })}</span>
           </button>
         ) : (
           <p className="text-xs text-white/45">{t("paywall.resetNote")}</p>
         )}
+        {/* Pris, period och automatisk förnyelse vid köptillfället (3.1.2c). */}
+        {!premium && native ? (
+          <p className="text-[11px] leading-relaxed text-white/35">{tu("legal")}</p>
+        ) : null}
 
         {/* Kvoten tog slut mitt i en konversation → låt användaren gå tillbaka
             till förslaget hen redan fått. */}
@@ -1132,6 +1167,7 @@ export default function PickSheet({
       onSave={(it) => void saveItem(it, "history")}
       onOpenService={(it, p) => openService(it, p, "history")}
       onAltSelect={(alt) => trackPickEvent("alt_select", { tmdbId: alt.tmdbId, fromSaved: alt.fromSaved, from: "history" })}
+      onOpenDetail={(it) => openDetail(it, "history")}
       onContinue={/^[A-Za-z0-9_-]{1,64}$/.test(detail.sessionId) ? () => continueSession(detail) : undefined}
     />
   ) : (
@@ -1171,7 +1207,20 @@ export default function PickSheet({
         ? sessionLabel(detail.lastAt, locale, t)
         : t("title");
 
-  return createPortal(
+  const detailOpenItem = open ? (detailItem?.item ?? null) : null;
+  const detailSheet = (
+    <PickDetailSheet
+      item={detailOpenItem}
+      from={detailItem?.from ?? "thread"}
+      onClose={closeDetail}
+      saved={detailOpenItem ? isSaved(detailOpenItem) : false}
+      saving={detailOpenItem ? savingKey === itemKey(detailOpenItem) : false}
+      onSave={(it) => void saveItem(it, detailItem?.from ?? "thread")}
+      onOpenService={(it, p) => openService(it, p, detailItem?.from ?? "thread")}
+    />
+  );
+
+  const sheetPortal = createPortal(
     <AnimatePresence>
       {open ? (
         <div
@@ -1297,5 +1346,12 @@ export default function PickSheet({
       ) : null}
     </AnimatePresence>,
     document.body
+  );
+
+  return (
+    <>
+      {sheetPortal}
+      {detailSheet}
+    </>
   );
 }

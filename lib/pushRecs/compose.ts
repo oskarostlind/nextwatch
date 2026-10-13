@@ -274,6 +274,9 @@ function lastVariantOf(history: History, angle: string): string | null {
 }
 
 /** Vinklar som behöver titelfakta (brief) för att avgöra om de passar. */
+/** Hur många av topplistans titlar som får tävla om den starkaste vinkeln. */
+const BEST_OF_TOP = 5;
+
 const NEEDS_BRIEF: ReadonlySet<string> = new Set(["provider", "rating", "runtime"]);
 
 async function composeDaily(
@@ -307,6 +310,38 @@ async function composeDaily(
   };
 
   let picked = await offersFor(first);
+
+  // Vardagsläget: förstahandsvalet saknar ofta det som gör en notis personlig
+  // (en regissör du gillar, en toppmatch). Titlarna 2–5 är nästan lika bra
+  // rekommendationer, så vi tar den av de fem som ger den starkaste vinkeln som
+  // inte nyss använts. Lika starka → bästa placeringen vinner. En vän som
+  // sparat titeln (friendPick) slår alltid detta.
+  if (!forceAngle && !friendPick) {
+    const recent = new Set(recentDailyAngles(ctx.history, 2));
+    const strength = (offers: AngleOffer[]) => {
+      const ranks = offers
+        .filter((o) => !recent.has(o.angle))
+        .map((o) => REC_ANGLES.indexOf(o.angle))
+        .filter((r) => r >= 0);
+      return ranks.length > 0 ? Math.min(...ranks) : Number.MAX_SAFE_INTEGER;
+    };
+    const rest = await Promise.all(
+      items.filter((i) => i !== first).slice(0, BEST_OF_TOP - 1).map(offersFor),
+    );
+    let best = picked;
+    let bestStrength = strength(picked.offers);
+    for (const cand of rest) {
+      const st = strength(cand.offers);
+      if (st < bestStrength) {
+        best = cand;
+        bestStrength = st;
+      }
+    }
+    if (best !== picked) {
+      picked = best;
+      debug.pickReason = "strongest-angle-of-top5";
+    }
+  }
 
   // Testläge (forceAngle): leta bland topplistan efter en titel som faktiskt
   // passar den begärda vinkeln i stället för att alltid hamna på generic.

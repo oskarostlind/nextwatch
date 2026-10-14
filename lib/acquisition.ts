@@ -19,17 +19,41 @@
 // Meta skickar `fbclid` på alla länkklick (annons som organiskt) och
 // Instagram/Facebook-webbläsaren har egna UA-token, så Meta-trafik känns igen
 // även när annonsen saknar UTM-taggar. Lägg ändå gärna till URL-parametrar i
-// Ads Manager: utm_source=meta&utm_medium=paid&utm_campaign={{campaign.name}}
-// &utm_content={{ad.name}} — då syns kampanj och annons per användare.
+// Ads Manager: utm_source={{site_source_name}}&utm_medium=paid
+// &utm_campaign={{campaign.name}}&utm_content={{ad.name}} — {{site_source_name}}
+// blir fb/ig/msg/an, så Instagram och Facebook skiljs åt även för annonser.
+//
+// 2026-10-15: "Meta" delas upp.
+//   - source = instagram | facebook | meta (Meta, men okänt vilken app).
+//     Avgörs i tur och ordning av utm_source (ig/instagram resp. fb/facebook/
+//     msg/messenger), in-app-webbläsarens UA ("Instagram" resp. FBAN/FBAV/…)
+//     och referrern (l.instagram.com / l.facebook.com, m.facebook.com, fb.me …).
+//   - medium för Meta = paid | organic | unknown. Betald = utm_medium
+//     paid/cpc/ads/… eller fbclid + UTM-taggar (Ads Manager-parametrar).
+//     Bara fbclid utan UTM = unknown — Meta sätter fbclid på både annonser och
+//     organiska länkar.
+//   - Vår egen app är inte längre en "källa": source = "app", medium = ios |
+//     android. Plattformen är en egen dimension (platformOf), och var
+//     installationen kom ifrån syns i /admin → App Store-källor (App Store
+//     Connect-kampanjkoder, lib/asc/).
+//   - Gamla rader (source "meta"/"ios_app") skrivs inte om — de klassas om vid
+//     läsning i normalizeAcquisition().
 
 export const ACQ_COOKIE = "nw_src";
 export const ACQ_NEW_FLAG = "nw_src_new";
 export const ACQ_COOKIE_MAX_AGE = 60 * 60 * 24 * 180;
 
 export type Acquisition = {
-  /** meta | google | tiktok | search | x | linkedin | ios_app | referral | direct | <utm_source> */
+  /**
+   * instagram | facebook | meta | google | tiktok | search | x | linkedin |
+   * app | app_store | referral | direct | <utm_source>.
+   * Äldre rader kan ha "meta" (före uppdelningen) och "ios_app".
+   */
   source: string;
-  /** paid | social | organic | inapp | referral | none | <utm_medium> */
+  /**
+   * Meta: paid | organic | unknown. App: ios | android. Annars paid | social |
+   * organic | referral | none | <utm_medium>. Äldre Meta-rader: social | inapp.
+   */
   medium: string;
   campaign: string | null;
   content: string | null;
@@ -41,7 +65,27 @@ export type Acquisition = {
   at: string;
 };
 
-const META_SOURCES = new Set(["meta", "facebook", "fb", "instagram", "ig", "an", "audience_network", "messenger", "threads"]);
+const META_SOURCES = new Set([
+  "meta",
+  "facebook",
+  "fb",
+  "instagram",
+  "ig",
+  "an",
+  "audience_network",
+  "messenger",
+  "msg",
+  "threads",
+]);
+const IG_UTM = new Set(["instagram", "ig"]);
+const FB_UTM = new Set(["facebook", "fb", "messenger", "msg"]);
+/** utm_medium-värden som betyder betald trafik. */
+const PAID_MEDIUMS = new Set(["paid", "cpc", "ppc", "cpm", "ads", "ad", "paid_social", "paidsocial", "paid-social", "sponsored"]);
+
+export type MetaApp = "instagram" | "facebook";
+/** Betald/organisk — null när det inte är tillämpligt (direkt, appen). */
+export type PaidKind = "paid" | "organic" | "unknown";
+export type AcqPlatform = "web" | "ios_app" | "android_app";
 const OWN_HOSTS = /(^|\.)nextwatch\.se$|\.vercel\.app$|^localhost$/;
 
 function clean(v: string | null | undefined, max = 120): string | null {
@@ -61,7 +105,37 @@ function hostOf(ref: string | null): string | null {
 
 /** Meta-appens inbyggda webbläsare (Facebook, Messenger, Instagram). */
 export function isMetaInAppUA(ua: string): boolean {
-  return /FBAN|FBAV|FB_IAB|FBIOS|Instagram/.test(ua);
+  return metaAppFromUA(ua) !== null;
+}
+
+/**
+ * Vilken Meta-app en in-app-webbläsare tillhör. Instagram kollas först:
+ * dess UA innehåller "Instagram <version>", Facebook/Messenger har FBAN/FBAV/
+ * FB_IAB/FBIOS (Messenger dessutom "MessengerForiOS"/"Orca-Android").
+ */
+export function metaAppFromUA(ua: string): MetaApp | null {
+  if (!ua) return null;
+  if (/\bInstagram\b/.test(ua)) return "instagram";
+  if (/FBAN|FBAV|FB_IAB|FBIOS|FB4A|MessengerForiOS|Orca-Android/.test(ua)) return "facebook";
+  return null;
+}
+
+/** Vilken Meta-app en referrer-värd tillhör (utan www.). */
+export function metaAppFromHost(host: string | null | undefined): MetaApp | null {
+  if (!host) return null;
+  const h = host.toLowerCase().replace(/^www\./, "");
+  if (/(^|\.)instagram\.com$/.test(h)) return "instagram";
+  if (/(^|\.)(facebook\.com|fb\.com|fb\.me|messenger\.com)$/.test(h)) return "facebook";
+  return null;
+}
+
+function isMetaHost(host: string): boolean {
+  return metaAppFromHost(host) !== null || /(^|\.)threads\.(net|com)$/.test(host);
+}
+
+/** Egna Android-appen — capacitor.config.ts lägger till "NextWatchAndroid" i UA:n. */
+function isOwnAndroidAppUA(ua: string): boolean {
+  return /NextWatchAndroid/.test(ua);
 }
 
 /**
@@ -85,17 +159,37 @@ export function classifyVisit(input: {
 
   const utmSource = clean(p.get("utm_source"), 60)?.toLowerCase() ?? null;
   const utmMedium = clean(p.get("utm_medium"), 60)?.toLowerCase() ?? null;
+  const hasUtm = Boolean(utmSource || utmMedium || p.get("utm_campaign"));
+  const fbclid = Boolean(p.get("fbclid"));
+
+  /** Meta-besök: vilken app (utm → UA → referrer) och betald/organisk. */
+  const meta = (): { source: string; medium: string } => {
+    const app: MetaApp | null =
+      (utmSource && IG_UTM.has(utmSource) ? "instagram" : utmSource && FB_UTM.has(utmSource) ? "facebook" : null) ??
+      metaAppFromUA(ua) ??
+      metaAppFromHost(externalRef);
+    let medium: PaidKind;
+    if (utmMedium && (PAID_MEDIUMS.has(utmMedium) || utmMedium.includes("paid"))) medium = "paid";
+    else if (fbclid && hasUtm) medium = "paid";
+    else if (hasUtm) medium = "organic";
+    else if (fbclid) medium = "unknown";
+    else medium = "organic";
+    return { source: app ?? "meta", medium };
+  };
 
   let source: string;
   let medium: string;
 
   if (utmSource) {
-    source = META_SOURCES.has(utmSource) ? "meta" : utmSource.replace(/[^a-z0-9_.-]/g, "").slice(0, 40) || "other";
-    medium = utmMedium ?? (p.get("fbclid") || p.get("gclid") ? "paid" : "unknown");
-  } else if (p.get("fbclid")) {
+    if (META_SOURCES.has(utmSource)) {
+      ({ source, medium } = meta());
+    } else {
+      source = utmSource.replace(/[^a-z0-9_.-]/g, "").slice(0, 40) || "other";
+      medium = utmMedium ?? (p.get("fbclid") || p.get("gclid") ? "paid" : "unknown");
+    }
+  } else if (fbclid) {
     // Både annonser och organiska länkar på Facebook/Instagram får fbclid.
-    source = "meta";
-    medium = "social";
+    ({ source, medium } = meta());
   } else if (p.get("gclid") || p.get("gbraid") || p.get("wbraid")) {
     source = "google";
     medium = "paid";
@@ -103,12 +197,10 @@ export function classifyVisit(input: {
     source = "tiktok";
     medium = "paid";
   } else if (isMetaInAppUA(ua)) {
-    source = "meta";
-    medium = "inapp";
+    ({ source, medium } = meta());
   } else if (externalRef) {
-    if (/(^|\.)(facebook|instagram|messenger|threads)\.(com|net)$|^l\.facebook\.com$|^lm\.facebook\.com$/.test(externalRef)) {
-      source = "meta";
-      medium = "social";
+    if (isMetaHost(externalRef)) {
+      ({ source, medium } = meta());
     } else if (/(^|\.)google\./.test(externalRef)) {
       source = "google";
       medium = "organic";
@@ -131,11 +223,16 @@ export function classifyVisit(input: {
       source = "referral";
       medium = "referral";
     }
+  } else if (isOwnAndroidAppUA(ua)) {
+    // Första öppningen i Android-appen. Källan till installationen syns inte
+    // här (Play Console).
+    source = "app";
+    medium = "android";
   } else if (isOwnIosAppUA(ua)) {
-    // Installerat via App Store. Vilken annons/sökning som gav installationen
-    // syns bara aggregerat (App Store Connect-kampanjkoder, Metas SKAdNetwork).
-    source = "ios_app";
-    medium = "app";
+    // Installerat via App Store. Vilken annons/kampanjlänk som gav
+    // installationen syns bara aggregerat — se /admin → App Store-källor.
+    source = "app";
+    medium = "ios";
   } else {
     source = "direct";
     medium = "none";
@@ -150,6 +247,65 @@ export function classifyVisit(input: {
     landing: input.url.pathname.slice(0, 200),
     at: (input.now ?? new Date()).toISOString(),
   };
+}
+
+/** Plattformen som egen dimension (inte källa). Gäller både nya och gamla rader. */
+export function platformOf(source: string | null | undefined, medium: string | null | undefined): AcqPlatform {
+  if (source === "ios_app") return "ios_app";
+  if (source === "app") return medium === "android" ? "android_app" : "ios_app";
+  return "web";
+}
+
+export function isMetaChannel(source: string | null | undefined): boolean {
+  return source === "instagram" || source === "facebook" || source === "meta";
+}
+
+export type NormalizedAcquisition = {
+  /** Kanal efter omklassning: instagram | facebook | meta | app | google | … | null (okänd). */
+  channel: string | null;
+  /** Betald/organisk, null när det inte är tillämpligt. */
+  paid: PaidKind | null;
+  platform: AcqPlatform;
+};
+
+/**
+ * Klassar om en lagrad rad (acquisition_visits eller users.acq_*) vid
+ * läsning. Gamla rader skrevs med source "meta" (FB och IG ihop) och
+ * "ios_app"; de mappas till dagens modell utan att databasen skrivs om.
+ * Användaragenten sparades aldrig, så för gamla Meta-rader avgör bara
+ * referrern Instagram/Facebook — saknas den blir det "meta" (okänd app).
+ */
+export function normalizeAcquisition(row: {
+  source: string | null | undefined;
+  medium: string | null | undefined;
+  referrer?: string | null;
+}): NormalizedAcquisition {
+  const source = row.source || null;
+  const medium = (row.medium || "").toLowerCase();
+  const platform = platformOf(source, medium);
+
+  if (!source) return { channel: null, paid: null, platform };
+  if (source === "ios_app" || source === "app") return { channel: "app", paid: null, platform };
+
+  if (isMetaChannel(source)) {
+    const channel = source === "meta" ? (metaAppFromHost(row.referrer) ?? "meta") : source;
+    let paid: PaidKind;
+    if (medium === "paid" || PAID_MEDIUMS.has(medium) || medium.includes("paid")) paid = "paid";
+    // "inapp" (gammal) = Meta-webbläsare utan fbclid och utan UTM → inte en annons.
+    else if (medium === "organic" || medium === "inapp") paid = "organic";
+    // "social" (gammal) = fbclid ELLER bara referrer — går inte att skilja i efterhand.
+    else if (medium === "social" || medium === "unknown" || !medium) paid = "unknown";
+    // Övriga utm_medium-värden (story, bio …) = egna organiska länkar.
+    else paid = "organic";
+    return { channel, paid, platform };
+  }
+
+  if (source === "direct") return { channel: source, paid: null, platform };
+  let paid: PaidKind;
+  if (PAID_MEDIUMS.has(medium) || medium.includes("paid")) paid = "paid";
+  else if (medium === "unknown" || !medium) paid = "unknown";
+  else paid = "organic";
+  return { channel: source, paid, platform };
 }
 
 export function encodeAcquisition(a: Acquisition): string {
@@ -178,11 +334,25 @@ export function decodeAcquisition(raw: string | null | undefined): Acquisition |
   }
 }
 
+export function platformLabel(p: AcqPlatform): string {
+  return p === "ios_app" ? "iOS-appen" : p === "android_app" ? "Android-appen" : "Webben";
+}
+
+export function paidLabel(p: PaidKind | null): string {
+  return p === "paid" ? "Betald" : p === "organic" ? "Organisk" : p === "unknown" ? "Okänt" : "—";
+}
+
 /** Svensk etikett till admin-vyn. */
 export function acquisitionLabel(source: string | null | undefined): string {
   switch (source) {
+    case "instagram":
+      return "Instagram";
+    case "facebook":
+      return "Facebook";
     case "meta":
-      return "Meta (FB/IG)";
+      return "Meta (okänd app)";
+    case "app":
+      return "Appen (installerad)";
     case "google":
       return "Google";
     case "search":

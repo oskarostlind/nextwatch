@@ -28,6 +28,11 @@
 //
 // 2026-10-14: flik "Push" (PushPanel, /api/admin/push-stats + push-test) —
 // öppningsgrad per pushtyp/textvinkel och testutskick till egna telefonen.
+//
+// 2026-10-15: Källor delar upp Meta i Instagram/Facebook (+ betald/organisk),
+// plattformen (webb/iOS-app/Android-app) är en egen tabell i stället för en
+// källa, och nya panelen "App Store-källor" (AppStoreSourcesPanel,
+// /api/admin/asc-downloads) visar App Store Connects kampanjkoder och källtyper.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "@/app/components/ui/Avatar";
@@ -40,7 +45,8 @@ import MailPanel, { MailComposer, type ComposeDraft } from "./MailPanel";
 import AdsPanel from "./AdsPanel";
 import PickPanel from "./PickPanel";
 import PushPanel from "./PushPanel";
-import { acquisitionLabel } from "@/lib/acquisition";
+import AppStoreSourcesPanel from "./AppStoreSourcesPanel";
+import { acquisitionLabel, isMetaChannel, platformLabel, type AcqPlatform } from "@/lib/acquisition";
 
 type Stats = {
   totalUsers: number;
@@ -90,7 +96,12 @@ type AdminUser = {
   hasLogin: boolean;
 };
 
-type SourceRow = { source: string | null; visits: number; users: number; accounts: number };
+type SourceCounts = { visits: number; users: number; accounts: number };
+type SourceRow = SourceCounts & {
+  source: string | null;
+  split?: Record<"paid" | "organic" | "unknown", SourceCounts>;
+};
+type PlatformRow = SourceCounts & { platform: AcqPlatform };
 
 type Tab = "overview" | "funnel" | "retention" | "users" | "mail" | "pick" | "push";
 type Sort = "newest" | "active" | "ratings";
@@ -175,6 +186,7 @@ export default function AdminClient() {
   const [admobConfigured, setAdmobConfigured] = useState(true);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [sources, setSources] = useState<SourceRow[] | null>(null);
+  const [platforms, setPlatforms] = useState<PlatformRow[] | null>(null);
 
   const [series, setSeries] = useState<SeriesRow[] | null>(null);
   const [usersBefore, setUsersBefore] = useState(0);
@@ -210,6 +222,7 @@ export default function AdminClient() {
           setAdmob((j.admob as AdmobEarnings | null) ?? null);
           setAdmobConfigured(Boolean(j.admobConfigured));
           setSources((j.sources as SourceRow[] | undefined) ?? []);
+          setPlatforms((j.platforms as PlatformRow[] | undefined) ?? []);
         }
       })
       .catch(() => {});
@@ -518,7 +531,7 @@ export default function AdminClient() {
             )}
 
             {/* ══ Källor ══ */}
-            <SectionTitle sub="Senaste 30 d, första beröring. Besök = första besöket per webbläsare/app. Konton = e-post eller Apple. Spåras sedan 3 okt 2026.">
+            <SectionTitle sub="Senaste 30 d, första beröring. Besök = första besöket per webbläsare/app. Konton = e-post eller Apple. Spåras sedan 3 okt 2026. Meta delas i Instagram/Facebook via utm_source, in-app-webbläsaren och referrern; äldre rader utan referrer blir ”Meta (okänd app)”.">
               Källor
             </SectionTitle>
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
@@ -538,8 +551,27 @@ export default function AdminClient() {
                     key={r.source ?? "__unknown"}
                     className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/5 px-4 py-2.5 text-sm tabular-nums last:border-0"
                   >
-                    <span className={r.source === "meta" ? "font-semibold text-sky-300" : "text-white/85"}>
-                      {acquisitionLabel(r.source)}
+                    <span className="min-w-0">
+                      <span className={`block ${isMetaChannel(r.source) ? "font-semibold text-sky-300" : "text-white/85"}`}>
+                        {acquisitionLabel(r.source)}
+                      </span>
+                      {isMetaChannel(r.source) && r.split && (
+                        <span className="block text-[11px] font-normal text-white/40">
+                          {(
+                            [
+                              ["paid", "betald"],
+                              ["organic", "organisk"],
+                              ["unknown", "okänt"],
+                            ] as const
+                          )
+                            .filter(([k]) => r.split![k].visits + r.split![k].users > 0)
+                            .map(([k, label]) => `${label} ${r.split![k].visits}/${r.split![k].accounts}`)
+                            .join(" · ") || "—"}
+                        </span>
+                      )}
+                      {r.source === "app" && (
+                        <span className="block text-[11px] text-white/40">Installationens källa: se App Store-källor</span>
+                      )}
                     </span>
                     <span className="text-right text-white/70">{r.visits}</span>
                     <span className="text-right text-white/70">{r.users}</span>
@@ -548,6 +580,45 @@ export default function AdminClient() {
                 ))
               )}
             </div>
+
+            {sources?.some((r) => isMetaChannel(r.source)) && (
+              <p className="mt-1.5 px-1 text-[11px] text-white/35">
+                Under Meta-raderna: besök/konton. Betald = utm_medium paid/cpc/ads eller fbclid + UTM. Okänt = bara fbclid
+                (Meta sätter det på både annonser och organiska länkar).
+              </p>
+            )}
+
+            {/* ══ Plattform ══ */}
+            <SectionTitle sub="Senaste 30 d. Var första besöket skedde — en egen dimension, inte en källa.">Plattform</SectionTitle>
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">
+                <span>Plattform</span>
+                <span className="text-right">Besök</span>
+                <span className="text-right">Nya</span>
+                <span className="text-right">Konton</span>
+              </div>
+              {!platforms ? (
+                <div className="h-16 animate-pulse bg-white/[0.03]" />
+              ) : (
+                platforms.map((r) => (
+                  <div
+                    key={r.platform}
+                    className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 border-b border-white/5 px-4 py-2.5 text-sm tabular-nums last:border-0"
+                  >
+                    <span className="text-white/85">{platformLabel(r.platform)}</span>
+                    <span className="text-right text-white/70">{r.visits}</span>
+                    <span className="text-right text-white/70">{r.users}</span>
+                    <span className="text-right font-semibold text-white">{r.accounts}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <p className="mt-1.5 px-1 text-[11px] text-white/35">
+              Android-appen känns igen sedan 15 okt 2026; tidigare Android-besök räknas som webben.
+            </p>
+
+            {/* ══ App Store-källor (App Store Connect) ══ */}
+            <AppStoreSourcesPanel />
 
             {/* ══ Intäkter ══ */}
             <SectionTitle sub="Apples exakta utbetalningar finns i App Store Connect.">Intäkter</SectionTitle>
@@ -744,7 +815,7 @@ export default function AdminClient() {
                     <div className="shrink-0 text-right text-[11px] leading-tight tabular-nums text-white/45">
                       <div>{u.ratings} swipes</div>
                       <div className="text-white/30">aktiv {ago(u.lastActiveAt)}</div>
-                      <div className={u.source === "meta" ? "text-sky-300/80" : "text-white/30"}>
+                      <div className={isMetaChannel(u.source) ? "text-sky-300/80" : "text-white/30"}>
                         {acquisitionLabel(u.source)}
                       </div>
                     </div>

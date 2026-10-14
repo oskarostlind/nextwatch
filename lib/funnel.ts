@@ -236,3 +236,47 @@ export function funnelTotalSwipes(): number {
   }
   return totalSwipes;
 }
+
+/**
+ * Är det här en NY enhet (tratten spårar den)? Samma bedömning som resten av
+ * tratten: servern svarade track=true på first_open (nw_uid var inte en
+ * etablerad användare). Nätverksfel / timeout → false — hellre att en ny enhet
+ * får dagens flöde än att en befintlig användare hamnar i "nya flödet".
+ */
+export function funnelIsNewDevice(timeoutMs = 3000): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  return Promise.race([
+    funnelInit().then((s) => Boolean(s?.track)),
+    new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), timeoutMs)),
+  ]).catch(() => false);
+}
+
+// --- Systemrutor ska inte räknas som "lämnade appen" -----------------------
+//
+// Apples inloggningsruta, köpbladet, push-tillståndet och ATT-frågan är
+// systemvyer: iOS skickar appen till "inactive" medan de visas, Capacitor fyrar
+// appStateChange(isActive=false) och FunnelTracker räknade det som first_exit —
+// mitt i en inloggning. Den som visar en sådan ruta anropar
+// suppressExitTracking() precis innan. När appen blir aktiv igen kortas fönstret
+// till RESUME_GRACE_MS (resumeExitTracking), så att en direkt efterföljande
+// systemruta (t.ex. lösenordsbekräftelse efter köpbladet) också täcks men en
+// riktig stängning strax efteråt räknas som vanligt.
+
+const RESUME_GRACE_MS = 3000;
+let exitSuppressedUntil = 0;
+
+/** Räkna inte bakgrund/göm som en stängning de närmaste `ms` millisekunderna. */
+export function suppressExitTracking(ms = 60_000): void {
+  exitSuppressedUntil = Math.max(exitSuppressedUntil, Date.now() + Math.max(0, ms));
+}
+
+/** Anropas av FunnelTracker när appen/fliken blir synlig igen. */
+export function resumeExitTracking(): void {
+  if (exitSuppressedUntil > Date.now()) {
+    exitSuppressedUntil = Math.min(exitSuppressedUntil, Date.now() + RESUME_GRACE_MS);
+  }
+}
+
+export function exitTrackingSuppressed(): boolean {
+  return Date.now() < exitSuppressedUntil;
+}

@@ -53,6 +53,17 @@ import { funnel, funnelSwipe } from "@/lib/funnel";
 import { recordLike, requestReleasePushAsk } from "@/lib/engagement";
 import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
 import PickLauncher from "@/app/components/pick/PickLauncher";
+import { recordFsSwipe, useFirstSession } from "@/lib/firstSession";
+import FirstSessionHost from "@/app/components/firstSession/FirstSessionHost";
+import FsProgress from "@/app/components/firstSession/deck/FsProgress";
+import FsLearnChip from "@/app/components/firstSession/deck/FsLearnChip";
+import GuestLoginLink from "@/app/components/firstSession/deck/GuestLoginLink";
+import {
+  FS_LEARN_AT,
+  FS_SERVICES_AT,
+  servicesCardDone,
+  syncFsOwner,
+} from "@/app/components/firstSession/deck/fsDeck";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -69,6 +80,10 @@ const ShareTitleModal = dynamic(() => import("@/app/components/client/ShareTitle
 });
 // Laddas bara för profiler utan tjänster — alla andra betalar inget för den.
 const ProviderPromptSheet = dynamic(() => import("@/app/components/client/ProviderPromptSheet"), {
+  ssr: false,
+});
+// Tjänste-/ålderskortet i nya flödet — bara nya enheter utan tjänster.
+const ServicesAgeCard = dynamic(() => import("@/app/components/firstSession/deck/ServicesAgeCard"), {
   ssr: false,
 });
 const SwipeLimitWall = dynamic(() => import("@/app/components/client/SwipeLimitWall"), {
@@ -497,6 +512,30 @@ export default function SwipePageClient({
     });
   }, []);
 
+  // "Nya flödet" (docs/nya-flodet.md, lib/firstSession.ts). Bara enheter som
+  // markerats eligible vid kallstarten berörs — för alla andra är fs.eligible
+  // false och allt nedan är avstängt (samma beteende som innan).
+  const fs = useFirstSession();
+  const fsRunning = fs.eligible && fs.step !== "done";
+  const fsInDeck = fs.eligible && fs.step === "deck" && mode !== "group";
+  // Byts nw_uid (inloggning på ett ANNAT befintligt konto) avslutas flödet. En
+  // gäst som blir konto behåller sitt id och fortsätter (se syncFsOwner).
+  const myUid = me?.userId ?? null;
+  useEffect(() => syncFsOwner(myUid), [myUid]);
+  // null = inte läst än (localStorage läses först efter hydreringen).
+  const [svcCardDone, setSvcCardDone] = useState<boolean | null>(null);
+  useEffect(() => setSvcCardDone(servicesCardDone()), []);
+  const showServicesCard =
+    fsInDeck && needsProviders && svcCardDone === false && fs.swipes >= FS_SERVICES_AT;
+  const onServicesCardDone = useCallback(
+    (reloadDeck: boolean) => {
+      setSvcCardDone(true);
+      // Den cachade leken byggdes utan tjänstefilter/åldersgräns — bygg om den.
+      if (reloadDeck) void retrySoloDeck();
+    },
+    [retrySoloDeck],
+  );
+
   const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
@@ -694,6 +733,7 @@ export default function SwipePageClient({
   function handleDislike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("dislike");
+    if (mode !== "group") recordFsSwipe(null);
     recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -707,6 +747,9 @@ export default function SwipePageClient({
   function handleLike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("like");
+    if (mode !== "group") {
+      recordFsSwipe({ tmdbId: c.tmdbId, mediaType: c.mediaType, title: c.title, poster: c.poster ?? null });
+    }
     // "Kommer snart": fråga om push FÖRE recordLike, så att den här frågan
     // hinner öppnas och den allmänna push-frågan (som LIKED_EVENT väcker) står
     // tillbaka i stället för att två ark staplas.
@@ -747,6 +790,7 @@ export default function SwipePageClient({
   function handleSeen(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("seen");
+    if (mode !== "group") recordFsSwipe(null);
     recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -918,7 +962,10 @@ export default function SwipePageClient({
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
-      {needsProviders ? <ProviderPromptSheet /> : null}
+      {/* Nya enheter under första sessionen får tjänstekortet i leken i stället
+          (ServicesAgeCard nedan) — alla andra får arket precis som förut. */}
+      {needsProviders && !fsRunning ? <ProviderPromptSheet /> : null}
+      <FirstSessionHost />
       {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
           poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
           fel bildvariant. */}
@@ -950,6 +997,9 @@ export default function SwipePageClient({
           <ProfileAvatarButton me={me} />
         </div>
       </div>
+
+      {mode === "individual" ? <GuestLoginLink /> : null}
+      {fsInDeck ? <FsProgress swipes={fs.swipes} /> : null}
 
       <MatchOverlay
         open={soloMatch !== null}
@@ -1071,6 +1121,17 @@ export default function SwipePageClient({
           Slut på förslag nu.
         </div>
       )}
+      {/* Samma geometri som filmkortet (inset-x-1 top-2, max 420 px): kortet ÄR
+          nästa kort i leken, inte en modal. Knapparna döljs medan det visas. */}
+      {showServicesCard ? (
+        <div className="absolute inset-x-1 top-2 bottom-0 z-30 mx-auto max-w-[min(100%,420px)] p-0.5">
+          <ServicesAgeCard onDone={onServicesCardDone} />
+        </div>
+      ) : fsInDeck && fs.likes.length >= FS_LEARN_AT && (cards[0] || leaving.length > 0) ? (
+        <div className="pointer-events-none absolute inset-x-1 top-2 bottom-0 z-20 mx-auto max-w-[min(100%,420px)]">
+          <FsLearnChip likes={fs.likes.length} />
+        </div>
+      ) : null}
       </div>
 
       {/* Knapparna: 60 px hög rad vars mitt ligger på kortets underkant (se
@@ -1078,6 +1139,7 @@ export default function SwipePageClient({
           knapparna hamnar på kortet under; bara knapparna själva tar tryck.
           Info-knappen är borta: ett tryck på kortet vänder det redan. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex h-[60px] items-center justify-center">
+        {showServicesCard ? null : (
         <ActionDock
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
@@ -1086,6 +1148,7 @@ export default function SwipePageClient({
           onUndo={handleUndo}
           onLike={() => swipeOut("right", 900)}
         />
+        )}
       </div>
       </div>
 

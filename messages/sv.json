@@ -1809,5 +1809,30 @@
       "rated": "Betyg {rating} sparat",
       "rateFailed": "Kunde inte spara betyget. Försök igen."
     }
+  },
+  "fsDeck": {
+    "startSwiping": "Börja swipa",
+    "starting": "Startar…",
+    "startFailed": "Det gick inte att starta. Försök igen.",
+    "haveAccount": "Har du konto?",
+    "signIn": "Logga in",
+    "progressCount": "{count} av {total}",
+    "progressThen": "Sedan väljer AI kvällens film",
+    "progressAria": "{count} av {total} swipes – sedan väljer AI kvällens film",
+    "learning": "{count} gillade – vi lär oss din smak",
+    "svcEyebrow": "Snabbt kort",
+    "svcTitle": "Vilka tjänster har du?",
+    "svcBody": "Då visar vi bara det du faktiskt kan se ikväll.",
+    "ageTitle": "Hur gammal är du?",
+    "ageHint": "Valfritt – för rätt åldersgräns",
+    "ageUnder15": "Under 15",
+    "age15to17": "15–17",
+    "age18plus": "18+",
+    "svcCta": "Visa bara det jag kan se ({count})",
+    "svcPickOne": "Välj minst en tjänst",
+    "svcSaving": "Sparar…",
+    "svcSkip": "Hoppa över",
+    "svcError": "Kunde inte spara. Försök igen.",
+    "svcSaved": "Nu bara från dina {count} tjänster"
   }
 }

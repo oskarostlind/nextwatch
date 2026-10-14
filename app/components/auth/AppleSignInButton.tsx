@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
-import { funnel } from "@/lib/funnel";
+import { funnel, suppressExitTracking } from "@/lib/funnel";
 
 /**
  * True i Android-appen: Sign in with Apple finns inte där (pluginet är iOS-only
@@ -39,6 +39,9 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
       }
 
       const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
+      // Apples ruta gör appen "inactive" — utan det här räknade tratten varje
+      // inloggning som first_exit (lib/funnel.ts, FunnelTracker).
+      suppressExitTracking(120_000);
       const result = await SignInWithApple.authorize({
         clientId: "com.nextwatch.app",
         redirectURI: `${window.location.origin}/api/auth/apple/callback`,

@@ -1340,11 +1340,11 @@
         "q": "I found a bug!"
       },
       "cancelPremium": {
-        "a": "Bought in the iOS app: Settings → your Apple ID → Subscriptions, or via \"Manage in the App Store\" in your profile. Bought on the web: \"Manage subscription\" in your profile settings.",
+        "a": "Bought in the iOS app: Settings → your Apple ID → Subscriptions, or via \"Manage in the App Store\" in your profile. Bought in the Android app: Play Store → Payments & subscriptions → Subscriptions, or via \"Manage in Google Play\" in your profile. Bought on the web: \"Manage subscription\" in your profile settings.",
         "q": "How do I cancel Premium?"
       },
       "deleteAccount": {
-        "a": "Profile → Settings → Delete account. All your data is permanently removed. If you have an active App Store subscription it needs to be cancelled separately with Apple.",
+        "a": "In the NextWatch app or at www.nextwatch.se (log in): Profile → Settings → Delete account. If you can't log in, email support@nextwatch.se from the account's email address and we'll delete it for you. The account and all linked data — profile, ratings, watchlist, groups, friends, Pick for me history and push tokens — is deleted immediately and permanently. An active App Store or Google Play subscription must be cancelled separately with Apple or Google; purchase receipts are kept by Apple, Google or Stripe under their own rules.",
         "q": "How do I delete my account?"
       },
       "groups": {

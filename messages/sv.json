@@ -1340,11 +1340,11 @@
         "q": "Jag hittar en bugg!"
       },
       "cancelPremium": {
-        "a": "Köpt i iOS-appen: Inställningar → ditt Apple-ID → Prenumerationer, eller via ”Hantera i App Store” i profilen. Köpt på webben: ”Hantera prenumeration” i profilens inställningar.",
+        "a": "Köpt i iOS-appen: Inställningar → ditt Apple-ID → Prenumerationer, eller via ”Hantera i App Store” i profilen. Köpt i Android-appen: Play Butiken → Betalningar och prenumerationer → Prenumerationer, eller via ”Hantera i Google Play” i profilen. Köpt på webben: ”Hantera prenumeration” i profilens inställningar.",
         "q": "Hur säger jag upp Premium?"
       },
       "deleteAccount": {
-        "a": "Profil → Inställningar → Radera konto. All din data tas bort permanent. Har du en aktiv App Store-prenumeration behöver den sägas upp separat hos Apple.",
+        "a": "I NextWatch-appen eller på www.nextwatch.se (logga in): Profil → Inställningar → Radera konto. Kan du inte logga in, mejla support@nextwatch.se från kontots e-postadress så raderar vi det åt dig. Kontot och all kopplad data — profil, betyg, watchlist, grupper, vänner, Välj åt mig-historik och push-tokens — raderas direkt och permanent. En aktiv prenumeration via App Store eller Google Play behöver sägas upp separat hos Apple respektive Google; kvitton för köp sparas hos Apple, Google eller Stripe enligt deras regler.",
         "q": "Hur raderar jag mitt konto?"
       },
       "groups": {

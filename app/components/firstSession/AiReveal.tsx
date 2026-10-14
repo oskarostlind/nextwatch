@@ -18,8 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import * as firstSession from "@/lib/firstSession";
-import { advanceFs, FS_EVENT, getFs, type FsLike, type FsState } from "@/lib/firstSession";
+import { advanceFs, FS_EVENT, getFs, setFsAiPick, type FsLike, type FsState } from "@/lib/firstSession";
 import { cachedPickStatus, fetchAutoPick, getPickStatus, peekAutoPick, trackPickEvent } from "@/lib/aiPick/client";
 import type { PickItem } from "@/lib/aiPick/types";
 import { funnel } from "@/lib/funnel";
@@ -31,10 +30,6 @@ const PickSheet = dynamic(() => import("@/app/components/pick/PickSheet"), { ssr
 export const AUTO_PREFETCH_AT = 7;
 /** Arkets stängningsanimation hinner klart innan steget byts (då avmonteras vi). */
 const EXIT_MS = 320;
-
-// setFsAiPick kommer från basgrenen (feat/nya-flodet). Anropas via namnrymden
-// så att filen fungerar även innan den är ihopslagen — då är det en no-op.
-const setFsAiPick = (firstSession as unknown as { setFsAiPick?: (pick: FsLike | null) => void }).setFsAiPick;
 
 function toFsLike(item: PickItem): FsLike {
   return { tmdbId: item.tmdbId, mediaType: item.mediaType, title: item.title, poster: item.poster };
@@ -104,9 +99,9 @@ export default function AiReveal({ fs }: { fs: FsState }) {
         if (res.quota) premiumRef.current = res.quota.premium;
         funnel("ai_auto_ok", { fromSaved: res.pick.fromSaved, ready: Boolean(ready) });
       },
-      onPickChange: (item) => setFsAiPick?.(toFsLike(item)),
+      onPickChange: (item) => setFsAiPick(toFsLike(item)),
       onSaved: (item, quota) => {
-        setFsAiPick?.(toFsLike(item));
+        setFsAiPick(toFsLike(item));
         finish(quota ? quota.premium : undefined);
       },
       // Funktionen är av för användaren: hoppa över steget tyst.

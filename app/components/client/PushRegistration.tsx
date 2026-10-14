@@ -330,13 +330,32 @@ export default function PushRegistration() {
         // Liten paus så arket inte dyker upp medan kortet fortfarande flyger ut.
         // Kortare än LIKED-pausen (1200 ms) så att den allmänna frågan ser att
         // release-frågan redan är öppen och står tillbaka.
+        // Ligger ett annat ark öppet (t.ex. AI-arket "Välj åt mig", som nya
+        // flödet öppnar av sig självt) väntar frågan tills det stängts — två
+        // ark ovanpå varandra blir oläsbart. Ger upp efter RELEASE_WAIT_MAX_MS.
+        const RELEASE_WAIT_STEP_MS = 700;
+        const RELEASE_WAIT_MAX_MS = 3 * 60 * 1000;
+        let releaseTimer: number | null = null;
         const onReleaseAsk = (e: Event) => {
           const title = (e as CustomEvent<{ title?: string }>).detail?.title?.trim() || "";
           if (!title) return;
-          window.setTimeout(() => void askForRelease(title), 450);
+          const deadline = Date.now() + RELEASE_WAIT_MAX_MS;
+          const tryAsk = () => {
+            releaseTimer = null;
+            if (blockingSheetOpen()) {
+              if (Date.now() < deadline) releaseTimer = window.setTimeout(tryAsk, RELEASE_WAIT_STEP_MS);
+              return;
+            }
+            void askForRelease(title);
+          };
+          if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+          releaseTimer = window.setTimeout(tryAsk, 450);
         };
         window.addEventListener(RELEASE_ASK_EVENT, onReleaseAsk);
-        cleanupFns.push(() => window.removeEventListener(RELEASE_ASK_EVENT, onReleaseAsk));
+        cleanupFns.push(() => {
+          window.removeEventListener(RELEASE_ASK_EVENT, onReleaseAsk);
+          if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+        });
 
         await ensureRegistered();
 

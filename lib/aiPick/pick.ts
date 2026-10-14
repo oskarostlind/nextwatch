@@ -62,6 +62,7 @@ import {
 } from "@/lib/aiPick/followup";
 import { markPickSeen } from "@/lib/aiPick/seen";
 import {
+  autoPickAllowedFor,
   autoPickEnabled,
   createSelftestRequest,
   finishPickRequest,
@@ -240,6 +241,10 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     return { status: 403, body: { ok: false, error: "disabled", quota: quota0 }, debug };
   }
   if (isAuto && !autoPickEnabled()) {
+    return { status: 403, body: { ok: false, error: "disabled", quota: quota0 }, debug };
+  }
+  // Bara konton/gästprofiler från de senaste 7 dygnen (quota.autoPickAllowedFor).
+  if (isAuto && !(await autoPickAllowedFor(uid))) {
     return { status: 403, body: { ok: false, error: "disabled", quota: quota0 }, debug };
   }
   // Utan nyckel kan vi inte leverera ett AI-val — svara innan något debiteras.

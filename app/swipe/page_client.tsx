@@ -25,7 +25,7 @@ import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { getSoloDeckSnapshot, hasSoloCard, pinSoloCard } from "@/lib/swipeDeckStore";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
-import { goPremium } from "@/lib/premiumPurchase";
+import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { trackSwipeForNudge } from "@/lib/signupNudge";
 import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
@@ -46,7 +46,7 @@ import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
-import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
+import { maybeTriggerAdUpsell, openPremiumUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useLocale, useTranslations } from "next-intl";
 import { funnel, funnelSwipe } from "@/lib/funnel";
@@ -998,7 +998,9 @@ export default function SwipePageClient({
         </div>
       </div>
 
-      {mode === "individual" ? <GuestLoginLink /> : null}
+      {/* Bara enheter i nya flödet (de har aldrig sett startsidan och dess
+          inloggning) — befintliga gäster har haft sin väg in sedan förut. */}
+      {mode === "individual" && fs.eligible ? <GuestLoginLink /> : null}
       {fsInDeck ? <FsProgress swipes={fs.swipes} /> : null}
 
       <MatchOverlay
@@ -1404,6 +1406,12 @@ export function StaticCard({
 
 /* ---------- Annonskort (AdSense på webb, AdMob på iOS i Fas 2) ---------- */
 
+/** Annonsplatsens premium-CTA: arket i apparna, /premium på webben. */
+function openAdSlotPremium() {
+  if (isNativeStoreApp() && openPremiumUpsell({ reward: false })) return;
+  void goPremium();
+}
+
 function AdCard({ adId, dockInset = false }: { adId: string; dockInset?: boolean }) {
   const t = useTranslations("swipe");
   const client = adsenseClientId();
@@ -1439,13 +1447,15 @@ function AdCard({ adId, dockInset = false }: { adId: string; dockInset?: boolean
           data-full-width-responsive="true"
         />
       ) : (
-        // Platshållaren är en premium-CTA: tap -> köpflöde (iOS) / /premium (webb).
+        // Platshållaren är en premium-CTA: tap -> premiumarket i apparna
+        // (PlanPicker + PlanLegal = full 3.1.2-text, aldrig direktköp) /
+        // /premium på webben.
         <div
           role="button"
           tabIndex={0}
-          onClick={() => void goPremium()}
+          onClick={openAdSlotPremium}
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") void goPremium();
+            if (e.key === "Enter" || e.key === " ") openAdSlotPremium();
           }}
           className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center"
         >

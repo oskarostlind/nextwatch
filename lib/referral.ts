@@ -2,7 +2,8 @@
 //
 // Värden delar https://www.nextwatch.se/g/<KOD>. Vännen öppnar länken (oftast i
 // webbläsaren), får en tyst gästprofil, går med i gruppen och swipar direkt.
-// Värdens gillade titlar ligger först i vännens lek (pendingGroupLikes) så att
+// Värdens gillade titlar ligger först i vännens lek (pendingGroupLikeKeys →
+// computeUnifiedRecs, filtrerade som resten av leken) så att
 // en match kan komma på första gilla. När vännen har röstat REFERRAL_VOTES
 // gånger i gruppen får BÅDA REFERRAL_PICKS AI-val (ai_pick_grants, source
 // 'referral').
@@ -32,7 +33,6 @@ import { getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 import { stockholmMonthStart } from "@/lib/aiPick/time";
-import { fetchTitleBrief } from "@/lib/tmdbTitleBrief";
 import { normalizeLocale } from "@/lib/i18nConfig";
 
 /** Antal gruppröster den inbjudna måste lägga innan belöningen delas ut. */
@@ -312,43 +312,37 @@ async function notifyInviter(inviterId: string): Promise<void> {
 /* Värdens gillade först i vännens lek                                 */
 /* ------------------------------------------------------------------ */
 
-export type PendingLikeItem = {
-  id: number;
-  tmdbType: "movie" | "tv";
-  title: string;
-  year?: string;
-  poster_path?: string | null;
-  vote_average?: number;
-};
+export type PendingLikeKey = { tmdbId: number; mediaType: "movie" | "tv" };
 
 /**
  * Titlar som ANDRA medlemmar redan gillat i gruppen men som `uid` varken röstat
- * på i gruppen eller betygsatt. Läggs först i gruppleken (app/api/recs/unified,
- * sida 1) — det är så "värdens gillade först" fungerar, och en match kan komma
- * på vännens första gilla. Kräver medlemskap (annars läcker andras smak).
- * Kastar aldrig; tom lista vid fel.
+ * på i gruppen eller betygsatt — bara i LÄNKGRUPPER (grupper med en rad i
+ * referral_links, dvs. där någon delat /g/<kod>). Vanliga grupper får ingen
+ * förtur: där är leken gruppens gemensamma rekommendationer som förut.
+ *
+ * Bara nycklar, ingen TMDB-data: lib/unifiedRecs.ts (computeUnifiedRecs med
+ * `leadGroupLikes`) filtrerar titlarna genom samma regler som resten av
+ * gruppleken (åldersgräns för yngsta medlemmen, gruppens tjänster,
+ * barnheuristiken, kvalitetsgolvet) innan de läggs först. Anroparen ansvarar
+ * för att `uid` är medlem — svaret får aldrig visas för en icke-medlem.
+ * Kastar aldrig; tom lista vid fel eller saknad tabell.
  */
-export async function pendingGroupLikes(opts: {
+export async function pendingGroupLikeKeys(opts: {
   groupCode: string;
   uid: string;
-  language: string;
-  mediaFilter?: "movie" | "tv" | "both";
   limit?: number;
-}): Promise<PendingLikeItem[]> {
+}): Promise<PendingLikeKey[]> {
+  if (tablesKnownMissing()) return [];
   try {
     const limit = Math.max(1, Math.min(opts.limit ?? 15, 30));
-    const member = await prisma.groupMember.findUnique({
-      where: { groupCode_userId: { groupCode: opts.groupCode, userId: opts.uid } },
-      select: { userId: true },
-    });
-    if (!member) return [];
-
     const rows = await prisma.$queryRaw<{ tmdb_id: number; tmdb_type: string }[]>`
       SELECT v.tmdb_id, v.tmdb_type
       FROM group_votes v
       WHERE v.group_code = ${opts.groupCode}
+        AND EXISTS (SELECT 1 FROM referral_links rl WHERE rl.group_code = ${opts.groupCode})
         AND v.user_id <> ${opts.uid}
         AND v.vote = 'LIKE'
+        AND v.tmdb_type IN ('movie', 'tv')
         AND NOT EXISTS (
           SELECT 1 FROM group_votes mine
           WHERE mine.group_code = v.group_code AND mine.user_id = ${opts.uid}
@@ -362,31 +356,11 @@ export async function pendingGroupLikes(opts: {
       ORDER BY COUNT(*) DESC, MAX(v.decided_at) DESC
       LIMIT ${limit}
     `;
-    const wanted = rows.filter(
-      (r) =>
-        (r.tmdb_type === "movie" || r.tmdb_type === "tv") &&
-        (!opts.mediaFilter || opts.mediaFilter === "both" || opts.mediaFilter === r.tmdb_type)
-    );
-    if (wanted.length === 0) return [];
-
-    const briefs = await Promise.all(
-      wanted.map((r) => fetchTitleBrief(r.tmdb_id, r.tmdb_type as "movie" | "tv", opts.language))
-    );
-    const out: PendingLikeItem[] = [];
-    for (const b of briefs) {
-      if (!b || !b.title) continue;
-      out.push({
-        id: b.tmdbId,
-        tmdbType: b.mediaType,
-        title: b.title,
-        year: b.year ?? undefined,
-        poster_path: b.posterUrl,
-        vote_average: b.voteAverage ?? undefined,
-      });
-    }
-    return out;
+    return rows
+      .filter((r) => r.tmdb_type === "movie" || r.tmdb_type === "tv")
+      .map((r) => ({ tmdbId: Number(r.tmdb_id), mediaType: r.tmdb_type as "movie" | "tv" }));
   } catch (e) {
-    console.warn("[referral] pendingGroupLikes:", e instanceof Error ? e.message : e);
+    logReferralError("pendingGroupLikeKeys", e);
     return [];
   }
 }

@@ -48,6 +48,43 @@ export function maybeTriggerAdUpsell(): void {
   }
 }
 
+/** Detalj som följer med UPSELL_EVENT när arket öppnas av ett knapptryck. */
+export type UpsellEventDetail = {
+  /** false = visa inte "+swipes för en video" (t.ex. från Välj åt mig). */
+  reward?: boolean;
+};
+
+// Antal monterade <PremiumUpsellModal /> — så att openPremiumUpsell() kan
+// svara false när ingen lyssnar (anroparen går då till /premium i stället).
+let upsellHosts = 0;
+
+/** Anropas av PremiumUpsellModal vid mount; returnerar avregistreringen. */
+export function registerUpsellHost(): () => void {
+  upsellHosts += 1;
+  return () => {
+    upsellHosts = Math.max(0, upsellHosts - 1);
+  };
+}
+
+/**
+ * Öppna premiumarket (PremiumUpsellModal) direkt — utan annonsräknaren. Används
+ * av köpknappar i apparna (Välj åt mig, swipegränsen, annonsplatsen) så att
+ * köpet alltid sker i arket som har PlanPicker + PlanLegal (butikens pris,
+ * provperiod, förnyelse, EULA/integritet, Återställ köp — riktlinje 3.1.2c),
+ * aldrig som ett direktköp utan den texten.
+ * Returnerar false om inget ark är monterat (anroparen faller då tillbaka på
+ * /premium, som har samma text).
+ */
+export function openPremiumUpsell(detail: UpsellEventDetail = {}): boolean {
+  if (typeof window === "undefined" || upsellHosts <= 0) return false;
+  try {
+    window.dispatchEvent(new CustomEvent<UpsellEventDetail>(UPSELL_EVENT, { detail }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Kvittera att användaren gjort något som gör CTA:n irrelevant just nu (löst in
  * en belönad video, eller startat ett köp). Nollar räknaren.

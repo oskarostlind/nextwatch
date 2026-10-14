@@ -191,17 +191,28 @@ export default function GroupSwipePage({ code }: { code: string }) {
 
   const sendVote = useCallback(
     (c: Card, vote: "LIKE" | "DISLIKE") => {
-      void fetch("/api/group/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          groupCode: code,
-          tmdbId: c.tmdbId,
-          tmdbType: c.mediaType,
-          vote,
-        }),
-      })
+      const body = JSON.stringify({
+        groupCode: code,
+        tmdbId: c.tmdbId,
+        tmdbType: c.mediaType,
+        vote,
+      });
+      const post = () =>
+        fetch("/api/group/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body,
+        });
+      // Ett omförsök vid nätverksfel/5xx (t.ex. DB-kallstart eller full
+      // anslutningspool) — annars försvann rösten tyst och en match som borde
+      // ha kommit uteblev. Upserten på servern gör omförsöket ofarligt.
+      const wait = () => new Promise<void>((r) => setTimeout(r, 1200));
+      const postWithRetry = () =>
+        post()
+          .then((res) => (res.status >= 500 ? wait().then(post) : res))
+          .catch(() => wait().then(post));
+      void postWithRetry()
         .then((res) => {
           if (!res.ok) {
             // 429 = daglig swipegräns nådd — visa väggen (SwipeLimitWall lyssnar).

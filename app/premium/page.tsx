@@ -13,6 +13,7 @@ import {
 import {
   PlanLegal,
   PlanPicker,
+  RestorePurchasesButton,
   defaultPlan,
   usePlanCta,
   usePremiumOffers,
@@ -120,7 +121,16 @@ export default function PremiumPage() {
         ) : !offers || !statusDone ? (
           <p className="text-center text-xs text-neutral-500">{ts("loading")}</p>
         ) : !plan || !selected ? (
-          <Note tone="info">{ts("unavailable")}</Note>
+          <>
+            <Note tone="info">{ts("unavailable")}</Note>
+            {/* Även utan säljbar plan: den som redan köpt i appen ska kunna
+                återställa (3.1.1 / Play). Bara i apparna — webben har Stripe. */}
+            {platform !== "web" ? (
+              <div className="text-center text-xs text-neutral-400">
+                <RestorePurchasesButton onError={setErr} />
+              </div>
+            ) : null}
+          </>
         ) : (
           <>
             <PlanPicker offers={offers} value={plan} onChange={setPlan} disabled={loading} />

@@ -675,8 +675,10 @@
     "keepSwiping": "Keep swiping",
     "moreInfo": "More info",
     "noDescription": "No description available.",
+    "noImage": "No image",
     "savedByMany": "{names} already had it on their watchlists.",
     "savedByOne": "{names} already had it on their watchlist.",
+    "trailer": "Trailer",
     "watchNowOn": "Watch now on {provider}",
     "youLike": "You like {list}."
   },

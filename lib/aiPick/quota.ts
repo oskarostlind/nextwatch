@@ -156,7 +156,9 @@ async function loadUsage(db: Db, uid: string, now: Date): Promise<PickUsage> {
       where: { AND: [{ userId: uid, source: "credit" }, consuming] },
     }),
     db.aiPickGrant.aggregate({ where: { userId: uid }, _sum: { picks: true } }),
-    db.aiPickGrant.count({ where: { userId: uid, createdAt: { gte: dayStart } } }),
+    // Bara belöningsvideor räknas mot dygnstaket – värvningsbelöningar (source
+    // 'referral', lib/referral.ts) får inte äta upp det.
+    db.aiPickGrant.count({ where: { userId: uid, source: "rewarded", createdAt: { gte: dayStart } } }),
     db.user.findUnique({ where: { id: uid }, select: { createdAt: true } }),
   ]);
   return {

@@ -209,6 +209,16 @@ export default function GroupSwipePage({ code }: { code: string }) {
             return null;
           }
           emitGroupVoted(); // OverlayMount snabb-pollar matchen (ersatte fetch-patchen)
+          // Värvningsbelöning (lib/referral): servern svarar referralReward på
+          // den röst som låste upp den. Länksidan (app/g/[code]) lyssnar.
+          void res
+            .json()
+            .then((j: { referralReward?: { picks?: number } }) => {
+              if (j?.referralReward) {
+                window.dispatchEvent(new CustomEvent("nw:referral-reward", { detail: j.referralReward }));
+              }
+            })
+            .catch(() => {});
           return fetch(`/api/group/match?code=${encodeURIComponent(code)}`, {
             cache: "no-store",
           });

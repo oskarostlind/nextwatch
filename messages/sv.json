@@ -476,6 +476,61 @@
     "step3": "Klicka på ⋮ (tre prickar) uppe till höger → <export>Export</export>.",
     "step4": "Ladda ner CSV-filen och välj den här nedan."
   },
+  "invite": {
+    "card": {
+      "eyebrow": "Ikväll",
+      "title": "Vem tittar du med?",
+      "body": "Skicka en länk. Hen swipar i webbläsaren – ingen app, inget konto. När ni gillar samma film blir det match.",
+      "likesFollow": "{count, plural, one {Din gillade följer med} other {Dina # gillade följer med}}",
+      "reward": "Ni får båda <b>{picks} AI-val</b> när din vän har swipat {votes} kort.",
+      "cta": "Bjud in någon",
+      "preview": "Så här ser din vän det",
+      "copy": "Kopiera länken",
+      "send": "Skicka länken",
+      "busy": "Skapar länken…",
+      "solo": "Jag tittar själv",
+      "copied": "Länken är kopierad – skicka den till din vän",
+      "failed": "Kunde inte skapa länken. Försök igen."
+    },
+    "share": {
+      "title": "Swipa film med mig ikväll",
+      "text": "Hjälp mig hitta kvällens film! Swipa i webbläsaren – ingen app behövs. När vi gillar samma blir det match."
+    },
+    "link": {
+      "hello": "Hej! {name} har gillat {count, plural, one {# titel} other {# titlar}}",
+      "helloNoName": "Hej! Din vän har gillat {count, plural, one {# titel} other {# titlar}}",
+      "helloEmpty": "Hej! Din vän vill hitta en film med dig",
+      "title": "Swipa – när ni gillar samma blir det match",
+      "joining": "Öppnar er grupp…",
+      "error": "Något gick fel när gruppen skulle öppnas.",
+      "retry": "Försök igen",
+      "rewardToast": "Snyggt! Ni fick {picks} AI-val var ✦"
+    },
+    "install": {
+      "text": "Ladda ner NextWatch så sparas er grupp",
+      "cta": "Hämta appen",
+      "close": "Stäng"
+    },
+    "invalid": {
+      "title": "Länken fungerar inte",
+      "body": "Gruppen finns inte längre, eller så har länken blivit fel. Be din vän skicka en ny länk – eller börja swipa på egen hand.",
+      "cta": "Öppna NextWatch",
+      "app": "Hämta appen"
+    },
+    "full": {
+      "title": "Gruppen är full",
+      "body": "Den här gruppen har redan {max} personer. Be din vän starta en ny grupp – eller börja swipa på egen hand."
+    },
+    "meta": {
+      "title": "Swipa film tillsammans – NextWatch",
+      "titleNamed": "{name} vill hitta en film med dig ikväll",
+      "description": "Swipa i webbläsaren – ingen app, inget konto. När ni gillar samma film blir det match."
+    },
+    "push": {
+      "rewardTitle": "Din vän swipade ✦",
+      "rewardBody": "Ni fick {picks} AI-val var. Låt AI välja kvällens film!"
+    }
+  },
   "landing": {
     "continueAsGuest": "Fortsätt som gäst",
     "createFreeAccount": "Skapa gratis konto",

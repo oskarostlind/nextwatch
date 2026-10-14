@@ -5,6 +5,7 @@ import { computeUnifiedRecs } from "../../../../lib/unifiedRecs";
 import { tmdbLanguageFromCookies } from "@/lib/tmdbLanguage";
 import { interleaveUpcoming, loadUpcomingForUser } from "@/lib/upcomingTitles";
 import { apiMsg } from "@/lib/apiMessages";
+import { pendingGroupLikes } from "@/lib/referral";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,22 @@ export async function GET(req: Request) {
     : loadUpcomingForUser({ uid, region, locale, forceAllMedia });
   upcomingPromise.catch(() => {}); // vakt mot obehandlad rejection före await
 
+  // Nya flödet del 6 ("värdens gillade först"): i gruppläge, FÖRSTA sidan
+  // (ny lek, ingen from-markör), läggs titlar som andra medlemmar redan gillat
+  // — och som den här användaren inte röstat på/betygsatt — överst. Vännen
+  // som kommer via /g/<kod> får då värdens gillade först, så en match kan komma
+  // på första gilla. Påfyllningar rörs inte. Startas parallellt med pipelinen
+  // och får högst LEAD_TIMEOUT_MS; pendingGroupLikes kräver medlemskap och
+  // kastar aldrig (tom lista vid fel).
+  const LEAD_TIMEOUT_MS = 3_500;
+  const leadPromise =
+    groupCode && pageNum === 1 && !fromTmdbPage
+      ? Promise.race([
+          pendingGroupLikes({ groupCode, uid, language: locale }),
+          new Promise<[]>((resolve) => setTimeout(() => resolve([]), LEAD_TIMEOUT_MS)),
+        ])
+      : Promise.resolve([]);
+
   // Film/serie-filtret läses annars server-side: solo från
   // Profile.swipeMediaFilter, grupp från Group.mediaFilter.
   const result = await computeUnifiedRecs({
@@ -71,7 +88,16 @@ export async function GET(req: Request) {
   // `hasMore = items.length > 0` (lib/swipeDeckStore.ts), och ett ensamt
   // "Kommer snart"-kort skulle då dölja att katalogen faktiskt är slut.
   const upcoming = await upcomingPromise.catch(() => []);
-  const items = result.items.length > 0 ? interleaveUpcoming(result.items, upcoming) : result.items;
+  let items = result.items.length > 0 ? interleaveUpcoming(result.items, upcoming) : result.items;
+
+  if (result.mode === "group") {
+    const mf = result.mediaFilter;
+    const lead = (await leadPromise).filter((it) => mf === "both" || it.tmdbType === mf);
+    if (lead.length > 0) {
+      const leadIds = new Set(lead.map((it) => `${it.tmdbType}_${it.id}`));
+      items = [...lead, ...items.filter((it) => !leadIds.has(`${it.tmdbType}_${it.id}`))];
+    }
+  }
 
   return NextResponse.json({ ...result, items });
 }

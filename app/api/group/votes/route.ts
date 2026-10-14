@@ -8,6 +8,7 @@ import prisma from "@/lib/prisma";
 import { notifyGroupMatchIfNeeded } from "@/lib/push";
 import { getSwipeAllowance, swipeLimitPayload } from "@/lib/swipeLimit";
 import { apiMsg } from "@/lib/apiMessages";
+import { maybeRewardReferral } from "@/lib/referral";
 
 type Body = {
   tmdbId: number;
@@ -16,7 +17,7 @@ type Body = {
   groupCode?: string;
 };
 
-type Ok = { ok: true };
+type Ok = { ok: true; referralReward?: { picks: number } };
 type Err = { ok: false; message: string };
 
 export async function POST(req: NextRequest) {
@@ -69,6 +70,14 @@ export async function POST(req: NextRequest) {
 
   if (body.vote === "LIKE") {
     await notifyGroupMatchIfNeeded(code, body.tmdbId, body.tmdbType);
+  }
+
+  // Värvningsbelöning (lib/referral): den som gått med via /g/<kod> och nu
+  // röstat 10 gånger ger sig själv och värden 5 AI-val var. En indexerad
+  // uppslagning i normalfallet; kastar aldrig och tål att tabellen saknas.
+  const referral = await maybeRewardReferral(uid, code);
+  if (referral.rewarded) {
+    return NextResponse.json({ ok: true, referralReward: { picks: referral.picks } } as Ok);
   }
 
   return NextResponse.json({ ok: true } as Ok);

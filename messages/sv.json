@@ -689,7 +689,10 @@
     "removeRating": "Ta bort betyg",
     "saveRating": "Spara betyg ({value}/10)",
     "saving": "Sparar…",
-    "skip": "Hoppa över"
+    "skip": "Hoppa över",
+    "pickToRate": "Välj ett betyg",
+    "ratingLow": "Inte för mig",
+    "ratingHigh": "Älskade den"
   },
   "nav": {
     "discover": "Utforska",
@@ -1472,10 +1475,16 @@
     "upgradeCta": "Uppgradera till Premium",
     "whyThis": "Varför det här?",
     "firstHint": {
+      "title": "Fyra sätt att svara",
       "nope": "Nej",
+      "nopeSub": "Inte för mig",
       "like": "Gilla",
-      "title": "Dra kortet åt höger om du vill se den, vänster om inte.",
-      "more": "Dra uppåt om du redan sett den. Tryck på kortet för handling och var den streamas."
+      "likeSub": "Vill se",
+      "seen": "Sett",
+      "seenSub": "Betygsätt",
+      "tap": "Tryck",
+      "tapSub": "Handling & var den streamas",
+      "aria": "Dra kortet åt höger för att gilla, åt vänster för nej, uppåt om du redan sett den. Tryck på kortet för att vända det och se handling och var den streamas."
     }
   },
   "swipeLimit": {

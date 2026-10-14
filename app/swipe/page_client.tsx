@@ -50,7 +50,7 @@ import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useLocale, useTranslations } from "next-intl";
 import { funnel, funnelSwipe } from "@/lib/funnel";
-import { recordLike } from "@/lib/engagement";
+import { recordLike, requestReleasePushAsk } from "@/lib/engagement";
 import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
 import PickLauncher from "@/app/components/pick/PickLauncher";
 
@@ -707,6 +707,10 @@ export default function SwipePageClient({
   function handleLike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("like");
+    // "Kommer snart": fråga om push FÖRE recordLike, så att den här frågan
+    // hinner öppnas och den allmänna push-frågan (som LIKED_EVENT väcker) står
+    // tillbaka i stället för att två ark staplas.
+    if (c.kind === "upcoming") requestReleasePushAsk(c.title);
     recordLike();
     recordUndo(c, "like");
     markSeen(c.id);

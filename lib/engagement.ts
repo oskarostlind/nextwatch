@@ -46,3 +46,21 @@ export function blockingSheetOpen(): boolean {
     return false;
   }
 }
+
+/**
+ * "Kommer snart"-kortet gillades → fråga direkt om push för just den titeln
+ * ("Får vi skicka en notis när X släpps?"). Till skillnad från den allmänna
+ * frågan efter första gilla ignorerar den här snoozen och tidigare nej:
+ * användaren har precis bett om en bevakning, och utan push kan den aldrig
+ * levereras (Oskars beslut 2026-10-14). PushRegistration lyssnar och avgör
+ * vad som går att visa utifrån OS-behörigheten.
+ */
+export const RELEASE_ASK_EVENT = "nw:release-ask";
+
+export function requestReleasePushAsk(title: string): void {
+  try {
+    window.dispatchEvent(new CustomEvent(RELEASE_ASK_EVENT, { detail: { title } }));
+  } catch {
+    /* SSR */
+  }
+}

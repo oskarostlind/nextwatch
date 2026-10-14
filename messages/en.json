@@ -1201,6 +1201,19 @@
     "groupMatchSeriesTitled": {
       "title": "It's a match! 🍿",
       "body": "You all picked the series {title}. Binge time?"
+    },
+    "releaseAsk": {
+      "title": "Can we notify you when {title} comes out? 🔔",
+      "body": "We'll let you know the day it's available to watch.",
+      "yes": "Yes, let me know",
+      "no": "No thanks",
+      "settingsTitle": "Notifications are off 🔕",
+      "settingsBodyIos": "To let you know when {title} comes out, turn on notifications for NextWatch in Settings.",
+      "settingsBodyAndroid": "To let you know when {title} comes out: open Settings → Apps → NextWatch → Notifications and turn them on.",
+      "openSettings": "Open Settings",
+      "later": "Not now",
+      "ok": "OK",
+      "done": "Done! We'll let you know when {title} comes out 🔔"
     }
   },
   "report": {

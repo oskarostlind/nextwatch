@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
-import { LIKED_EVENT, PUSH_ASK_AFTER_LIKES, blockingSheetOpen, likeCount } from "@/lib/engagement";
+import {
+  LIKED_EVENT,
+  PUSH_ASK_AFTER_LIKES,
+  RELEASE_ASK_EVENT,
+  blockingSheetOpen,
+  likeCount,
+} from "@/lib/engagement";
 
 /**
  * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
@@ -70,12 +76,31 @@ function reportPushOpened(pid: string | undefined, actionId: string | undefined)
  *   - vi försöker registrera igen varje gång appen kommer i förgrunden
  *     (appStateChange / visibilitychange) tills en token faktiskt sparats.
  */
+/**
+ * Frågan efter en like på ett "Kommer snart"-kort (RELEASE_ASK_EVENT).
+ *  - ask:      OS-dialogen kan visas → egen fråga först, "Ja" visar OS-dialogen
+ *  - settings: OS har nekat för gott → bara Inställningar kan slå på notiser
+ *  - done:     behörighet finns redan → kort bekräftelse, ingen fråga
+ */
+type ReleaseAsk = { title: string; mode: "ask" | "settings" | "done" };
+
 export default function PushRegistration() {
   const t = useTranslations("push");
   const pendingToken = useRef<string | null>(null);
   const [softAskOpen, setSoftAskOpen] = useState(false);
   // Sätts av effekten; anropas av soft-askens "Ja"-knapp.
   const requestAndRegister = useRef<(() => Promise<void>) | null>(null);
+  const [releaseAsk, setReleaseAskState] = useState<ReleaseAsk | null>(null);
+  // Speglas i en ref så att effektens closures (den allmänna frågan) ser om
+  // release-frågan redan är öppen — två ark på varandra vore värsta tänkbara.
+  const releaseAskOpen = useRef(false);
+  const setReleaseAsk = (v: ReleaseAsk | null) => {
+    releaseAskOpen.current = v !== null;
+    setReleaseAskState(v);
+  };
+  // Sätts av effekten (behöver PushNotifications-pluginet).
+  const releaseYes = useRef<(() => Promise<boolean>) | null>(null);
+  const isIos = Capacitor.getPlatform() === "ios";
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -170,7 +195,12 @@ export default function PushRegistration() {
             if (perm.receive === "prompt" || perm.receive === "prompt-with-rationale") {
               // Först efter några "gilla" — då vet användaren vad appen är och
               // varför notiser kan vara värda något. Aldrig ovanpå ett annat ark.
-              if (!softAskSnoozed() && likeCount() >= PUSH_ASK_AFTER_LIKES && !blockingSheetOpen()) {
+              if (
+                !softAskSnoozed() &&
+                likeCount() >= PUSH_ASK_AFTER_LIKES &&
+                !blockingSheetOpen() &&
+                !releaseAskOpen.current
+              ) {
                 setSoftAskOpen(true);
                 funnel("push_softask");
               }
@@ -193,6 +223,65 @@ export default function PushRegistration() {
             /* ignorera */
           }
         };
+
+        // "Kommer snart"-like: fråga om push för just den titeln — även om
+        // användaren sagt nej förut (snoozen gäller inte här). Vad som går att
+        // visa beror på OS-läget:
+        //  - granted → inget att fråga; registrera token om den saknas, bekräfta.
+        //  - prompt / prompt-with-rationale → vår fråga, "Ja" öppnar OS-dialogen.
+        //    (Android 13+ ger en andra chans efter första nej: prompt-with-rationale.)
+        //  - denied → OS-dialogen kan aldrig visas igen. iOS: knapp till appens
+        //    sida i Inställningar. Android: instruktion (att öppna inställningarna
+        //    kräver native-kod som inte finns i appen än).
+        const askForRelease = async (title: string) => {
+          let state = "prompt";
+          try {
+            state = (await PushNotifications.checkPermissions()).receive;
+          } catch {
+            /* pluginet saknas — behandla som att vi kan fråga */
+          }
+          if (state === "granted") {
+            if (!registered) {
+              try {
+                await PushNotifications.register();
+              } catch {
+                /* försöker igen vid nästa förgrund */
+              }
+            }
+            setReleaseAsk({ title, mode: "done" });
+            return;
+          }
+          if (state === "denied") {
+            setReleaseAsk({ title, mode: "settings" });
+            funnel("push_release_denied_shown");
+            return;
+          }
+          setReleaseAsk({ title, mode: "ask" });
+          funnel("push_release_ask");
+        };
+        releaseYes.current = async () => {
+          try {
+            const perm = await PushNotifications.requestPermissions();
+            funnel(perm.receive === "granted" ? "push_release_granted" : "push_release_denied");
+            if (perm.receive === "granted") {
+              await PushNotifications.register();
+              return true;
+            }
+          } catch {
+            /* ignorera */
+          }
+          return false;
+        };
+        // Liten paus så arket inte dyker upp medan kortet fortfarande flyger ut.
+        // Kortare än LIKED-pausen (1200 ms) så att den allmänna frågan ser att
+        // release-frågan redan är öppen och står tillbaka.
+        const onReleaseAsk = (e: Event) => {
+          const title = (e as CustomEvent<{ title?: string }>).detail?.title?.trim() || "";
+          if (!title) return;
+          window.setTimeout(() => void askForRelease(title), 450);
+        };
+        window.addEventListener(RELEASE_ASK_EVENT, onReleaseAsk);
+        cleanupFns.push(() => window.removeEventListener(RELEASE_ASK_EVENT, onReleaseAsk));
 
         await ensureRegistered();
 
@@ -245,6 +334,96 @@ export default function PushRegistration() {
       cleanupFns.forEach((fn) => fn());
     };
   }, []);
+
+  // Bekräftelsen ("Klart! Vi säger till …") stänger sig själv.
+  useEffect(() => {
+    if (releaseAsk?.mode !== "done") return;
+    const id = window.setTimeout(() => setReleaseAsk(null), 3500);
+    return () => window.clearTimeout(id);
+  }, [releaseAsk]);
+
+  if (releaseAsk) {
+    const values = { title: releaseAsk.title };
+    return (
+      <div
+        data-blocking-sheet
+        className="fixed inset-x-0 bottom-0 z-[70] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+      >
+        <div className="mx-auto max-w-sm rounded-2xl border border-white/15 bg-neutral-900 p-4 shadow-2xl">
+          {releaseAsk.mode === "done" ? (
+            <p className="text-sm font-semibold text-white">{t("releaseAsk.done", values)}</p>
+          ) : releaseAsk.mode === "ask" ? (
+            <>
+              <p className="text-sm font-semibold text-white">{t("releaseAsk.title", values)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/60">{t("releaseAsk.body")}</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const title = releaseAsk.title;
+                    setReleaseAsk(null);
+                    funnel("push_release_yes");
+                    void releaseYes.current?.().then((ok) => {
+                      if (ok) setReleaseAsk({ title, mode: "done" });
+                    });
+                  }}
+                  className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
+                >
+                  {t("releaseAsk.yes")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReleaseAsk(null);
+                    // Nej här = nej tack just nu. Den allmänna frågan ska inte
+                    // komma direkt efteråt heller.
+                    snoozeSoftAsk();
+                    funnel("push_release_no");
+                  }}
+                  className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/5"
+                >
+                  {t("releaseAsk.no")}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-white">{t("releaseAsk.settingsTitle")}</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/60">
+                {isIos ? t("releaseAsk.settingsBodyIos", values) : t("releaseAsk.settingsBodyAndroid", values)}
+              </p>
+              <div className="mt-3 flex gap-2">
+                {isIos ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReleaseAsk(null);
+                      funnel("push_release_open_settings");
+                      // Capacitor iOS lämnar icke-app-URL:er till systemet
+                      // (UIApplication.open) — app-settings: öppnar NextWatchs
+                      // sida i Inställningar. Väl tillbaka registrerar
+                      // appStateChange-lyssnaren token om notiser slagits på.
+                      window.location.href = "app-settings:";
+                    }}
+                    className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
+                  >
+                    {t("releaseAsk.openSettings")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setReleaseAsk(null)}
+                  className={`rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/5 ${isIos ? "" : "flex-1"}`}
+                >
+                  {isIos ? t("releaseAsk.later") : t("releaseAsk.ok")}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (!softAskOpen) return null;
 

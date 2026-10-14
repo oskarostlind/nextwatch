@@ -1201,6 +1201,19 @@
     "groupMatchSeriesTitled": {
       "title": "Match! 🍿",
       "body": "Ni är överens om serien {title}. Dags att bingea?"
+    },
+    "releaseAsk": {
+      "title": "Får vi skicka en notis när {title} släpps? 🔔",
+      "body": "Då säger vi till samma dag som den går att se.",
+      "yes": "Ja, säg till",
+      "no": "Nej tack",
+      "settingsTitle": "Notiser är avstängda 🔕",
+      "settingsBodyIos": "För att vi ska kunna säga till när {title} släpps behöver du slå på notiser för NextWatch i Inställningar.",
+      "settingsBodyAndroid": "För att vi ska kunna säga till när {title} släpps: öppna Inställningar → Appar → NextWatch → Aviseringar och slå på dem.",
+      "openSettings": "Öppna Inställningar",
+      "later": "Inte nu",
+      "ok": "Okej",
+      "done": "Klart! Vi säger till när {title} släpps 🔔"
     }
   },
   "report": {

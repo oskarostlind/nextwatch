@@ -12,6 +12,11 @@ const config: CapacitorConfig = {
     url: 'https://www.nextwatch.se',
     cleartext: false,
   },
+  // Bara Android läser det här blocket (iOS ignorerar det). User-agent-taggen
+  // låter servern känna igen Android-appen redan vid SSR (t.ex. ingen AdSense).
+  android: {
+    appendUserAgent: 'NextWatchAndroid',
+  },
   plugins: {
     PushNotifications: {
       // Visa notiser även när appen är i förgrunden.

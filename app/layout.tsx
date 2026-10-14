@@ -4,6 +4,7 @@ import React from "react";
 import Script from "next/script";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
+import { headers } from "next/headers";
 import AppShell from "./components/layouts/AppShell";
 import OverlayMount from "./components/client/OverlayMount";
 import AppDeepLinkHandler from "./components/client/AppDeepLinkHandler";
@@ -88,11 +89,15 @@ export default async function RootLayout({
   // AdSense har dessutom nekat sajten, så scriptet gör i dagsläget ingen nytta.
   // Site-verification ligger i metadata ovan och påverkas inte av det här.
   const adsClient = adsenseClientId();
+  // Android-appen (Capacitor lägger till "NextWatchAndroid" i user-agent, se
+  // capacitor.config.ts → android.appendUserAgent) får aldrig AdSense — där
+  // sköter AdMob annonserna. iOS-vägen är oförändrad.
+  const inAndroidApp = ((await headers()).get("user-agent") ?? "").includes("NextWatchAndroid");
 
   return (
     <html lang={bcp47(locale)} className="min-h-[100dvh] overscroll-none bg-neutral-950">
       <body className="min-h-[100dvh] overscroll-none bg-neutral-950 text-neutral-100 antialiased">
-        {adsFeatureEnabled() && adsClient && (
+        {adsFeatureEnabled() && adsClient && !inAndroidApp && (
           <Script
             async
             strategy="afterInteractive"

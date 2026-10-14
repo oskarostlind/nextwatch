@@ -53,7 +53,7 @@ import { funnel, funnelSwipe } from "@/lib/funnel";
 import { recordLike, requestReleasePushAsk } from "@/lib/engagement";
 import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
 import PickLauncher from "@/app/components/pick/PickLauncher";
-import { recordFsSwipe, useFirstSession } from "@/lib/firstSession";
+import { AI_REVEAL_AT, getFs, recordFsSwipe, useFirstSession } from "@/lib/firstSession";
 import FirstSessionHost from "@/app/components/firstSession/FirstSessionHost";
 import FsProgress from "@/app/components/firstSession/deck/FsProgress";
 import GuestLoginLink from "@/app/components/firstSession/deck/GuestLoginLink";
@@ -330,6 +330,24 @@ export async function fetchDetailsWithFallback(type: MediaType, id: number) {
  * kan direktlänka till) — matchrutan ska inte bli ännu en yta som skickar folk
  * till en hyrsida, se lib/watchLinks.ts.
  */
+// Första sessionen (nya flödet): högst EN toppmatch, och aldrig på swipen som
+// öppnar AI-steget eller senare — annars krockar rutan med AI-arket, spara-
+// arket och bjud in-kortet (prod 2026-10-15: tre toppmatcher på tio swipes).
+// Anropas EFTER recordFsSwipe, så fs.swipes räknar redan den här swipen.
+const FS_TOPMATCH_KEY = "nw_fs_topmatch";
+function allowFsTopMatch(): boolean {
+  const fs = getFs();
+  if (!fs.eligible || fs.step === "done") return true;
+  if (fs.step !== "deck" || fs.swipes >= AI_REVEAL_AT - 1) return false;
+  try {
+    if (localStorage.getItem(FS_TOPMATCH_KEY) === "1") return false;
+    localStorage.setItem(FS_TOPMATCH_KEY, "1");
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
   const groups = providerGroupsFor(card.providers, showPaidOptions);
   const providers: { name: string; url: string }[] = [];
@@ -785,7 +803,7 @@ export default function SwipePageClient({
     if (mode !== "group") trackSwipeForNudge("like");
 
     // Toppmatch firas bara i solo — i grupp äger gruppmatchen den rutan.
-    if (c.topMatch && mode !== "group") setSoloMatch(c);
+    if (c.topMatch && mode !== "group" && allowFsTopMatch()) setSoloMatch(c);
   }
 
   function handleSeen(c: Card): void {

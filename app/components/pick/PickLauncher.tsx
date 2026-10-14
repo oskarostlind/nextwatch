@@ -12,6 +12,7 @@
 // efter att sidan satt sig och bara när inget annat ark ligger öppet.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getFs } from "@/lib/firstSession";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
@@ -34,6 +35,11 @@ function coachSeen(): boolean {
     // dyker upp vid varje besök.
     return true;
   }
+}
+
+function inFirstSession(): boolean {
+  const fs = getFs();
+  return fs.eligible && fs.step !== "done";
 }
 
 function markCoachSeen(): void {
@@ -78,6 +84,9 @@ export default function PickLauncher() {
     if (!enabled || coachSeen()) return;
     const show = window.setTimeout(() => {
       if (blockingSheetOpen()) return; // försök igen nästa besök
+      // Första sessionen (nya flödet): AI-steget vid 10 swipes ÄR introt, och
+      // bubblan låg över "Har du konto? Logga in". Visas nästa besök i stället.
+      if (inFirstSession()) return;
       markCoachSeen();
       setCoach(true);
     }, COACH_DELAY_MS);

@@ -43,6 +43,8 @@ export const pickRequestSchema = z.object({
     })
     .optional(),
   markSeen: z.boolean().optional(),
+  /** Dagens gratis auto-förslag (nya flödet) — se PickRequestBody.auto. */
+  auto: z.boolean().optional(),
 });
 
 /** GET /api/pick/history — `before` (ISO) + `limit` (1..30, default 15). */

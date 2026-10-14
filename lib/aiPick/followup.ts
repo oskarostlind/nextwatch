@@ -565,7 +565,9 @@ export async function loadConversation(
   sessionId: string,
 ): Promise<{ turns: ConvTurn[]; shownIds: number[] }> {
   const rows = await prisma.aiPickRequest.findMany({
-    where: { userId: uid, sessionId, status: "ok", source: { in: ["premium", "credit", "selftest"] } },
+    // 'auto' = dagens gratis auto-förslag: chipsen under det ("Lättare" …) är
+    // följdfrågor på det och ska se det som tur 1.
+    where: { userId: uid, sessionId, status: "ok", source: { in: ["premium", "credit", "selftest", "auto"] } },
     orderBy: { createdAt: "desc" },
     take: EXCLUDE_ROWS,
     select: {

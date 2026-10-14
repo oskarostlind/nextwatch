@@ -1709,8 +1709,8 @@
     "close": "Close",
     "chipsAria": "Quick picks",
     "chips": {
-      "light": "Something light",
-      "short": "Max 90 min",
+      "light": "Lighter",
+      "short": "Shorter",
       "thrilling": "Thrilling",
       "surprise": "Surprise me"
     },
@@ -1786,17 +1786,17 @@
     },
     "welcomeLeft": "You have {count} free picks to try it out",
     "quotaLeft": "{count, plural, =0 {That was your last pick} one {You have 1 pick left} other {You have # picks left}}",
-    "premiumNudge": "With Premium you get {count} picks a month, no ads",
+    "premiumNudge": "With Premium the AI picks for you without limits – and no ads",
     "paywall": {
       "title": "Let NextWatch pick",
       "bodyFree": "Tell us what you're in the mood for and we'll pick a title – ideally something you liked but haven't watched yet.",
-      "bodyPremiumUsed": "You've used your {count} picks this month.",
-      "resetNote": "Your picks refill on the 1st of every month.",
+      "bodyPremiumUsed": "You've made a lot of picks today. More tomorrow!",
+      "resetNote": "Your picks refill at midnight.",
       "watchAd": "Watch a short ad → {count} picks",
       "watchAdBusy": "Loading video…",
       "adFailed": "The video couldn't be shown right now. Try again in a moment.",
       "rewardLimit": "You've watched the maximum number of ads for today. Come back tomorrow.",
-      "premiumCta": "Premium · {count} picks a month, no ads · SEK 19/month",
+      "premiumCta": "Premium · unlimited Pick for me, no ads",
       "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
     },
     "error": {
@@ -1910,5 +1910,26 @@
       "started": "Welcome to Premium!",
       "error": "The purchase couldn't be completed. Please try again."
     }
+  },
+  "pick2": {
+    "header": {
+      "subtitle": "Your AI for tonight's movie"
+    },
+    "thinking": {
+      "reading": "{count, plural, one {Reading your like …} other {Reading your # likes …}}",
+      "title": "Thinking …",
+      "sub": "Comparing up to 30 titles – both things you saved and new ones"
+    },
+    "card": {
+      "eyebrow": "Tonight's pick"
+    },
+    "thread": {
+      "auto": "✦ Tonight's pick"
+    },
+    "quota": {
+      "unlimited": "Unlimited with Premium",
+      "left": "{count, plural, =0 {No AI picks left} one {1 AI pick left} other {# AI picks left}}"
+    },
+    "saveTonight": "Save tonight's movie"
   }
 }

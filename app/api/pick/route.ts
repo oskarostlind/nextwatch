@@ -7,6 +7,10 @@
 // HTTP: 200 ok (även ok:false no_candidates), 400 bad_request, 401 utan
 // session, 402 no_quota, 403 disabled (utrullningsflaggan), 429 rate limit,
 // 503 unavailable. Ingenting debiteras vid fel.
+//
+// { auto: true } (nya flödet): gratis auto-förslag, högst ett per användare och
+// kalenderdygn (Stockholm) — samma dygn igen ger samma förslag; 429 när dagens
+// försök är slut.
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -53,7 +57,8 @@ export async function POST(req: Request) {
       body: normalizePickBody(parsed.data),
       region: jar.get("nw_region")?.value ?? null,
       uiLocale: await uiLocaleFromCookies(),
-      mode: "user",
+      // { auto: true } = dagens gratis auto-förslag (lib/aiPick/pick.ts) — debiteras aldrig.
+      mode: parsed.data.auto ? "auto" : "user",
     });
     return json(result.body, result.status);
   } catch (e) {

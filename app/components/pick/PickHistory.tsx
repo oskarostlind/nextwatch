@@ -158,6 +158,8 @@ export function usePickHistory(): PickHistoryState {
 /* ---------- hjälpare ---------- */
 
 export function entryAsk(entry: PickHistoryEntry, prev: PickHistoryEntry | undefined): AskEcho {
+  // Dagens gratis auto-förslag (nya flödet) — användaren frågade inget.
+  if (entry.auto) return { kind: "auto" };
   // Följdfråga utan text = "Visa något annat" (sedan följdfrågorna skickas den
   // tom; servern tolkar den i samtalets sammanhang).
   if (prev && !entry.prompt && entry.chips.length === 0) return { kind: "another" };
@@ -199,6 +201,7 @@ export function HistoryList({
   scrollRoot: RefObject<HTMLDivElement | null>;
 }) {
   const t = useTranslations("pick");
+  const t2 = useTranslations("pick2");
   const locale = useLocale();
   const [confirming, setConfirming] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -280,7 +283,7 @@ export function HistoryList({
       <ul className="-mx-2 divide-y divide-white/[0.06]">
         {sessions.map((s) => {
           const first = s.entries[0];
-          const line = first ? askText(entryAsk(first, undefined), t) : t("thread.anyQuery");
+          const line = first ? askText(entryAsk(first, undefined), t, t2("thread.auto")) : t("thread.anyQuery");
           const label = sessionLabel(s.lastAt, locale, t);
           const posters = sessionPosters(s);
           return (
@@ -440,11 +443,12 @@ export function HistoryDetail({
   onContinue?: () => void;
 }) {
   const t = useTranslations("pick");
+  const t2 = useTranslations("pick2");
   return (
     <div className="space-y-6">
       {session.entries.map((e, i) => (
         <section key={e.requestId} className="space-y-2.5">
-          <AskBubble text={askText(entryAsk(e, session.entries[i - 1]), t)} lines={3} />
+          <AskBubble text={askText(entryAsk(e, session.entries[i - 1]), t, t2("thread.auto"))} lines={3} />
           <HistoryEntryCard
             entry={e}
             isSaved={isSaved}

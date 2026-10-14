@@ -675,8 +675,10 @@
     "keepSwiping": "Fortsätt swipa",
     "moreInfo": "Mer info",
     "noDescription": "Ingen beskrivning tillgänglig.",
+    "noImage": "Ingen bild",
     "savedByMany": "{names} hade den redan i sina watchlists.",
     "savedByOne": "{names} hade den redan i sin watchlist.",
+    "trailer": "Trailer",
     "watchNowOn": "Kolla nu på {provider}",
     "youLike": "Du gillar {list}."
   },

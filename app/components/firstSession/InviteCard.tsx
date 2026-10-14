@@ -19,9 +19,12 @@
 // WKWebView, mobil-Chrome), annars kopiera + bekräftelse (Android WebView,
 // desktop). Avbrutet delningsark = stanna kvar på kortet.
 //
-// Montering: FirstSessionHost bör ligga inuti kortytans relativa behållare i
-// app/swipe/page_client.tsx (samma yta som kortleken) — kortet fyller sin
-// närmaste positionerade förälder med samma geometri som filmkortet.
+// Montering: FirstSessionHost ligger inuti kortytans relativa behållare i
+// app/swipe/page_client.tsx (samma yta som kortleken, slutar 38 px ovanför
+// knappraden). Kortet tar exakt samma geometri som tjänstekortet
+// (ServicesAgeCard) och filmkortet: inset-x-1 top-2 bottom-0, max 420 px,
+// rounded-2xl — det täcker alltså aldrig toppraden (Båda/Film/Serier).
+// Knappraden döljs av leken medan kortet visas.
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -172,10 +175,10 @@ export default function InviteCard({ fs }: { fs: FsState }) {
   }
 
   const shell =
-    "pointer-events-auto relative flex h-full w-full max-w-[420px] flex-col gap-3.5 overflow-hidden rounded-[26px] px-[22px] pb-[22px] pt-[26px] text-neutral-100 shadow-[0_0_0_1px_rgba(34,211,238,0.30),0_20px_50px_rgba(0,0,0,0.55)]";
+    "pointer-events-auto absolute inset-0 flex flex-col gap-3.5 overflow-y-auto [&>*]:shrink-0 overscroll-contain rounded-2xl px-[22px] pb-[22px] pt-[26px] text-neutral-100 shadow-[0_0_0_1px_rgba(34,211,238,0.30),0_20px_50px_rgba(0,0,0,0.55)]";
 
   return (
-    <div className="absolute inset-0 z-40 flex items-stretch justify-center px-1 pb-[38px] pt-2">
+    <div className="absolute inset-x-1 top-2 bottom-0 z-30 mx-auto max-w-[min(100%,420px)] p-0.5">
       <div
         className={shell}
         style={{ background: "radial-gradient(120% 80% at 50% 0%, #10303a 0%, #121214 60%)" }}

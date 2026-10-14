@@ -56,10 +56,8 @@ import PickLauncher from "@/app/components/pick/PickLauncher";
 import { recordFsSwipe, useFirstSession } from "@/lib/firstSession";
 import FirstSessionHost from "@/app/components/firstSession/FirstSessionHost";
 import FsProgress from "@/app/components/firstSession/deck/FsProgress";
-import FsLearnChip from "@/app/components/firstSession/deck/FsLearnChip";
 import GuestLoginLink from "@/app/components/firstSession/deck/GuestLoginLink";
 import {
-  FS_LEARN_AT,
   FS_SERVICES_AT,
   servicesCardDone,
   syncFsOwner,
@@ -518,6 +516,9 @@ export default function SwipePageClient({
   const fs = useFirstSession();
   const fsRunning = fs.eligible && fs.step !== "done";
   const fsInDeck = fs.eligible && fs.step === "deck" && mode !== "group";
+  // Bjud in-kortet (steg "invite") ligger på kortytan som nästa kort i leken —
+  // knapparna döljs medan det visas, precis som för tjänstekortet.
+  const fsInviteCard = fs.eligible && fs.step === "invite";
   // Byts nw_uid (inloggning på ett ANNAT befintligt konto) avslutas flödet. En
   // gäst som blir konto behåller sitt id och fortsätter (se syncFsOwner).
   const myUid = me?.userId ?? null;
@@ -965,7 +966,9 @@ export default function SwipePageClient({
       {/* Nya enheter under första sessionen får tjänstekortet i leken i stället
           (ServicesAgeCard nedan) — alla andra får arket precis som förut. */}
       {needsProviders && !fsRunning ? <ProviderPromptSheet /> : null}
-      <FirstSessionHost />
+      {/* FirstSessionHost monteras på kortytan längre ner (InviteCard ska ligga
+          exakt där filmkortet ligger). Övriga steg är fixed/portalade ark och
+          påverkas inte av var de monteras. */}
       {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
           poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
           fel bildvariant. */}
@@ -999,7 +1002,7 @@ export default function SwipePageClient({
       </div>
 
       {mode === "individual" ? <GuestLoginLink /> : null}
-      {fsInDeck ? <FsProgress swipes={fs.swipes} /> : null}
+      {fsInDeck ? <FsProgress swipes={fs.swipes} likes={fs.likes.length} /> : null}
 
       <MatchOverlay
         open={soloMatch !== null}
@@ -1127,11 +1130,11 @@ export default function SwipePageClient({
         <div className="absolute inset-x-1 top-2 bottom-0 z-30 mx-auto max-w-[min(100%,420px)] p-0.5">
           <ServicesAgeCard onDone={onServicesCardDone} />
         </div>
-      ) : fsInDeck && fs.likes.length >= FS_LEARN_AT && (cards[0] || leaving.length > 0) ? (
-        <div className="pointer-events-none absolute inset-x-1 top-2 bottom-0 z-20 mx-auto max-w-[min(100%,420px)]">
-          <FsLearnChip likes={fs.likes.length} />
-        </div>
       ) : null}
+      {/* Nya flödets steg. InviteCard tar samma geometri som tjänstekortet
+          ovan (inset-x-1 top-2 bottom-0, max 420 px) relativt den här ytan.
+          Lärchipen bor i progress-raden (FsProgress), inte på kortet. */}
+      <FirstSessionHost />
       </div>
 
       {/* Knapparna: 60 px hög rad vars mitt ligger på kortets underkant (se
@@ -1139,7 +1142,7 @@ export default function SwipePageClient({
           knapparna hamnar på kortet under; bara knapparna själva tar tryck.
           Info-knappen är borta: ett tryck på kortet vänder det redan. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex h-[60px] items-center justify-center">
-        {showServicesCard ? null : (
+        {showServicesCard || fsInviteCard ? null : (
         <ActionDock
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff

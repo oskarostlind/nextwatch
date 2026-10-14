@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
 import { advanceFs, type FsState } from "@/lib/firstSession";
-import { funnel } from "@/lib/funnel";
+import { funnel, suppressExitTracking } from "@/lib/funnel";
 import {
   getPushPermission,
   requestPushPermissionAndRegister,
@@ -69,14 +69,13 @@ export default function PushAskSheet({ fs }: { fs: FsState }) {
   const [busy, setBusy] = useState(false);
   const isIos = Capacitor.getPlatform() === "ios";
 
-  // Förhandsvisningen: senast gillade titeln från leken.
-  // TODO(nya-flodet:2): visa kvällens AI-val här om AiReveal exponerar det
-  // (t.ex. på FsState) — tills dess senaste gillade, annars en neutral text.
+  // Förhandsvisningen: kvällens AI-val (AiReveal sätter fs.aiPick), annars
+  // senast gillade titeln från leken, annars en neutral text.
   const preview = useMemo(() => {
-    const last = fs.likes.length ? fs.likes[fs.likes.length - 1] : null;
+    const last = fs.aiPick ?? (fs.likes.length ? fs.likes[fs.likes.length - 1] : null);
     const poster = last?.poster && /^https:\/\//.test(last.poster) ? last.poster : null;
     return { title: last?.title?.trim() || null, poster };
-  }, [fs.likes]);
+  }, [fs.aiPick, fs.likes]);
 
   useEffect(() => {
     let alive = true;
@@ -119,9 +118,8 @@ export default function PushAskSheet({ fs }: { fs: FsState }) {
     }
 
     if (mode === "ask") {
-      // TODO(nya-flodet:1): anropa suppressExitTracking(ms) från lib/funnel.ts här
-      // när del 1 exporterar den — OS-dialogen blurrar appen och ser annars ut
-      // som att användaren lämnade.
+      // OS-dialogen blurrar appen och ser annars ut som att användaren lämnade.
+      suppressExitTracking(30_000);
     }
     const perm = await requestPushPermissionAndRegister();
     if (mode === "ask" && perm !== "unsupported") {

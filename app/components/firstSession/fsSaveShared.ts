@@ -51,13 +51,9 @@ export function takeSavePending(): string | null {
   }
 }
 
-/**
- * Kvällens AI-val. FsState har inget fält för det ännu —
- * TODO(nya-flodet:2): AiReveal lägger valet i FsState som `aiPick: FsLike`
- * när användaren trycker "Spara kvällens film". Tills dess visas bara gillade.
- */
+/** Kvällens AI-val (AiReveal sätter fs.aiPick via setFsAiPick). */
 export function tonightPick(fs: FsState): FsLike | null {
-  const p = (fs as FsState & { aiPick?: FsLike | null }).aiPick;
+  const p = fs.aiPick;
   return p && typeof p.tmdbId === "number" ? p : null;
 }
 

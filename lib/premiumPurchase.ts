@@ -294,7 +294,8 @@ export async function openSubscriptionManagement(): Promise<boolean> {
  *   - Webb: användaren redirectas till Stripe Checkout (funktionen returnerar
  *     ok:true precis innan navigeringen sker).
  */
-export async function startPremiumPurchase(): Promise<PurchaseResult> {
+export async function startPremiumPurchase(plan: PremiumPlan = "monthly"): Promise<PurchaseResult> {
+  void plan; // TODO(nya-flodet:3) – välj produkt/baserplan/Stripe-pris efter plan
   // Gäst? Rekommendera konto först — annars är köpet knutet till en session
   // som försvinner vid utloggning eller gäststädningen. "Köp ändå" går vidare.
   if (!(await ensureAccountBeforePremium())) return { ok: false, message: "", cancelled: true };
@@ -309,15 +310,32 @@ export async function startPremiumPurchase(): Promise<PurchaseResult> {
  * webben navigerar till /premium (marknadsföringssidan), native iOS startar
  * köpflödet direkt och går till /premium/success när det lyckas.
  */
-export async function goPremium(): Promise<void> {
+export async function goPremium(plan: PremiumPlan = "monthly"): Promise<void> {
   if (!isNativeStoreApp()) {
     window.location.href = "/premium";
     return;
   }
-  const result = await startPremiumPurchase();
+  const result = await startPremiumPurchase(plan);
   if (result.ok) {
     window.location.href = "/premium/success";
   } else if (!result.cancelled && result.message) {
     window.location.href = "/premium";
   }
+}
+
+/* ---------- Planer och erbjudanden (nya flödet 2026-10-15, se docs/nya-flodet.md) ---------- */
+
+export type PremiumPlan = "monthly" | "yearly";
+export type PremiumOffer = { price: string; period: "month" | "year"; trialDays: number; available: boolean };
+export type PremiumOffers = { monthly: PremiumOffer; yearly: PremiumOffer };
+
+/**
+ * Priser att visa i betalväggar. Butikens lokaliserade pris när det finns
+ * (StoreKit / Play / Stripe), annars listpriset. STUB – del 3 fyller i.
+ */
+export async function getPremiumOffers(): Promise<PremiumOffers> {
+  return {
+    monthly: { price: "79 kr", period: "month", trialDays: 7, available: true },
+    yearly: { price: "599 kr", period: "year", trialDays: 7, available: true },
+  };
 }

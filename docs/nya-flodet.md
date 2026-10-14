@@ -26,7 +26,7 @@ Befintliga användare/enheter påverkas INTE (de har inget `nw_fs_v1`-tillstånd
 - Gäller iOS, Android och webb. Köp: iOS StoreKit, Android Google Play, webb Stripe – aldrig Stripe i apparna.
 
 ## Kontrakt mellan delarna
-- `lib/firstSession.ts` (finns) – stegmaskinen. `startFirstSession()` anropas när en ny enhet kallstartar. Leken anropar `recordFsSwipe(like|null)` för varje solo-swipe. Varje steg anropar `advanceFs("<steg>", { isPremium })` när det är klart ELLER stängs.
+- `lib/firstSession.ts` (finns) – stegmaskinen. `startFirstSession()` anropas när en ny enhet kallstartar. Leken anropar `recordFsSwipe(like|null)` för varje solo-swipe. Varje steg anropar `advanceFs("<steg>", { isPremium, skipPaywall })` när det är klart ELLER stängs. SaveSheet: "Senare" = `skipPaywall: true` (betalväggen kräver konto).
 - `app/components/firstSession/FirstSessionHost.tsx` (finns) monteras i solo-leken och visar `AiReveal`, `SaveSheet`, `SoftPaywall`, `PushAskSheet`, `InviteCard` (stubbar – ägarna fyller i).
 - Köp: `lib/premiumPurchase.ts` exporterar `goPremium(plan?: "monthly" | "yearly")` (default "monthly" så gamla anrop fungerar) och `getPremiumOffers(): Promise<PremiumOffers>` där `PremiumOffers = { monthly: Offer; yearly: Offer }`, `Offer = { price: string; period: "month" | "year"; trialDays: number; available: boolean }` – butikens lokaliserade pris när det finns, annars "79 kr"/"599 kr".
 - AI auto-förslag: `POST /api/pick` med `{ auto: true, ... }` → gratis, räknas inte, högst 1 per användare och dygn, `source = 'auto'`. Klienthjälpare `fetchAutoPick()` i `lib/aiPick/client.ts`.

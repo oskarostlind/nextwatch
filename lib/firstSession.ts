@@ -91,11 +91,11 @@ export function recordFsSwipe(like: FsLike | null): void {
  * Gå vidare från `from`. Anropas av steget självt när det är klart (eller
  * stängs). `isPremium` gör att betalväggen hoppas över.
  */
-export function advanceFs(from: FsStep, opts?: { isPremium?: boolean }): void {
+export function advanceFs(from: FsStep, opts?: { isPremium?: boolean; skipPaywall?: boolean }): void {
   const cur = getFs();
   if (!cur.eligible || cur.step !== from) return;
   let i = ORDER.indexOf(from) + 1;
-  while (ORDER[i] === "paywall" && (cur.variant !== "paywall" || opts?.isPremium)) i++;
+  while (ORDER[i] === "paywall" && (cur.variant !== "paywall" || opts?.isPremium || opts?.skipPaywall)) i++;
   write({ ...cur, step: ORDER[Math.min(i, ORDER.length - 1)] });
 }
 

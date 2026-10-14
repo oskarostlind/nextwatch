@@ -689,7 +689,10 @@
     "removeRating": "Remove rating",
     "saveRating": "Save rating ({value}/10)",
     "saving": "Saving…",
-    "skip": "Skip"
+    "skip": "Skip",
+    "pickToRate": "Pick a rating",
+    "ratingLow": "Not for me",
+    "ratingHigh": "Loved it"
   },
   "nav": {
     "discover": "Discover",
@@ -1472,10 +1475,16 @@
     "upgradeCta": "Upgrade to Premium",
     "whyThis": "Why this one?",
     "firstHint": {
+      "title": "Four ways to answer",
       "nope": "Nope",
+      "nopeSub": "Not for me",
       "like": "Like",
-      "title": "Drag right if you want to watch it, left if not.",
-      "more": "Drag up if you've already seen it. Tap the card for the plot and where to stream it."
+      "likeSub": "Want to watch",
+      "seen": "Seen",
+      "seenSub": "Rate it",
+      "tap": "Tap",
+      "tapSub": "Plot & where to stream",
+      "aria": "Drag the card right to like it, left for nope, up if you've already seen it. Tap the card to flip it for the plot and where to stream it."
     }
   },
   "swipeLimit": {

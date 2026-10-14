@@ -1287,7 +1287,7 @@ const DeckCard = memo(function DeckCard({
           seenRotate={STAMP_ROTATE_DONE}
         />
       ) : null}
-      {top ? <FirstCardHint visible={top.hint} /> : null}
+      {top ? <FirstCardHint visible={top.hint} x={top.x} y={top.y} /> : null}
     </motion.div>
   );
 });

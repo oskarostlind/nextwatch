@@ -476,6 +476,61 @@
     "step3": "Click ⋮ (three dots) in the top right → <export>Export</export>.",
     "step4": "Download the CSV file and pick it below."
   },
+  "invite": {
+    "card": {
+      "eyebrow": "Tonight",
+      "title": "Who are you watching with?",
+      "body": "Send a link. They swipe in the browser – no app, no account. When you both like the same film, it's a match.",
+      "likesFollow": "{count, plural, one {Your like comes along} other {Your # likes come along}}",
+      "reward": "You both get <b>{picks} AI picks</b> when your friend has swiped {votes} cards.",
+      "cta": "Invite someone",
+      "preview": "What your friend sees",
+      "copy": "Copy link",
+      "send": "Send the link",
+      "busy": "Creating the link…",
+      "solo": "I'm watching alone",
+      "copied": "Link copied – send it to your friend",
+      "failed": "Couldn't create the link. Please try again."
+    },
+    "share": {
+      "title": "Swipe movies with me tonight",
+      "text": "Help me find tonight's movie! Swipe in your browser – no app needed. When we both like the same one, it's a match."
+    },
+    "link": {
+      "hello": "Hi! {name} has liked {count, plural, one {# title} other {# titles}}",
+      "helloNoName": "Hi! Your friend has liked {count, plural, one {# title} other {# titles}}",
+      "helloEmpty": "Hi! Your friend wants to find a movie with you",
+      "title": "Swipe – when you both like the same one, it's a match",
+      "joining": "Opening your group…",
+      "error": "Something went wrong opening the group.",
+      "retry": "Try again",
+      "rewardToast": "Nice! You both got {picks} AI picks ✦"
+    },
+    "install": {
+      "text": "Get NextWatch to keep your group",
+      "cta": "Get the app",
+      "close": "Close"
+    },
+    "invalid": {
+      "title": "This link doesn't work",
+      "body": "The group no longer exists, or the link got garbled. Ask your friend for a new link – or start swiping on your own.",
+      "cta": "Open NextWatch",
+      "app": "Get the app"
+    },
+    "full": {
+      "title": "The group is full",
+      "body": "This group already has {max} people. Ask your friend to start a new group – or start swiping on your own."
+    },
+    "meta": {
+      "title": "Swipe movies together – NextWatch",
+      "titleNamed": "{name} wants to find a movie with you tonight",
+      "description": "Swipe in your browser – no app, no account. When you both like the same film, it's a match."
+    },
+    "push": {
+      "rewardTitle": "Your friend swiped ✦",
+      "rewardBody": "You both got {picks} AI picks. Let AI choose tonight's movie!"
+    }
+  },
   "landing": {
     "continueAsGuest": "Continue as guest",
     "createFreeAccount": "Create a free account",

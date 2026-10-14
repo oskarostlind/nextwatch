@@ -2,6 +2,7 @@
 // URL:en används som support-URL i App Store Connect.
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -12,8 +13,19 @@ export async function generateMetadata(): Promise<Metadata> {
 /** Bara ordningen; frågorna och svaren bor i messages/*.json (support.faq). */
 const FAQ_KEYS = ["noRecs", "groups", "cancelPremium", "deleteAccount", "notifications", "bug"] as const;
 
+/**
+ * Svar med en egen Android-variant (Google Play-instruktioner). Visas BARA i
+ * Android-appen: sidan är support-URL i App Store Connect och syns i iOS-appen,
+ * och App Store-riktlinje 2.3.10 förbjuder att andra appbutiker nämns där.
+ * Google Plays krav på raderings-URL uppfylls av den vanliga texten också.
+ */
+const ANDROID_VARIANTS: ReadonlySet<string> = new Set(["cancelPremium", "deleteAccount"]);
+
 export default async function SupportPage() {
   const t = await getTranslations("support");
+  // Capacitor lägger "NextWatchAndroid" i user-agent i Android-appen (se
+  // capacitor.config.ts och app/layout.tsx).
+  const inAndroidApp = ((await headers()).get("user-agent") ?? "").includes("NextWatchAndroid");
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 text-neutral-200">
@@ -39,7 +51,7 @@ export default async function SupportPage() {
             <summary className="cursor-pointer list-none text-[15px] font-medium text-white/90 marker:content-none">
               {t(`faq.${key}.q`)}
             </summary>
-            <p className="mt-2 text-sm leading-relaxed text-white/65">{t(`faq.${key}.a`)}</p>
+            <p className="mt-2 text-sm leading-relaxed text-white/65">{t(inAndroidApp && ANDROID_VARIANTS.has(key) ? `faq.${key}.aAndroid` : `faq.${key}.a`)}</p>
           </details>
         ))}
       </div>

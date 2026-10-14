@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-NextWatch (package name `nextwatch`) is a Swedish-market "Tinder for movies & TV" app built on **Next.js 15 (App Router, Turbopack)** with **React 19**. Users swipe on TMDB titles — solo or in a group — and a group **match** unlocks when enough members like the same title. The app tracks each user's watchlist and ratings, builds a personal taste model, and recommends titles filtered by the streaming services the user (or group) actually has. The web app is also wrapped natively for iOS via Capacitor.
+NextWatch (package name `nextwatch`) is a Swedish-market "Tinder for movies & TV" app built on **Next.js 15 (App Router, Turbopack)** with **React 19**. Users swipe on TMDB titles — solo or in a group — and a group **match** unlocks when enough members like the same title. The app tracks each user's watchlist and ratings, builds a personal taste model, and recommends titles filtered by the streaming services the user (or group) actually has. The web app is also wrapped natively for iOS and Android via Capacitor.
 
 Code comments and most UI copy are in **Swedish**. Some files keep historical "why" comments explaining non-obvious workarounds (e.g. Turbopack export quirks in `lib/cookies.ts`) — read them.
 
@@ -137,6 +137,16 @@ The Next.js app is deployed to the web (`www.nextwatch.se`) and loaded inside a 
 - **"Kommer snart"-like → notisfråga (2026-10-14):** `handleLike` i `app/swipe/page_client.tsx` skickar `requestReleasePushAsk(titel)` (`lib/engagement.ts`) och `PushRegistration` frågar *"Får vi skicka en notis när {titel} släpps?"* — även om användaren nekat/snoozat den allmänna frågan (Oskars beslut). OS-läge avgör: `granted` → registrera + bekräftelse; `prompt`/`prompt-with-rationale` → vår fråga, Ja = OS-dialogen; `denied` → iOS-knapp till `app-settings:` (Capacitor lämnar den till `UIApplication.open`), Android bara instruktion (att öppna inställningarna kräver ett native-plugin). Den allmänna frågan står tillbaka medan arket är öppet.
 - **Utskickstid:** `NW_PUSH_HOURLY=1` → varje användare får sina tips den timme hen brukar swipa (typvärde av `ratings.decided_at` 08–22, annars `NW_PUSH_DEFAULT_HOUR`=19). Kräver att cronen körs varje timme: `.github/workflows/push-cron.yml` (repo-secret `CRON_SECRET`). Utan env-variabeln gäller den dagliga Vercel-cronen (17:00 UTC) som förut.
 - **iOS:** Notification Service Extension + knappar kräver build ≥ den som skickades 2026-10-14 — se `.cursor/skills/ios-appflow-build/SKILL.md`.
+
+### Android (Capacitor, sedan 2026-10-14)
+Samma WebView-skal som iOS (`server.url` → www.nextwatch.se), projekt i `android/`. **Regel: inget Android-arbete får ändra iOS-beteendet** — all ny webbkod gatas på `getPlatform() === "android"`, iOS-grenarna lämnas orörda.
+- **Plattformshjälpare** (`lib/premiumPurchase.ts`): `isNativeIos()` (oförändrad), `isNativeAndroid()`, `isNativeStoreApp()` (= iOS ∨ Android; används där appbeteendet ska vara lika — köp i appen, belöningsvideo, dölj App Store-länk). OBS: `isNativeIOS()` i `ProfileClient.tsx` är historiskt sann för *alla* native-plattformar.
+- **Köp:** Google Play Billing via `@capgo/native-purchases` (`planIdentifier` = baserplan krävs) → `/api/google/play/verify` → `lib/googlePlay.ts` (Play Developer API `subscriptionsv2`, kvitterar, `subProvider: "google"`). Lazy förnyelsesynk i `/api/billing/status` som för Apple. Tabell `google_play_purchases` (`prisma/sql/2026-10-14_google_play.sql`, **rå SQL, ingen Prisma-modell**). Stripe får aldrig visas i Android-appen (Play-policy).
+- **Push:** FCM HTTP v1 (`lib/fcm.ts`) för tokens med `platform = "android"`; allt annat går som förut till APNs i `lib/push.ts`. Kanaler `nw_default`/`nw_match` skapas i `MainActivity.java`. Låsskärmsknappar finns inte på Android. Kräver `android/app/google-services.json`.
+- **Annonser:** AdMob-appen "NextWatch Android" (`ca-app-pub-2616665688666431~3146411158` i `strings.xml`), enheter via `NEXT_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_ID` / `_REWARDED_ID` (fallback Googles Android-test-id:n). Ingen ATT på Android.
+- **Inloggning:** Sign in with Apple döljs (`useHideAppleSignIn`), e-post/lösenord gäller.
+- **Env:** `GOOGLE_SERVICE_ACCOUNT_JSON` (delas av FCM + Play API), `GOOGLE_PLAY_SUB_MONTHLY`, `GOOGLE_PLAY_BASE_PLAN_MONTHLY`, valfria `GOOGLE_PLAY_PACKAGE_NAME`, `FCM_PROJECT_ID`.
+- **Bygg:** `cd android && ./gradlew bundleRelease -PnwVersionCode=<N>` (öka N varje uppladdning). Uppladdningsnyckeln ligger gitignorerad i `android/signing/` (se README där). `public/.well-known/assetlinks.json` ska få Play-appsigneringens SHA-256 tillagd.
 
 ### E-post (Resend — sedan 2026-10-10)
 All e-post går genom **`lib/email.ts`** via Resends REST-API (fetch, inget SDK). Strato SMTP/nodemailer används inte längre — lägg aldrig till en egen transport i en route igen (det fanns fyra kopior innan).

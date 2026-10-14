@@ -5,8 +5,26 @@ import { Capacitor } from "@capacitor/core";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
+/**
+ * True i Android-appen: Sign in with Apple finns inte där (pluginet är iOS-only
+ * och Play kräver det inte) — knappen och dess "eller"-avdelare döljs. Sätts i
+ * en effect så SSR/hydrering är identisk med webben; iOS påverkas inte.
+ */
+export function useHideAppleSignIn(): boolean {
+  const [hide, setHide] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") setHide(true);
+    } catch {
+      /* webb */
+    }
+  }, []);
+  return hide;
+}
+
 export default function AppleSignInButton({ disabled = false }: { disabled?: boolean } = {}) {
   const t = useTranslations("auth");
+  const hidden = useHideAppleSignIn();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -79,6 +97,8 @@ export default function AppleSignInButton({ disabled = false }: { disabled?: boo
       setLoading(false);
     }
   }
+
+  if (hidden) return null;
 
   return (
     <div className="space-y-2">

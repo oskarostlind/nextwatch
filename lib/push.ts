@@ -25,6 +25,7 @@ import { DEFAULT_LOCALE, normalizeLocale } from "@/lib/i18nConfig";
 import { tmdbLanguageFor } from "@/lib/tmdbLanguage";
 import { fetchTitleBrief, type TitleBrief } from "@/lib/tmdbTitleBrief";
 import { signPushAction } from "@/lib/pushActionToken";
+import { fcmConfigured, sendFcmToTokens } from "@/lib/fcm";
 
 export type PushPayload = {
   title: string;
@@ -250,7 +251,10 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   let logId: string | null = null;
   try {
     const creds = getCredentials();
-    if (!creds) {
+    // Android (FCM) är ett separat spår bredvid APNs — iOS-flödet nedan är
+    // oförändrat. Utan APNs-nycklar kan Android-tokens fortfarande nås.
+    const fcmOn = fcmConfigured();
+    if (!creds && !fcmOn) {
       console.warn("[push] APNS_* env saknas – push skickas inte.");
       return { sent: false };
     }
@@ -260,11 +264,16 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       return { sent: false };
     }
 
-    const tokens = await prisma.pushToken.findMany({
+    const allTokens = await prisma.pushToken.findMany({
       where: { userId },
-      select: { token: true },
+      select: { token: true, platform: true },
     });
-    if (tokens.length === 0) return { sent: false };
+    // Allt som inte uttryckligen är Android går till APNs, precis som förut.
+    const tokens = creds ? allTokens.filter((t) => t.platform !== "android") : [];
+    const androidTokens = fcmOn
+      ? allTokens.filter((t) => t.platform === "android").map((t) => t.token)
+      : [];
+    if (tokens.length === 0 && androidTokens.length === 0) return { sent: false };
 
     // Loggraden skrivs först när vi vet att pushen faktiskt kan gå iväg, och id:t
     // måste finnas innan sändning eftersom det åker med i data.pid. Misslyckas
@@ -304,25 +313,34 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       if (act) data.act = act;
     }
 
-    const jwt = getApnsJwt(creds);
-
-    const session = http2.connect(`https://${creds.host}`);
-    session.on("error", () => {
-      /* hanteras per request */
-    });
-
     const stale: string[] = [];
     let delivered = 0;
-    try {
-      await Promise.all(
-        tokens.map(async ({ token }) => {
-          const result = await sendToToken(session, creds, jwt, token, payload, data);
-          if (result === "ok") delivered += 1;
-          if (result === "stale") stale.push(token);
-        })
-      );
-    } finally {
-      session.close();
+
+    if (creds && tokens.length > 0) {
+      const jwt = getApnsJwt(creds);
+
+      const session = http2.connect(`https://${creds.host}`);
+      session.on("error", () => {
+        /* hanteras per request */
+      });
+
+      try {
+        await Promise.all(
+          tokens.map(async ({ token }) => {
+            const result = await sendToToken(session, creds, jwt, token, payload, data);
+            if (result === "ok") delivered += 1;
+            if (result === "stale") stale.push(token);
+          })
+        );
+      } finally {
+        session.close();
+      }
+    }
+
+    if (androidTokens.length > 0) {
+      const fcm = await sendFcmToTokens(androidTokens, payload, data);
+      delivered += fcm.delivered;
+      stale.push(...fcm.stale);
     }
 
     if (stale.length > 0) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { isNativeIos } from "./premiumPurchase";
+import { isNativeIos, isNativeStoreApp } from "./premiumPurchase";
 
 /**
  * Meta App Events i iOS-appen — krävs för att Metas appkampanjer ska kunna
@@ -67,7 +67,9 @@ export async function startMetaAppEvents(): Promise<void> {
   }
   d.isNativeIos = isNativeIos();
   report({ ...d });
-  if (started || !d.isNativeIos) return;
+  d.isNativeApp = isNativeStoreApp();
+  // iOS och Android (samma Meta-app; Android-nycklarna ligger i strings.xml).
+  if (started || !d.isNativeApp) return;
   started = true;
   const wrapped = await withTimeout(plugin()).catch(() => null);
   d.jsLoaded = !!wrapped;

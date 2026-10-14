@@ -14,7 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-export type EntitlementSource = "stripe" | "apple" | "lifetime" | null;
+export type EntitlementSource = "stripe" | "apple" | "google" | "lifetime" | null;
 
 export type Entitlement = {
   isPremium: boolean;
@@ -54,7 +54,13 @@ export function computeEntitlement(u: UserEntitlementRow | null): Entitlement {
   return {
     isPremium,
     plan: isPremium ? "premium" : "free",
-    source: isPremium ? (u.subProvider === "apple" ? "apple" : "stripe") : null,
+    source: isPremium
+      ? u.subProvider === "apple"
+        ? "apple"
+        : u.subProvider === "google"
+          ? "google"
+          : "stripe"
+      : null,
     status: u.subStatus ?? null,
     renewsAt: u.subCurrentPeriodEnd ? u.subCurrentPeriodEnd.toISOString() : null,
   };

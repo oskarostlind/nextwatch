@@ -860,7 +860,7 @@ type NotifPrefs = {
 type BillingStatus = {
   plan: string;
   isPremium: boolean;
-  source: "stripe" | "apple" | "lifetime" | null;
+  source: "stripe" | "apple" | "google" | "lifetime" | null;
   status: string | null;
   renewsAt: string | null;
 };
@@ -906,6 +906,18 @@ function Toggle({
       />
     </button>
   );
+}
+
+/** Android-appen (Capacitor). OBS: isNativeIOS() nedan är sann även här — den
+ *  ska fortsätta betyda "native app" för befintliga anropare. */
+function isNativeAndroidApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string } };
+  try {
+    return w.Capacitor?.isNativePlatform?.() === true && w.Capacitor?.getPlatform?.() === "android";
+  } catch {
+    return false;
+  }
 }
 
 function isNativeIOS(): boolean {
@@ -1039,6 +1051,7 @@ function SettingsTab() {
   }
 
   const ios = isNativeIOS();
+  const android = isNativeAndroidApp();
   const [adPrivacyNeeded, setAdPrivacyNeeded] = useState(false);
   useEffect(() => {
     if (!ios) return;
@@ -1095,7 +1108,24 @@ function SettingsTab() {
                 : ""}
             </p>
             {billing.plan !== "lifetime" &&
-              (billing.source === "apple" || ios ? (
+              (billing.source === "google" ? (
+                <div className="grid gap-2">
+                  {android && (
+                    <Button variant="secondary" onClick={() => void openSubscriptionManagement()}>
+                      {t("manageInGooglePlay")}
+                    </Button>
+                  )}
+                  <p className="text-xs text-white/50">
+                    {t("manageGoogleHint")}
+                  </p>
+                </div>
+              ) : android ? (
+                // Köpt på iPhone eller webben men öppnad i Android-appen: bara
+                // en hänvisning (Play-policyn — inga externa betalflöden i appen).
+                <p className="text-xs text-white/50">
+                  {billing.source === "apple" ? t("manageAppleHint") : t("manageWebHint")}
+                </p>
+              ) : billing.source === "apple" || ios ? (
                 <div className="grid gap-2">
                   {ios && (
                     <Button variant="secondary" onClick={() => void openSubscriptionManagement()}>
@@ -1218,6 +1248,11 @@ function SettingsTab() {
           {billing?.source === "apple" && (
             <p className="text-xs text-white/50">
               {t("deleteAccountAppleHint")}
+            </p>
+          )}
+          {billing?.source === "google" && (
+            <p className="text-xs text-white/50">
+              {t("deleteAccountGoogleHint")}
             </p>
           )}
           {!deleteConfirm ? (

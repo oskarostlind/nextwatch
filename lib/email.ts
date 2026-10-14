@@ -256,7 +256,7 @@ export async function sendPasswordResetEmail(to: string, link: string, locale: u
 export async function sendPremiumWelcomeEmail(
   to: string,
   locale: unknown,
-  opts: { provider: "stripe" | "apple"; idempotencyKey: string },
+  opts: { provider: "stripe" | "apple" | "google"; idempotencyKey: string },
 ): Promise<SendResult> {
   const lang = normalizeLocale(locale);
   const t = await getTranslations({ locale: lang, namespace: "email" });
@@ -267,7 +267,12 @@ export async function sendPremiumWelcomeEmail(
     heading: t("premium.heading"),
     paragraphs: [t("premium.intro"), t("premium.perks")],
     cta: { label: t("premium.cta"), url: `${APP_URL}/swipe` },
-    footnote: opts.provider === "apple" ? t("premium.manageApple") : t("premium.manageStripe"),
+    footnote:
+      opts.provider === "apple"
+        ? t("premium.manageApple")
+        : opts.provider === "google"
+          ? t("premium.manageGoogle")
+          : t("premium.manageStripe"),
     footer: t("common.footer"),
   });
   return sendEmail({

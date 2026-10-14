@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nextwatch</string>
+    <string name="title_activity_main">Nextwatch</string>
+    <string name="package_name">com.nextwatch.app</string>
+    <string name="custom_url_scheme">nextwatch</string>
+    <!-- AdMob Android-app (NextWatch Android). -->
+    <string name="admob_app_id" translatable="false">ca-app-pub-2616665688666431~3146411158</string>
+    <string name="facebook_app_id" translatable="false">1277172887819315</string>
+    <string name="facebook_client_token" translatable="false">db30731dcaa999193e044c452fd61293</string>
+    <string name="notif_channel_default">Nextwatch</string>
+    <string name="notif_channel_match">Gruppmatchningar</string>
+</resources>

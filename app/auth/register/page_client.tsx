@@ -5,12 +5,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Capacitor } from "@capacitor/core";
-import AppleSignInButton from "@/app/components/auth/AppleSignInButton";
+import AppleSignInButton, { useHideAppleSignIn } from "@/app/components/auth/AppleSignInButton";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
 export default function RegisterClient({ termsAlreadyAccepted = false }: { termsAlreadyAccepted?: boolean }) {
   const t = useTranslations("auth");
+  const hideApple = useHideAppleSignIn();
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function RegisterClient({ termsAlreadyAccepted = false }: { terms
 
       <AppleSignInButton disabled={!terms} />
 
+      {!hideApple && (
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-white/10" />
@@ -94,6 +96,7 @@ export default function RegisterClient({ termsAlreadyAccepted = false }: { terms
           <span className="bg-neutral-900/80 px-2 text-neutral-500">{t("orWithEmail")}</span>
         </div>
       </div>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>

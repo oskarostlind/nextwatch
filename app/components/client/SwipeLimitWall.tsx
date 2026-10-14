@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Crown, PlayCircle } from "lucide-react";
-import { goPremium, isNativeIos } from "@/lib/premiumPurchase";
+import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { watchRewardedForSwipes } from "@/lib/admobAds";
 // reportSwipeLimitFrom bor i lib/swipeLimitEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
@@ -80,7 +80,7 @@ export default function SwipeLimitWall() {
     return () => window.removeEventListener(SWIPE_LIMIT_EVENT, onLimit);
   }, [refresh]);
 
-  const offerRewarded = isNativeIos() && rewardedLeft > 0;
+  const offerRewarded = isNativeStoreApp() && rewardedLeft > 0;
 
   const onWatchRewarded = () => {
     if (watching) return;

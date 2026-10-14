@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     if (!DEVICE_RE.test(device) || !NAME_RE.test(name)) {
       return NextResponse.json({ ok: false, track: false });
     }
-    const platform = body.platform === "ios" ? "ios" : "web";
+    const platform = body.platform === "ios" ? "ios" : body.platform === "android" ? "android" : "web";
     const path = typeof body.path === "string" ? body.path.slice(0, 120) : null;
     const props = cleanProps(body.props);
     const uid = (await cookies()).get("nw_uid")?.value ?? null;

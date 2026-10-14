@@ -14,7 +14,7 @@
 // Bannern togs BORT (Oskars beslut 2026-07-18): den låg i vägen för knapparna
 // och förstörde upplevelsen oavsett placering — intäkten motiverade den inte.
 //
-// Gate: bara native iOS (isNativeIos), aldrig för premium, aldrig under ett
+// Gate: bara native-apparna (isNativeStoreApp: iOS + Android), aldrig för premium, aldrig under ett
 // aktivt 24h-fönster. Undantag: den FRIVILLIGA belöningsvideon för AI-val
 // (watchRewardedForPicks) får även premium se — den initierar bara SDK:t och
 // lämnar `eligible` (= interstitials) orört. Samtycke före första annonsen: UMP-formuläret (GDPR)
@@ -30,7 +30,7 @@
 // Annonsenhets-id:n via env med Googles officiella TEST-id:n som fallback, så
 // en build utan env aldrig visar skarpa annonser av misstag.
 
-import { isNativeIos } from "@/lib/premiumPurchase";
+import { isNativeAndroid, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { adEveryFromEnv } from "@/lib/ads";
 import { funnel } from "@/lib/funnel";
 import { claimPickReward } from "@/lib/aiPick/client";
@@ -38,6 +38,12 @@ import { claimPickReward } from "@/lib/aiPick/client";
 const TEST_IDS = {
   interstitial: "ca-app-pub-3940256099942544/4411468910",
   rewarded: "ca-app-pub-3940256099942544/1712485313",
+};
+
+/** Googles officiella Android-test-id:n (annonsenheter är per plattform i AdMob). */
+const ANDROID_TEST_IDS: Record<keyof typeof TEST_IDS, string> = {
+  interstitial: "ca-app-pub-3940256099942544/1033173712",
+  rewarded: "ca-app-pub-3940256099942544/5224354917",
 };
 
 /**
@@ -54,6 +60,16 @@ function isAdUnitId(value: string): boolean {
 }
 
 function adId(kind: keyof typeof TEST_IDS): string {
+  // Android-appen har egna annonsenheter (NextWatch Android i AdMob). iOS-
+  // vägen nedan är oförändrad.
+  if (isNativeAndroid()) {
+    const envA = {
+      interstitial: process.env.NEXT_PUBLIC_ADMOB_ANDROID_INTERSTITIAL_ID,
+      rewarded: process.env.NEXT_PUBLIC_ADMOB_ANDROID_REWARDED_ID,
+    }[kind];
+    if (!envA || !isAdUnitId(envA)) return ANDROID_TEST_IDS[kind];
+    return envA;
+  }
   const env = {
     interstitial: process.env.NEXT_PUBLIC_ADMOB_INTERSTITIAL_ID,
     rewarded: process.env.NEXT_PUBLIC_ADMOB_REWARDED_ID,
@@ -332,7 +348,7 @@ async function initSdkAndConsent(): Promise<boolean> {
  * annons behövs direkt (belöningsvideon i dagsgränsväggen).
  */
 export async function initAdMobIfEligible(force = false): Promise<boolean> {
-  if (!isNativeIos()) return false;
+  if (!isNativeStoreApp()) return false;
   if (initialized) return eligible;
   if (!force && !pastStartStretch(CONSENT_LEAD_SWIPES)) return false;
   if (initInFlight) return initInFlight;
@@ -438,7 +454,7 @@ async function doPrepareInterstitial(): Promise<void> {
  * INTERSTITIAL_EVERY:e swipe med tidsgolv. Fire-and-forget — får aldrig blockera swipeflödet.
  */
 export function registerSwipeForAds(): void {
-  if (typeof window !== "undefined" && isNativeIos()) {
+  if (typeof window !== "undefined" && isNativeStoreApp()) {
     lifetimeSwipes = lifetime() + 1;
     saveNumber(LIFETIME_KEY, lifetimeSwipes);
     // Nära första annonsen: dags för samtycke + ATT (init frågar dem).
@@ -506,7 +522,7 @@ export function registerSwipeForAds(): void {
  * startas bara SDK:t + samtycket, så interstitials förblir avstängda.
  */
 export async function initAdMobForRewarded(): Promise<boolean> {
-  if (!isNativeIos()) return false;
+  if (!isNativeStoreApp()) return false;
   if (await initAdMobIfEligible(true)) return true;
   return initSdkAndConsent();
 }
@@ -602,7 +618,7 @@ export async function watchRewardedForPicks(): Promise<boolean> {
  * en knapp när det här är true. Frågar UMP direkt om init inte hunnit köras.
  */
 export async function adPrivacyOptionsRequired(): Promise<boolean> {
-  if (!isNativeIos()) return false;
+  if (!isNativeStoreApp()) return false;
   if (privacyOptionsRequired) return true;
   try {
     const { AdMob } = await plugin();

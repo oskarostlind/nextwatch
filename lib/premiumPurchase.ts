@@ -26,6 +26,25 @@ export function isNativeIos(): boolean {
   }
 }
 
+/** Native Android-appen (Capacitor). Köp går via Google Play Billing. */
+export function isNativeAndroid(): boolean {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Native app med butikens egen betalning (iOS → App Store, Android → Google
+ * Play). Används där beteendet ska vara detsamma i båda apparna (köp direkt i
+ * appen, belöningsvideo, inga Stripe-länkar). På iOS är den identisk med
+ * isNativeIos().
+ */
+export function isNativeStoreApp(): boolean {
+  return isNativeIos() || isNativeAndroid();
+}
+
 /** True om felet är användarens egna avbryt (ska inte visas som fel). */
 function isUserCancelled(message: string): boolean {
   const m = message.toLowerCase();
@@ -84,6 +103,82 @@ async function startAppleIapPurchase(): Promise<PurchaseResult> {
   }
 }
 
+type PlayConfig = {
+  enabled?: boolean;
+  products?: { monthly?: string | null };
+  basePlans?: { monthly?: string | null };
+};
+
+async function fetchPlayConfig(): Promise<{ productId: string; basePlan: string } | null> {
+  const res = await fetch("/api/google/play/config", { cache: "no-store" });
+  const config = (await res.json()) as PlayConfig;
+  const productId = config.products?.monthly ?? null;
+  const basePlan = config.basePlans?.monthly ?? null;
+  if (!config.enabled || !productId || !basePlan) return null;
+  return { productId, basePlan };
+}
+
+async function verifyPlayToken(purchaseToken: string): Promise<{ ok: boolean; active?: boolean; message?: string }> {
+  const res = await fetch("/api/google/play/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ purchaseToken }),
+  });
+  const js = (await res.json().catch(() => null)) as { ok?: boolean; active?: boolean; message?: string } | null;
+  return { ok: res.ok && Boolean(js?.ok), active: js?.active, message: js?.message };
+}
+
+/** Android: Google Play Billing via @capgo/native-purchases, verifierat server-side. */
+async function startGooglePlayPurchase(): Promise<PurchaseResult> {
+  try {
+    const cfg = await fetchPlayConfig();
+    if (!cfg) return { ok: false, message: clientMsg("purchaseUnavailableRetry") };
+
+    const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
+    const transaction = await NativePurchases.purchaseProduct({
+      productIdentifier: cfg.productId,
+      planIdentifier: cfg.basePlan,
+      productType: PURCHASE_TYPE.SUBS,
+    });
+    const token = transaction.purchaseToken;
+    if (!token) return { ok: false, message: clientMsg("purchaseUnverified") };
+
+    const v = await verifyPlayToken(token);
+    if (!v.ok) return { ok: false, message: clientMsg("purchaseUnverified") };
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isUserCancelled(message)) return { ok: false, message: "", cancelled: true };
+    console.error("[premiumPurchase] Play Billing misslyckades:", message);
+    return { ok: false, message: clientMsg("purchaseFailed") };
+  }
+}
+
+/** Android: hittar aktiv prenumeration i Google Play och verifierar den server-side. */
+async function restoreGooglePlayPurchases(): Promise<PurchaseResult> {
+  try {
+    const cfg = await fetchPlayConfig();
+    if (!cfg) return { ok: false, message: clientMsg("purchaseUnavailable") };
+    const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
+    await NativePurchases.restorePurchases().catch(() => {});
+    const { purchases } = await NativePurchases.getPurchases({ productType: PURCHASE_TYPE.SUBS });
+    const latest = purchases
+      .filter((p) => p.productIdentifier === cfg.productId && p.purchaseToken)
+      .sort((a, b) => (b.purchaseDate ?? "").localeCompare(a.purchaseDate ?? ""))[0];
+    if (!latest?.purchaseToken) return { ok: false, message: clientMsg("noActiveSubscription") };
+    const v = await verifyPlayToken(latest.purchaseToken);
+    if (!v.ok) return { ok: false, message: v.message ?? clientMsg("purchaseVerifyFailed") };
+    if (v.active === false) return { ok: false, message: clientMsg("subscriptionExpired") };
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isUserCancelled(message)) return { ok: false, message: "", cancelled: true };
+    console.error("[premiumPurchase] Play-återställning misslyckades:", message);
+    return { ok: false, message: clientMsg("restoreFailed") };
+  }
+}
+
 async function startStripeCheckout(): Promise<PurchaseResult> {
   try {
     const r = await fetch("/api/stripe/checkout", {
@@ -110,6 +205,7 @@ async function startStripeCheckout(): Promise<PurchaseResult> {
  * Endast native iOS.
  */
 export async function restorePremiumPurchases(): Promise<PurchaseResult> {
+  if (isNativeAndroid()) return restoreGooglePlayPurchases();
   if (!isNativeIos()) {
     return { ok: false, message: clientMsg("restoreOnIos") };
   }
@@ -180,7 +276,8 @@ export async function restorePremiumPurchases(): Promise<PurchaseResult> {
  * arket inte kunde öppnas — visa då instruktionstext istället.
  */
 export async function openSubscriptionManagement(): Promise<boolean> {
-  if (!isNativeIos()) return false;
+  // iOS: App Stores ark. Android: Google Plays prenumerationscenter (intent).
+  if (!isNativeStoreApp()) return false;
   try {
     const { NativePurchases } = await import("@capgo/native-purchases");
     await NativePurchases.manageSubscriptions();
@@ -202,6 +299,8 @@ export async function startPremiumPurchase(): Promise<PurchaseResult> {
   // som försvinner vid utloggning eller gäststädningen. "Köp ändå" går vidare.
   if (!(await ensureAccountBeforePremium())) return { ok: false, message: "", cancelled: true };
   if (isNativeIos()) return startAppleIapPurchase();
+  // Android-appen: Google Play Billing (Play-policyn förbjuder Stripe i appen).
+  if (isNativeAndroid()) return startGooglePlayPurchase();
   return startStripeCheckout();
 }
 
@@ -211,7 +310,7 @@ export async function startPremiumPurchase(): Promise<PurchaseResult> {
  * köpflödet direkt och går till /premium/success när det lyckas.
  */
 export async function goPremium(): Promise<void> {
-  if (!isNativeIos()) {
+  if (!isNativeStoreApp()) {
     window.location.href = "/premium";
     return;
   }

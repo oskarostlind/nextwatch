@@ -26,11 +26,12 @@ let init: Promise<State | null> | null = null;
 let sent: Set<string> | null = null;
 const queue: { name: string; props?: FunnelProps; at: number }[] = [];
 
-function platform(): "ios" | "web" {
+function platform(): "ios" | "android" | "web" {
   try {
     const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string } })
       .Capacitor;
     if (cap?.isNativePlatform?.() && cap.getPlatform?.() === "ios") return "ios";
+    if (cap?.isNativePlatform?.() && cap.getPlatform?.() === "android") return "android";
   } catch {
     /* webb */
   }

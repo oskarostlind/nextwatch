@@ -12,13 +12,14 @@
 // annars hade webbesökare (och crawlern) fått en tom fot, vilket är hela
 // poängen med komponenten omvänt.
 import * as React from "react";
-import { isNativeIos } from "@/lib/premiumPurchase";
+import { isNativeStoreApp } from "@/lib/premiumPurchase";
 import { appStoreUrl } from "@/lib/seo";
 
 export default function AppStoreLink({ campaign }: { campaign: string }) {
   const [native, setNative] = React.useState(false);
   React.useEffect(() => {
-    setNative(isNativeIos());
+    // Dölj i båda apparna (iOS och Android) — App Store-länken hör till webben.
+    setNative(isNativeStoreApp());
   }, []);
 
   if (native) return null;

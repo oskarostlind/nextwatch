@@ -181,7 +181,8 @@
       "perks": "Du har obegränsat antal swipes, inga annonser, grupper med upp till 20 personer och hela din smakprofil.",
       "cta": "Börja swipea",
       "manageStripe": "Prenumerationen förnyas automatiskt varje månad. Kvittot kommer i ett separat mejl från Stripe. Du kan säga upp när som helst i profilen under Inställningar → Hantera prenumeration.",
-      "manageApple": "Prenumerationen förnyas automatiskt varje månad. Apple skickar kvittot. Du säger upp i iPhone-inställningarna → ditt namn → Prenumerationer."
+      "manageApple": "Prenumerationen förnyas automatiskt varje månad. Apple skickar kvittot. Du säger upp i iPhone-inställningarna → ditt namn → Prenumerationer.",
+      "manageGoogle": "Prenumerationen förnyas automatiskt varje månad. Google skickar kvittot. Du säger upp i Google Play → Betalningar och prenumerationer."
     }
   },
   "filmChat": {
@@ -728,6 +729,8 @@
     "eyebrow": "Uppgradera",
     "intro": "Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.",
     "legalApple": "Betalningen dras från ditt Apple-konto när du bekräftar köpet. Förnyelsen sker inom 24 timmar före periodens slut om du inte säger upp innan dess. Du hanterar och avslutar prenumerationen i Inställningar på din enhet.",
+    "openingGooglePlay": "Öppnar Google Play…",
+    "legalGoogle": "Betalningen dras från ditt Google-konto när du bekräftar köpet. Prenumerationen förnyas automatiskt varje månad tills du säger upp den. Du hanterar och avslutar den i Google Play → Betalningar och prenumerationer.",
     "legalName": "<name>NextWatch Premium</name> — 19 kr per månad. Prenumerationen förnyas automatiskt varje månad tills du säger upp den.",
     "legalStripe": "Betalningen hanteras av Stripe. Du kan avsluta prenumerationen när som helst.",
     "openingAppStore": "Öppnar App Store…",
@@ -780,6 +783,10 @@
     "languageLabel": "Språk",
     "loading": "Laddar…",
     "manageAppleHint": "Hantera eller säg upp din prenumeration via App Store: Inställningar → ditt namn → Prenumerationer.",
+    "manageInGooglePlay": "Hantera i Google Play",
+    "manageGoogleHint": "Hantera eller säg upp din prenumeration i Google Play: Profil → Betalningar och prenumerationer → Prenumerationer.",
+    "manageWebHint": "Prenumerationen köptes på webben — hantera eller säg upp den på nextwatch.se under Profil → Inställningar.",
+    "deleteAccountGoogleHint": "Att radera kontot avslutar inte prenumerationen i Google Play. Säg upp den i Google Play först.",
     "manageInAppStore": "Hantera i App Store",
     "manageSubscription": "Hantera prenumeration",
     "networkError": "Nätverksfel.",

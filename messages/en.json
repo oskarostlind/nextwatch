@@ -181,7 +181,8 @@
       "perks": "You get unlimited swipes, no ads, groups of up to 20 people and your full taste profile.",
       "cta": "Start swiping",
       "manageStripe": "Your subscription renews automatically every month. Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
-      "manageApple": "Your subscription renews automatically every month. Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions."
+      "manageApple": "Your subscription renews automatically every month. Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions.",
+      "manageGoogle": "Your subscription renews automatically every month. Google sends the receipt. Cancel in Google Play → Payments & subscriptions."
     }
   },
   "filmChat": {
@@ -728,6 +729,8 @@
     "eyebrow": "Upgrade",
     "intro": "Remove ads and swipe without limits. SEK 19/month, no lock-in.",
     "legalApple": "Payment is charged to your Apple account when you confirm the purchase. It renews within 24 hours before the end of the period unless you cancel before then. You manage and cancel the subscription in Settings on your device.",
+    "openingGooglePlay": "Opening Google Play…",
+    "legalGoogle": "Payment is charged to your Google account when you confirm the purchase. The subscription renews automatically every month until you cancel. Manage or cancel it in Google Play → Payments & subscriptions.",
     "legalName": "<name>NextWatch Premium</name> — SEK 19 per month. The subscription renews automatically every month until you cancel.",
     "legalStripe": "Payment is handled by Stripe. You can cancel the subscription at any time.",
     "openingAppStore": "Opening the App Store…",
@@ -780,6 +783,10 @@
     "languageLabel": "Language",
     "loading": "Loading…",
     "manageAppleHint": "Manage or cancel your subscription in the App Store: Settings → your name → Subscriptions.",
+    "manageInGooglePlay": "Manage in Google Play",
+    "manageGoogleHint": "Manage or cancel your subscription in Google Play: Profile → Payments & subscriptions → Subscriptions.",
+    "manageWebHint": "This subscription was bought on the web — manage or cancel it at nextwatch.se under Profile → Settings.",
+    "deleteAccountGoogleHint": "Deleting your account does not cancel your Google Play subscription. Cancel it in Google Play first.",
     "manageInAppStore": "Manage in the App Store",
     "manageSubscription": "Manage subscription",
     "networkError": "Network error.",

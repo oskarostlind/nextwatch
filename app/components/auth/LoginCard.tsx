@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import AppleSignInButton from './AppleSignInButton';
+import AppleSignInButton, { useHideAppleSignIn } from './AppleSignInButton';
 import { useTranslations } from "next-intl";
 
 export default function LoginCard() {
   const t = useTranslations("auth");
+  const hideApple = useHideAppleSignIn();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -78,6 +79,7 @@ export default function LoginCard() {
         </button>
       </form>
 
+      {!hideApple && (
       <div className="relative my-4">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-white/10" />
@@ -86,6 +88,7 @@ export default function LoginCard() {
           <span className="bg-neutral-900/60 px-2 text-neutral-500">{t("or")}</span>
         </div>
       </div>
+      )}
 
       <AppleSignInButton />
 

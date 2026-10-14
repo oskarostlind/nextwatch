@@ -82,7 +82,7 @@ import type {
 } from "@/lib/aiPick/types";
 import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
-import { goPremium, isNativeIos } from "@/lib/premiumPurchase";
+import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
 import {
@@ -237,7 +237,8 @@ export default function PickSheet({
   const dragControls = useDragControls();
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const native = isNativeIos();
+  // iOS → Apple IAP, Android → Google Play (båda köper direkt i appen).
+  const native = isNativeStoreApp();
   const history = usePickHistory();
   const resetHistory = history.reset;
 

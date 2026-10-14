@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "../../../../lib/prisma";
 import { computeEntitlement } from "../../../../lib/entitlements";
 import { refreshAppleSubscription } from "../../../../lib/appleIap";
+import { refreshGoogleSubscription } from "../../../../lib/googlePlay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,17 @@ export async function GET() {
       user.subCurrentPeriodEnd.getTime() < Date.now() + 12 * 60 * 60 * 1000)
   ) {
     await refreshAppleSubscription(uid);
+    user = await prisma.user.findUnique({ where: { id: uid }, select: USER_SELECT });
+  }
+
+  // Samma lazy-synk för Google Play (Android-appen).
+  if (
+    user?.subProvider === "google" &&
+    user.plan === "premium" &&
+    (!user.subCurrentPeriodEnd ||
+      user.subCurrentPeriodEnd.getTime() < Date.now() + 12 * 60 * 60 * 1000)
+  ) {
+    await refreshGoogleSubscription(uid);
     user = await prisma.user.findUnique({ where: { id: uid }, select: USER_SELECT });
   }
 

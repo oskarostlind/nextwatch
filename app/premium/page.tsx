@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button, Card, Note, PageHeader } from "@/app/components/ui/kit";
 import { useTranslations } from "next-intl";
 import {
+  isNativeAndroid,
   isNativeIos,
   restorePremiumPurchases,
   startPremiumPurchase,
@@ -16,9 +17,12 @@ export default function PremiumPage() {
   const [err, setErr] = useState<string>("");
   // Avgörs i effect (inte vid render) så SSR-html:en är stabil.
   const [onIos, setOnIos] = useState(false);
+  // Android-appen: Google Play Billing (egen förnyelsetext, ingen Apple-EULA).
+  const [onAndroid, setOnAndroid] = useState(false);
 
   useEffect(() => {
     setOnIos(isNativeIos());
+    setOnAndroid(isNativeAndroid());
   }, []);
 
   async function buy() {
@@ -28,7 +32,7 @@ export default function PremiumPage() {
       // Plattformsmedveten: native iOS -> Apple IAP, webb -> Stripe Checkout.
       const result = await startPremiumPurchase();
       if (result.ok) {
-        if (isNativeIos()) window.location.href = "/premium/success";
+        if (isNativeIos() || isNativeAndroid()) window.location.href = "/premium/success";
         // Webb: Stripe-redirecten har redan skett.
         return;
       }
@@ -92,10 +96,12 @@ export default function PremiumPage() {
           {loading
             ? onIos
               ? t("openingAppStore")
-              : t("startingStripe")
+              : onAndroid
+                ? t("openingGooglePlay")
+                : t("startingStripe")
             : t("buyCta")}
         </Button>
-        {onIos && (
+        {(onIos || onAndroid) && (
           <>
             <button
               type="button"
@@ -120,10 +126,13 @@ export default function PremiumPage() {
           </p>
           {onIos ? (
             <p>{t("legalApple")}</p>
+          ) : onAndroid ? (
+            <p>{t("legalGoogle")}</p>
           ) : (
             <p>{t("legalStripe")}</p>
           )}
           <p className="flex flex-wrap gap-x-3 gap-y-1">
+            {!onAndroid && (
             <a
               href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
               target="_blank"
@@ -132,6 +141,7 @@ export default function PremiumPage() {
             >
               {t("eula")}
             </a>
+            )}
             <a href="/legal/terms" className="underline underline-offset-2 transition hover:text-neutral-300">
               {t("ourTerms")}
             </a>

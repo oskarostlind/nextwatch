@@ -11,7 +11,7 @@ export type BillingStatus = {
   plan: string;
   planSince: string | null;
   isPremium: boolean;
-  source: "stripe" | "apple" | "lifetime" | null;
+  source: "stripe" | "apple" | "google" | "lifetime" | null;
   status: string | null;
   renewsAt: string | null;
 };

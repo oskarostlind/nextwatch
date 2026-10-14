@@ -26,6 +26,8 @@ export type FsState = {
   /** A/B: "paywall" visar den mjuka betalväggen efter spara, "control" hoppar över den. */
   variant: "paywall" | "control";
   startedAt: number;
+  /** Kvällens AI-val (sätts av AiReveal, läses av SaveSheet/PushAskSheet). */
+  aiPick?: FsLike | null;
 };
 
 export const FS_EVENT = "nw:first-session";
@@ -97,6 +99,13 @@ export function advanceFs(from: FsStep, opts?: { isPremium?: boolean; skipPaywal
   let i = ORDER.indexOf(from) + 1;
   while (ORDER[i] === "paywall" && (cur.variant !== "paywall" || opts?.isPremium || opts?.skipPaywall)) i++;
   write({ ...cur, step: ORDER[Math.min(i, ORDER.length - 1)] });
+}
+
+/** AiReveal sparar kvällens val så att spara-arket och notisfrågan kan visa det. */
+export function setFsAiPick(pick: FsLike | null): void {
+  const cur = getFs();
+  if (!cur.eligible) return;
+  write({ ...cur, aiPick: pick });
 }
 
 /** Avsluta flödet direkt (t.ex. inloggning på befintligt konto). */

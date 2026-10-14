@@ -158,24 +158,9 @@ export function PlanLegal({
 }) {
   const t = useTranslations("store");
   const tp = useTranslations("premium");
-  const [restoring, setRestoring] = useState(false);
   const offer = offers[plan];
   const period = t(`period.${offer.period}`);
   const name = (chunks: ReactNode) => <span className="font-medium text-neutral-300">{chunks}</span>;
-
-  async function restore() {
-    setRestoring(true);
-    try {
-      const result = await restorePremiumPurchases();
-      if (result.ok) {
-        window.location.href = "/premium/success";
-        return;
-      }
-      if (!result.cancelled) onError?.(result.message || tp("restoreFailed"));
-    } finally {
-      setRestoring(false);
-    }
-  }
 
   return (
     <div className="space-y-2 text-xs leading-relaxed text-neutral-500">
@@ -212,17 +197,47 @@ export function PlanLegal({
         <a href="/legal/privacy" className="underline underline-offset-2 transition hover:text-neutral-300">
           {tp("privacy")}
         </a>
-        {platform !== "web" ? (
-          <button
-            type="button"
-            onClick={() => void restore()}
-            disabled={busy || restoring}
-            className="underline underline-offset-2 transition hover:text-neutral-300 disabled:opacity-50"
-          >
-            {restoring ? tp("restoring") : tp("restore")}
-          </button>
-        ) : null}
+        {platform !== "web" ? <RestorePurchasesButton busy={busy} onError={onError} /> : null}
       </p>
     </div>
+  );
+}
+
+/**
+ * "Återställ tidigare köp" (App Store 3.1.1 / Play) — bara i apparna. Egen
+ * komponent så den kan visas även när butiken inte har någon plan att sälja
+ * (t.ex. /premium när produkterna inte laddats): den som redan betalat ska
+ * alltid kunna få tillbaka Premium.
+ */
+export function RestorePurchasesButton({
+  busy,
+  onError,
+  className = "underline underline-offset-2 transition hover:text-neutral-300 disabled:opacity-50",
+}: {
+  busy?: boolean;
+  onError?: (message: string) => void;
+  className?: string;
+}) {
+  const tp = useTranslations("premium");
+  const [restoring, setRestoring] = useState(false);
+
+  async function restore() {
+    setRestoring(true);
+    try {
+      const result = await restorePremiumPurchases();
+      if (result.ok) {
+        window.location.href = "/premium/success";
+        return;
+      }
+      if (!result.cancelled) onError?.(result.message || tp("restoreFailed"));
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  return (
+    <button type="button" onClick={() => void restore()} disabled={busy || restoring} className={className}>
+      {restoring ? tp("restoring") : tp("restore")}
+    </button>
   );
 }

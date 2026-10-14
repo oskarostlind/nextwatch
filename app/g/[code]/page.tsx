@@ -15,12 +15,14 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { cache } from "react";
+import { cookies, headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import prisma from "@/lib/prisma";
 import { getGroupCapacity } from "@/lib/groupLimits";
 import { inviterSummary, normalizeGroupCode } from "@/lib/referral";
 import { appStoreUrl } from "@/lib/seo";
+import { rateLimitAllow } from "@/lib/rateLimit";
 import LinkClient from "./LinkClient";
 import AppStoreLink from "./AppStoreLink";
 
@@ -28,11 +30,39 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ code: string }> };
 
+/** Besökarens IP (Vercel sätter x-forwarded-for). */
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "anonymous";
+}
+
+/**
+ * Gissningsskydd: koderna är korta, så sidan begränsas per IP och per uid
+ * (in-memory per instans, samma limiter som /api/group/share). Över gränsen
+ * behandlas varje kod som ogiltig — svaret avslöjar då inte ens om gruppen
+ * finns. React cache() → räknas EN gång per förfrågan, fast både
+ * generateMetadata och sidan frågar.
+ */
+const linkPageAllowed = cache(async (): Promise<boolean> => {
+  const ipOk = rateLimitAllow(await clientIp(), "group_link_page_ip", { limit: 60 });
+  const uid = (await cookies()).get("nw_uid")?.value ?? null;
+  const uidOk = uid ? rateLimitAllow(uid, "group_link_page_uid", { limit: 30 }) : true;
+  return ipOk && uidOk;
+});
+
+/** Gruppen bakom koden, eller null (ogiltig kod / begränsad). En gång per förfrågan. */
+const findLinkGroup = cache(async (code: string | null): Promise<{ code: string } | null> => {
+  if (!code || !(await linkPageAllowed())) return null;
+  return prisma.group.findUnique({ where: { code }, select: { code: true } }).catch(() => null);
+});
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { code: raw } = await params;
   const code = normalizeGroupCode(raw);
   const t = await getTranslations("invite");
-  const host = code ? await inviterSummary(code) : { name: null, likes: 0 };
+  // Värdens namn bara för en grupp som finns — en gissad kod får den neutrala titeln.
+  const group = await findLinkGroup(code);
+  const host = group ? await inviterSummary(group.code) : { name: null, likes: 0 };
   const title = host.name ? t("meta.titleNamed", { name: host.name }) : t("meta.title");
   const description = t("meta.description");
   return {
@@ -40,7 +70,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     description,
     // Privat grupplänk — ska aldrig indexeras (lib/seo PRIVATE_PATHS gäller /group, inte /g).
     robots: { index: false, follow: false },
-    openGraph: { title, description, url: code ? `/g/${code}` : undefined, type: "website" },
+    openGraph: { title, description, url: group ? `/g/${group.code}` : undefined, type: "website" },
   };
 }
 
@@ -71,7 +101,9 @@ export default async function InviteLinkPage({ params }: Params) {
   const code = normalizeGroupCode(raw);
   if (!code) return <Notice kind="invalid" />;
 
-  const group = await prisma.group.findUnique({ where: { code }, select: { code: true } });
+  // Ogiltig kod och för många försök ser likadana ut: inget gruppnamn, inga
+  // gillade, ingen skillnad mellan "finns inte" och "begränsad".
+  const group = await findLinkGroup(code);
   if (!group) return <Notice kind="invalid" />;
 
   // Redan medlem (t.ex. värden själv, eller vännen som öppnar länken igen)

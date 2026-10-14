@@ -23,6 +23,7 @@ import { watchRewardedForSwipes } from "@/lib/admobAds";
 // reportSwipeLimitFrom bor i lib/swipeLimitEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
 import { SWIPE_LIMIT_EVENT } from "@/lib/swipeLimitEvent";
+import { openPremiumUpsell } from "@/lib/adUpsellEvent";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
@@ -128,6 +129,10 @@ export default function SwipeLimitWall() {
               type="button"
               disabled={buying}
               onClick={() => {
+                // I apparna: premiumarket (PlanPicker + PlanLegal = butikens
+                // pris, provperiod, EULA/integritet, Återställ köp — 3.1.2c),
+                // aldrig direktköp härifrån. Webben: goPremium() → /premium.
+                if (isNativeStoreApp() && openPremiumUpsell({ reward: false })) return;
                 setBuying(true);
                 void goPremium().finally(() => setBuying(false));
               }}

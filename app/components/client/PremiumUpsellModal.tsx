@@ -3,6 +3,9 @@
 // Premium-CTA:n som visas EFTER en annons — ett bottenark, inte en ruta mitt på
 // skärmen. Triggas av maybeTriggerAdUpsell() (lib/adUpsellEvent.ts): på webben
 // när annonskortet lämnat däcket, i iOS-appen när AdMob-interstitialen stängts.
+// Dessutom av openPremiumUpsell() — köpknapparna i apparna (Välj åt mig,
+// swipegränsen, annonsplatsen) öppnar arket i stället för att köpa direkt, så
+// att 3.1.2-texten (PlanLegal) alltid står vid köptillfället.
 //
 // Punkterna är INTE nyskrivna för den här ytan — de läses ur samma
 // i18n-nycklar som /premium (namnrymden "premium": bulletAdFree, bulletSwipes,
@@ -25,10 +28,24 @@ import { canOfferSwipeReward, watchRewardedForSwipes } from "@/lib/admobAds";
 import { notify } from "@/app/components/lib/notify";
 // maybeTriggerAdUpsell bor i lib/adUpsellEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
-import { UPSELL_EVENT, maybeTriggerAdUpsell, markUpsellSatisfied } from "@/lib/adUpsellEvent";
+import {
+  UPSELL_EVENT,
+  maybeTriggerAdUpsell,
+  markUpsellSatisfied,
+  registerUpsellHost,
+  type UpsellEventDetail,
+} from "@/lib/adUpsellEvent";
 import { useTranslations } from "next-intl";
 import type { PremiumPlan } from "@/lib/premiumPurchase";
-import { PlanLegal, PlanPicker, defaultPlan, usePlanCta, usePremiumOffers, useStorePlatform } from "./PremiumUpsellPlans";
+import {
+  PlanLegal,
+  PlanPicker,
+  RestorePurchasesButton,
+  defaultPlan,
+  usePlanCta,
+  usePremiumOffers,
+  useStorePlatform,
+} from "./PremiumUpsellPlans";
 
 /** Samma förmåner som /premium, i samma ordning. */
 const BENEFIT_KEYS = ["bulletAdFree", "bulletSwipes", "bulletGroups", "bulletTaste", "bulletPick"] as const;
@@ -63,9 +80,12 @@ export default function PremiumUpsellModal() {
   const selected = offers && plan ? offers[plan] : null;
 
   useEffect(() => {
-    const onUpsell = () => {
+    const unregister = registerUpsellHost();
+    const onUpsell = (e: Event) => {
       setRewardAvailable(false);
       setOpen(true);
+      const detail = (e as CustomEvent<UpsellEventDetail | undefined>).detail;
+      if (detail?.reward === false) return;
       if (!canOfferSwipeReward()) return;
       void fetch("/api/swipe/limit", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
@@ -84,6 +104,7 @@ export default function PremiumUpsellModal() {
     window.addEventListener(UPSELL_EVENT, onUpsell);
     window.addEventListener("nw:admob-ad-shown", onNativeAd);
     return () => {
+      unregister();
       window.removeEventListener(UPSELL_EVENT, onUpsell);
       window.removeEventListener("nw:admob-ad-shown", onNativeAd);
     };
@@ -167,7 +188,10 @@ export default function PremiumUpsellModal() {
                   {offers && plan ? (
                     <PlanPicker offers={offers} value={plan} onChange={setPlan} disabled={buying} />
                   ) : offers ? (
-                    <p className="text-center text-xs text-neutral-500">{ts("unavailable")}</p>
+                    <div className="space-y-2 text-center text-xs text-neutral-500">
+                      <p>{ts("unavailable")}</p>
+                      {platform !== "web" ? <RestorePurchasesButton onError={setBuyError} /> : null}
+                    </div>
                   ) : (
                     <p className="text-center text-xs text-neutral-500">{ts("loading")}</p>
                   )}

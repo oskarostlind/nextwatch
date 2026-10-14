@@ -266,6 +266,27 @@ export function autoPickEnabled(): boolean {
   return !(v === "0" || v === "off" || v === "false");
 }
 
+/**
+ * Auto-förslaget är till för NYA användare (nya flödets första session) — inte
+ * ett gratis LLM-anrop per dygn för alla. Tillåtet bara när användarraden
+ * (konto eller gästprofil, samma rad) skapades för högst
+ * NW_PICK_AUTO_MAX_AGE_DAYS dygn sedan (default 7; 0 = ingen åldersgräns).
+ * Saknad rad / fel → nej.
+ */
+export async function autoPickAllowedFor(uid: string, now = new Date()): Promise<boolean> {
+  const env = (process.env.NW_PICK_AUTO_MAX_AGE_DAYS ?? "").trim();
+  const parsed = env === "" ? NaN : Number(env);
+  const days = Number.isFinite(parsed) && parsed >= 0 ? parsed : 7;
+  if (days === 0) return true;
+  try {
+    const u = await prisma.user.findUnique({ where: { id: uid }, select: { createdAt: true } });
+    if (!u) return false;
+    return now.getTime() - u.createdAt.getTime() <= days * 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
 export type AutoRow = {
   id: string;
   status: string;

@@ -240,13 +240,20 @@ export function funnelTotalSwipes(): number {
 /**
  * Är det här en NY enhet (tratten spårar den)? Samma bedömning som resten av
  * tratten: servern svarade track=true på first_open (nw_uid var inte en
- * etablerad användare). Nätverksfel / timeout → false — hellre att en ny enhet
+ * etablerad användare) — OCH first_open skedde för högst NEW_DEVICE_WINDOW_MS
+ * sedan. Nätverksfel / timeout → false — hellre att en ny enhet
  * får dagens flöde än att en befintlig användare hamnar i "nya flödet".
  */
+/** Hur länge efter first_open en enhet räknas som "ny" (nya flödet startar). */
+export const NEW_DEVICE_WINDOW_MS = 10 * 60 * 1000;
+
 export function funnelIsNewDevice(timeoutMs = 3000): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(false);
   return Promise.race([
-    funnelInit().then((s) => Boolean(s?.track)),
+    // Bara en FÄRSK first_open (t0 < 10 min sedan) räknas: track=true ligger
+    // kvar i nw_fx i TRACK_DAYS, så en enhet som öppnat appen förut och sedan
+    // loggar ut skulle annars få hela nya flödet som om den vore ny.
+    funnelInit().then((s) => Boolean(s?.track) && Date.now() - (s?.t0 ?? 0) < NEW_DEVICE_WINDOW_MS),
     new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), timeoutMs)),
   ]).catch(() => false);
 }

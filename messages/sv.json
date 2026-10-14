@@ -1853,7 +1853,7 @@
       "watchAdBusy": "Laddar video…",
       "adFailed": "Videon gick inte att visa just nu. Försök igen om en stund.",
       "rewardLimit": "Du har sett max antal reklamfilmer för idag. Kom tillbaka i morgon.",
-      "premiumCta": "Premium · {count} val i månaden, ingen reklam · 79 kr/mån",
+      "premiumCta": "Premium · obegränsat med Välj åt mig, ingen reklam",
       "unlocked": "Klart! {count, plural, one {1 nytt val} other {# nya val}} upplåsta."
     },
     "error": {

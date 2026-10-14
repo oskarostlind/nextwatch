@@ -49,11 +49,11 @@
 // { auto: true }). Finns svaret redan (förhämtat) hoppas "tänker" över. Under
 // förslaget sitter "Spara kvällens film"; chipsen är vanliga följdfrågor i
 // auto-förslagets session.
-// Premium-CTA:n: på webben → /premium (Stripe). I iOS-appen startar knappen i
-// paywall-vyn Apple-köpet direkt via goPremium() (samma som PremiumUpsellModal)
-// — /premium i appen upplevdes som "webbens premium". Pris/period/förnyelse
-// (upsell.legal) står under knappen vid köptillfället (3.1.2c); nudgen under
-// ett förslag öppnar därför paywall-vyn i appen i stället för att köpa direkt.
+// Premium-CTA:n: på webben → /premium (Stripe). I apparna öppnar knappen i
+// paywall-vyn PremiumUpsellModal (openPremiumUpsell) — där står PlanPicker +
+// PlanLegal med butikens pris, provperiod, förnyelse, EULA/integritet och
+// Återställ köp vid köptillfället (3.1.2c). Aldrig direktköp härifrån. Nudgen
+// under ett förslag öppnar först paywall-vyn.
 
 import {
   useCallback,
@@ -94,7 +94,8 @@ import type {
 } from "@/lib/aiPick/types";
 import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
-import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
+import { isNativeStoreApp } from "@/lib/premiumPurchase";
+import { openPremiumUpsell } from "@/lib/adUpsellEvent";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
 import { readCachedWatchlist } from "@/lib/watchlistData";
@@ -279,7 +280,6 @@ export default function PickSheet({
 }) {
   const t = useTranslations("pick");
   const t2 = useTranslations("pick2");
-  const tu = useTranslations("upsell");
   const locale = useLocale();
   const router = useRouter();
   const { mediaFilter } = useSwipeSettings();
@@ -824,7 +824,6 @@ export default function PickSheet({
     }
   };
 
-  const [buying, setBuying] = useState(false);
   const onPremium = (from: "paywall" | "result") => {
     trackPickEvent("upsell_click", { from });
     if (native) {
@@ -833,13 +832,10 @@ export default function PickSheet({
         goPaywall(quota);
         return;
       }
-      if (buying) return;
-      setBuying(true);
-      // Apple IAP i appen. Lyckat köp → /premium/success; avbrutet → kvar här.
-      void goPremium().finally(() => {
-        setBuying(false);
-        void getPickStatus({ fresh: true }).then((q) => q && setQuota(q));
-      });
+      // Köpet sker i premiumarket (plan + full 3.1.2-text). Arket ligger i
+      // swipe-vyn under det här arket, så stäng det här först.
+      onClose();
+      if (!openPremiumUpsell({ reward: false })) router.push("/premium");
       return;
     }
     onClose();
@@ -1209,15 +1205,11 @@ export default function PickSheet({
             }`}
           >
             <Crown className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{buying ? tu("opening") : t("paywall.premiumCta")}</span>
+            <span>{t("paywall.premiumCta")}</span>
           </button>
         ) : (
           <p className="text-xs text-white/45">{t("paywall.resetNote")}</p>
         )}
-        {/* Pris, period och automatisk förnyelse vid köptillfället (3.1.2c). */}
-        {!premium && native ? (
-          <p className="text-[11px] leading-relaxed text-white/35">{tu("legal")}</p>
-        ) : null}
 
         {/* Kvoten tog slut mitt i en konversation → låt användaren gå tillbaka
             till förslaget hen redan fått. */}

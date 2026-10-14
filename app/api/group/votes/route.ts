@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import prisma from "@/lib/prisma";
+import prisma, { withDbRetry } from "@/lib/prisma";
 import { notifyGroupMatchIfNeeded } from "@/lib/push";
 import { getSwipeAllowance, swipeLimitPayload } from "@/lib/swipeLimit";
 import { apiMsg } from "@/lib/apiMessages";
@@ -45,10 +45,14 @@ export async function POST(req: NextRequest) {
   // Bara medlemmar får rösta i en grupp. Utan den här kontrollen kunde vem som
   // helst med (eller som gissade) en gruppkod injicera röster och trigga
   // gruppmatchningar (IDOR).
-  const membership = await prisma.groupMember.findUnique({
-    where: { groupCode_userId: { groupCode: code, userId: uid } },
-    select: { userId: true },
-  });
+  // withDbRetry: Neon-kallstart (P1001) ska inte tappa rösten — den första
+  // rösten via /g/<kod> kommer ofta precis efter en paus.
+  const membership = await withDbRetry(() =>
+    prisma.groupMember.findUnique({
+      where: { groupCode_userId: { groupCode: code, userId: uid } },
+      select: { userId: true },
+    })
+  );
   if (!membership) {
     return NextResponse.json({ ok: false, message: await apiMsg("notGroupMember") } as Err, { status: 403 });
   }
@@ -61,12 +65,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(await swipeLimitPayload(allowance), { status: 429 });
   }
 
-  await prisma.$executeRaw`
-    INSERT INTO group_votes (group_code, user_id, tmdb_id, tmdb_type, vote, decided_at)
-    VALUES (${code}, ${uid}, ${body.tmdbId}, ${body.tmdbType}, ${body.vote}, NOW())
-    ON CONFLICT (group_code, user_id, tmdb_id, tmdb_type)
-    DO UPDATE SET vote = EXCLUDED.vote, decided_at = NOW()
-  `;
+  // Idempotent upsert → säker att försöka om.
+  await withDbRetry(
+    () => prisma.$executeRaw`
+      INSERT INTO group_votes (group_code, user_id, tmdb_id, tmdb_type, vote, decided_at)
+      VALUES (${code}, ${uid}, ${body.tmdbId}, ${body.tmdbType}, ${body.vote}, NOW())
+      ON CONFLICT (group_code, user_id, tmdb_id, tmdb_type)
+      DO UPDATE SET vote = EXCLUDED.vote, decided_at = NOW()
+    `
+  );
 
   if (body.vote === "LIKE") {
     await notifyGroupMatchIfNeeded(code, body.tmdbId, body.tmdbType);

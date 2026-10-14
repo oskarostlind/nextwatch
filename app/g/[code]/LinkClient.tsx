@@ -3,7 +3,8 @@
 // Vännens vy av /g/<KOD>: ansluter tyst (/api/group/link-join — gästprofil,
 // medlemskap, nw_group) och visar sedan den befintliga gruppleken
 // (app/group/swipe/_legacy) med en kort hälsning ovanför. Värdens gillade
-// ligger först i leken (app/api/recs/unified → lib/referral pendingGroupLikes).
+// ligger först i leken (app/api/recs/unified → computeUnifiedRecs leadGroupLikes,
+// filtrerade som resten av leken).
 //
 // Mätning (lib/funnel, en gång per enhet): web_swipe vid första rösten via
 // länken, group_match_link när en match kommer här, referral_reward när
@@ -16,6 +17,7 @@ import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 import { GROUP_VOTED_EVENT } from "@/lib/groupVoteEvent";
 import { refreshSocial } from "@/lib/socialStore";
+import { ensureGroupDeck } from "@/lib/swipeDeckStore";
 import { notify } from "@/app/components/lib/notify";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import InstallNudge from "./InstallNudge";
@@ -63,6 +65,12 @@ export default function LinkClient({ code, hostName, hostLikes, appStoreHref }: 
       }
       // Social-store:n (GroupBar, matchlistor) ska se den nya gruppen direkt.
       void refreshSocial();
+      // Alltid en FÄRSK första sida via länken: en sparad lek ur localStorage
+      // (tidigare besök, eller hämtad innan värdens gillade fanns) hämtar
+      // annars bara påfyllningar (?from=…), och förturen för värdens gillade
+      // gäller bara sida 1 — då kom värdens titlar aldrig först. Hämtningen
+      // sker medan skelettet visas, så toppkortet byts aldrig under fingret.
+      await ensureGroupDeck(j.code, { force: true }).catch(() => {});
       setState("ready");
     } catch {
       setFailure({ reason: "error", message: "" });

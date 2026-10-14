@@ -16,6 +16,7 @@ import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { apiMsg } from "@/lib/apiMessages";
 import { canJoinGroup } from "@/lib/groupLimits";
+import { getRateLimitKey, rateLimitAllow } from "@/lib/rateLimit";
 import { POST as ensureGuestProfile } from "@/app/api/profile/guest/route";
 import {
   DEVICE_COOKIE,
@@ -35,6 +36,20 @@ export async function POST(req: Request): Promise<NextResponse<Ok | Err>> {
     const uid = jar.get("nw_uid")?.value ?? null;
     if (!uid) {
       return NextResponse.json({ ok: false, reason: "session", message: await apiMsg("noSession") }, { status: 401 });
+    }
+
+    // Gissningsskydd: koderna är korta (6 tecken). Per uid OCH per IP — en ny
+    // gäst-uid per förfrågan (cookielös klient) ska inte kringgå gränsen.
+    // In-memory per instans, samma limiter som /api/group/share.
+    const ipKey = getRateLimitKey(req);
+    if (
+      !rateLimitAllow(getRateLimitKey(req, uid), "group_link_join_uid", { limit: 15 }) ||
+      !rateLimitAllow(ipKey, "group_link_join_ip", { limit: 40 })
+    ) {
+      return NextResponse.json(
+        { ok: false, reason: "error", message: await apiMsg("tooManyRequests") },
+        { status: 429 }
+      );
     }
 
     const body = (await req.json().catch(() => null)) as { code?: unknown } | null;

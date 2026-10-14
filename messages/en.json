@@ -1853,7 +1853,7 @@
       "watchAdBusy": "Loading video…",
       "adFailed": "The video couldn't be shown right now. Try again in a moment.",
       "rewardLimit": "You've watched the maximum number of ads for today. Come back tomorrow.",
-      "premiumCta": "Premium · {count} picks a month, no ads · SEK 79/month",
+      "premiumCta": "Premium · unlimited Pick for me, no ads",
       "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
     },
     "error": {

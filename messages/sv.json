@@ -1223,6 +1223,19 @@
       "done": "Klart! Vi säger till när {title} släpps 🔔"
     }
   },
+  "pushAsk": {
+    "title": "Vill du få kvällens AI-val när du brukar titta?",
+    "timeGroup": "Välj tid för notisen",
+    "previewTitle": "✦ Kvällens val: {title}",
+    "previewTitleGeneric": "✦ Kvällens val är klart",
+    "previewBody": "Från det du gillat. Tryck så väljer AI något annat om du vill.",
+    "yes": "Ja, kl {time}",
+    "notNow": "Inte nu",
+    "openSettings": "Öppna Inställningar",
+    "okAt": "Okej, kl {time}",
+    "deniedIos": "Notiser är avstängda för NextWatch. Slå på dem i Inställningar → NextWatch → Notiser, så kommer kvällens val kl {time}.",
+    "deniedAndroid": "Notiser är avstängda för NextWatch. Slå på dem i telefonens Inställningar → Appar → NextWatch → Aviseringar, så kommer kvällens val kl {time}."
+  },
   "report": {
     "alsoBlock": "Blockera användaren också",
     "aUser": "användare",

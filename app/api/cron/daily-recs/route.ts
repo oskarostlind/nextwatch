@@ -21,6 +21,8 @@
 // Valfritt läge NW_PUSH_HOURLY=1: då ska routen anropas varje timme (GitHub
 // Actions, se .github/workflows/push-cron.yml) och varje användare får sitt tips
 // i sin egen vanliga swipe-timme (lib/pushRecs/timing.ts). Utan env: som förut.
+// Har användaren valt en tid i notisfrågan (profiles.push_hour, nya flödet
+// 2026-10-15) vinner den över typvärdet — preferredPushHour() sköter det.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

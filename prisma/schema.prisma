@@ -186,6 +186,12 @@ model Profile {
   /// OBS: läses/skrivs med rå SQL tills klienten är omgenererad — se
   /// lib/genreStats.ts för varför.
   genreStats         Json?    @map("genre_stats")
+  /// Timme (0–23, Stockholm) då användaren valt att få kvällens tips — sätts i
+  /// notisfrågan i nya flödet (PushAskSheet, 18–21). Null = inget val; då
+  /// gäller typvärdet av swipetimmarna (lib/pushRecs/timing.ts). Läses/skrivs
+  /// med rå SQL (prisma/sql/2026-10-15_push_hour.sql) så koden tål att
+  /// kolumnen saknas.
+  pushHour           Int?     @map("push_hour") @db.SmallInt
 
   // Swipe-inställningar (styrs från profilen).
   /// Visa hyr-/köpalternativ på titelkort. Av som standard: annars tror användaren

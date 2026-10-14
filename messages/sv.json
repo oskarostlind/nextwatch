@@ -178,11 +178,11 @@
       "subject": "Välkommen till NextWatch Premium",
       "heading": "Premium är aktiverat",
       "intro": "Tack för att du stöttar NextWatch! Ditt Premium är aktivt nu och gäller på alla enheter där du är inloggad.",
-      "perks": "Du har obegränsat antal swipes, inga annonser, grupper med upp till 20 personer och hela din smakprofil.",
+      "perks": "Du har obegränsat antal swipes, inga annonser, obegränsat med Välj åt mig, grupper med upp till 20 personer och hela din smakprofil.",
       "cta": "Börja swipea",
-      "manageStripe": "Prenumerationen förnyas automatiskt varje månad. Kvittot kommer i ett separat mejl från Stripe. Du kan säga upp när som helst i profilen under Inställningar → Hantera prenumeration.",
-      "manageApple": "Prenumerationen förnyas automatiskt varje månad. Apple skickar kvittot. Du säger upp i iPhone-inställningarna → ditt namn → Prenumerationer.",
-      "manageGoogle": "Prenumerationen förnyas automatiskt varje månad. Google skickar kvittot. Du säger upp i Google Play → Betalningar och prenumerationer."
+      "manageStripe": "Kvittot kommer i ett separat mejl från Stripe. Du kan säga upp när som helst i profilen under Inställningar → Hantera prenumeration.",
+      "manageApple": "Apple skickar kvittot. Du säger upp i iPhone-inställningarna → ditt namn → Prenumerationer.",
+      "manageGoogle": "Google skickar kvittot. Du säger upp i Google Play → Betalningar och prenumerationer."
     }
   },
   "filmChat": {
@@ -721,17 +721,17 @@
     "bulletAdFree": "Helt annonsfritt",
     "bulletGroups": "Grupper upp till 20 personer — gratis rymmer 3",
     "bulletSwipes": "Obegränsat med swipes — gratis ingår 100 per dygn",
-    "bulletPick": "Välj åt mig: 20 AI-val i månaden – låt NextWatch välja kvällens film",
-    "bulletTaste": "Din smakprofil: se vilka teman, regissörer och skådespelare dina swipes pekar mot",
-    "buyCta": "Bli Premium – 19 kr/mån",
+    "bulletPick": "Obegränsat med Välj åt mig – låt AI:n välja kvällens film",
+    "bulletTaste": "Smakprofilen (Profil → Smak): se vilka teman, regissörer och skådespelare dina swipes pekar mot",
+    "buyCta": "Bli Premium",
     "checkoutFailed": "Kunde inte starta betalningen.",
     "eula": "Användarvillkor (EULA)",
     "eyebrow": "Uppgradera",
-    "intro": "Ta bort annonser och swipa obegränsat. 19 kr/mån, inga bindningstider.",
-    "legalApple": "Betalningen dras från ditt Apple-konto när du bekräftar köpet. Förnyelsen sker inom 24 timmar före periodens slut om du inte säger upp innan dess. Du hanterar och avslutar prenumerationen i Inställningar på din enhet.",
+    "intro": "Inga annonser, obegränsat med swipes och AI-val, större grupper och hela din smakprofil.",
+    "legalApple": "Betalningen dras från ditt Apple-konto när du bekräftar köpet. Prenumerationen förnyas automatiskt om du inte säger upp den senast 24 timmar före periodens slut. Du hanterar och avslutar prenumerationen i Inställningar på din enhet.",
     "openingGooglePlay": "Öppnar Google Play…",
-    "legalGoogle": "Betalningen dras från ditt Google-konto när du bekräftar köpet. Prenumerationen förnyas automatiskt varje månad tills du säger upp den. Du hanterar och avslutar den i Google Play → Betalningar och prenumerationer.",
-    "legalName": "<name>NextWatch Premium</name> — 19 kr per månad. Prenumerationen förnyas automatiskt varje månad tills du säger upp den.",
+    "legalGoogle": "Betalningen dras från ditt Google-konto när du bekräftar köpet. Prenumerationen förnyas automatiskt tills du säger upp den. Du hanterar och avslutar den i Google Play → Betalningar och prenumerationer.",
+    "legalName": "<name>NextWatch Premium</name> — en prenumeration som förnyas automatiskt tills du säger upp den.",
     "legalStripe": "Betalningen hanteras av Stripe. Du kan avsluta prenumerationen när som helst.",
     "openingAppStore": "Öppnar App Store…",
     "ourTerms": "Våra villkor",
@@ -740,7 +740,7 @@
     "restoreFailed": "Kunde inte återställa köp.",
     "restoring": "Återställer…",
     "startingStripe": "Startar Stripe…",
-    "subtitle": "19 kr/mån – avsluta när du vill."
+    "subtitle": "Årsvis eller månadsvis – avsluta när du vill."
   },
   "premiumSuccess": {
     "body": "Din premium bör aktiveras inom några sekunder. Ladda om sidan om det inte syns direkt.",
@@ -865,7 +865,7 @@
     "tourWatchlist": "Watchlist-genomgången",
     "tourWatchlistHint": "Sparade titlar, betygsätt det du sett och Kolla nu.",
     "upgradeCta": "Uppgradera till Premium",
-    "upgradeHint": "Uppgradera till Premium (19 kr/mån) för en helt annonsfri upplevelse.",
+    "upgradeHint": "Uppgradera till Premium för en helt annonsfri upplevelse.",
     "usernameBlockedChars": "Otillåtna tecken tas bort.",
     "usernameHint": "3–20 tecken (a–z, 0–9, _, .) — visas för vänner.",
     "usernameLabel": "Användarnamn",
@@ -1423,7 +1423,7 @@
   },
   "swipeLimit": {
     "body": "{limit} swipes per dag ingår gratis. Kom igen imorgon – eller bli Premium för obegränsat swipande.",
-    "cta": "Bli Premium – 19 kr/mån",
+    "cta": "Bli Premium – 79 kr/mån",
     "heading": "Du har nått dagens gräns",
     "opening": "Öppnar…",
     "resetHint": "Gränsen nollställs löpande under dygnet.",
@@ -1441,7 +1441,7 @@
     "networkError": "Nätverksfel.",
     "notEnoughData": "Swipa, betygsätt och fyll i favoriter nedan — då bygger vi en profil åt dig.",
     "premiumBody": "Se vilka teman, regissörer och skådespelare dina swipes egentligen pekar mot — och få förslag på genrer du missat.",
-    "premiumCta": "Bli Premium – 19 kr/mån",
+    "premiumCta": "Bli Premium",
     "premiumTitle": "Smakprofil ingår i Premium",
     "rowBasedOn": "Baserat på",
     "rowCast": "Skådespelare",
@@ -1521,10 +1521,10 @@
     "body": "Annonsen är slut – men den behöver inte komma tillbaka.",
     "bulletsLabel": "Det här ingår",
     "close": "Stäng",
-    "cta": "Bli Premium – 19 kr/mån",
+    "cta": "Bli Premium – 79 kr/mån",
     "dismiss": "Inte nu",
     "heading": "Slipp annonser med Premium",
-    "legal": "19 kr/mån, förnyas automatiskt tills du säger upp. Avsluta när du vill.",
+    "legal": "NextWatch Premium: 79 kr/mån (månadsvis). Förnyas automatiskt tills du säger upp – senast 24 timmar före periodens slut. Avsluta när du vill.",
     "loadingVideo": "Laddar video…",
     "opening": "Öppnar…",
     "watchAd": "Titta på en video – få {bonus} swipes till"
@@ -1796,7 +1796,7 @@
       "watchAdBusy": "Laddar video…",
       "adFailed": "Videon gick inte att visa just nu. Försök igen om en stund.",
       "rewardLimit": "Du har sett max antal reklamfilmer för idag. Kom tillbaka i morgon.",
-      "premiumCta": "Premium · obegränsat med Välj åt mig, ingen reklam",
+      "premiumCta": "Premium · {count} val i månaden, ingen reklam · 79 kr/mån",
       "unlocked": "Klart! {count, plural, one {1 nytt val} other {# nya val}} upplåsta."
     },
     "error": {
@@ -1931,5 +1931,49 @@
       "left": "{count, plural, =0 {Inga AI-val kvar} one {1 AI-val kvar} other {# AI-val kvar}}"
     },
     "saveTonight": "Spara kvällens film"
+  },
+  "store": {
+    "plans": {
+      "yearly": "Årsvis",
+      "monthly": "Månadsvis"
+    },
+    "period": {
+      "month": "månad",
+      "year": "år"
+    },
+    "perMonth": "{price}/mån",
+    "perYear": "{price}/år",
+    "yearlyPerMonth": "≈ {price}/mån",
+    "save": "Spara {pct} %",
+    "trialBadge": "{days} dagar gratis",
+    "ctaTrial": "Prova {days} dagar gratis",
+    "ctaYearly": "Bli Premium – {price}/år",
+    "ctaMonthly": "Bli Premium – {price}/mån",
+    "loading": "Hämtar priser…",
+    "unavailable": "Premium går inte att köpa här just nu. Försök igen senare.",
+    "planPickerLabel": "Välj plan",
+    "legal": {
+      "summary": "<name>NextWatch Premium – {plan}</name>: {price} per {period}.",
+      "summaryTrial": "<name>NextWatch Premium – {plan}</name>: {days} dagar gratis, därefter {price} per {period}.",
+      "renew": "Prenumerationen förnyas automatiskt varje {period} till samma pris tills du säger upp den. Säg upp senast 24 timmar före periodens slut för att undvika nästa debitering.",
+      "trialCancel": "Säg upp senast 24 timmar innan provperioden tar slut så debiteras du ingenting.",
+      "apple": "Betalningen dras från ditt Apple-konto när du bekräftar köpet – vid provperiod först när den tar slut. Du hanterar och avslutar prenumerationen i Inställningar → ditt namn → Prenumerationer.",
+      "google": "Betalningen dras från ditt Google-konto när du bekräftar köpet – vid provperiod först när den tar slut. Du hanterar och avslutar prenumerationen i Google Play → Betalningar och prenumerationer.",
+      "stripe": "Betalningen hanteras av Stripe – vid provperiod dras den först när perioden tar slut. Du avslutar när som helst i profilen under Hantera prenumeration."
+    },
+    "current": {
+      "title": "Du har Premium",
+      "planPrice": "{plan} · {price} per {period}",
+      "lifetime": "Premium för alltid (livstid)",
+      "keepPrice": "Ditt pris ändras inte – du behåller priset du tecknade för så länge prenumerationen löper.",
+      "manage": "Hantera prenumeration",
+      "manageWeb": "Hantera i profilen"
+    },
+    "email": {
+      "renews": "Prenumerationen förnyas automatiskt tills du säger upp den.",
+      "renewsMonthly": "Prenumerationen förnyas automatiskt varje månad tills du säger upp den.",
+      "renewsYearly": "Prenumerationen förnyas automatiskt varje år tills du säger upp den.",
+      "trial": "Din gratis provperiod på {days} dagar har börjat. Du debiteras först när den tar slut – säg upp senast 24 timmar innan om du inte vill fortsätta."
+    }
   }
 }

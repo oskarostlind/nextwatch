@@ -21,6 +21,7 @@
 
 import { getTranslations } from "next-intl/server";
 import { normalizeLocale } from "@/lib/i18nConfig";
+import { PREMIUM_TRIAL_DAYS } from "@/lib/entitlements";
 
 const RESEND_API = "https://api.resend.com";
 
@@ -252,27 +253,48 @@ export async function sendPasswordResetEmail(to: string, link: string, locale: u
  * Stripe skickar själva kvittot; det här bekräftar att premium är aktivt och
  * säger var prenumerationen sägs upp (krav-nära: användaren ska hitta det).
  * idempotencyKey hindrar dubbletter när Stripe/StoreKit skickar samma köp igen.
+ * plan (månad/år) styr förnyelsemeningen; okänd plan → neutral mening. trial
+ * lägger till en rad om att gratisperioden börjat och när man måste säga upp.
+ * Inga belopp i mejlet: befintliga kunder har kvar sitt gamla pris och butiken
+ * skickar ändå kvittot med rätt summa.
  */
 export async function sendPremiumWelcomeEmail(
   to: string,
   locale: unknown,
-  opts: { provider: "stripe" | "apple" | "google"; idempotencyKey: string },
+  opts: {
+    provider: "stripe" | "apple" | "google";
+    idempotencyKey: string;
+    plan?: "monthly" | "yearly";
+    trial?: boolean;
+  },
 ): Promise<SendResult> {
   const lang = normalizeLocale(locale);
   const t = await getTranslations({ locale: lang, namespace: "email" });
+  const ts = await getTranslations({ locale: lang, namespace: "store" });
+  const renews =
+    opts.plan === "yearly"
+      ? ts("email.renewsYearly")
+      : opts.plan === "monthly"
+        ? ts("email.renewsMonthly")
+        : ts("email.renews");
+  const manage =
+    opts.provider === "apple"
+      ? t("premium.manageApple")
+      : opts.provider === "google"
+        ? t("premium.manageGoogle")
+        : t("premium.manageStripe");
   const mail = renderEmail({
     lang,
     subject: t("premium.subject"),
     preheader: t("premium.intro"),
     heading: t("premium.heading"),
-    paragraphs: [t("premium.intro"), t("premium.perks")],
+    paragraphs: [
+      t("premium.intro"),
+      t("premium.perks"),
+      ...(opts.trial ? [ts("email.trial", { days: PREMIUM_TRIAL_DAYS })] : []),
+    ],
     cta: { label: t("premium.cta"), url: `${APP_URL}/swipe` },
-    footnote:
-      opts.provider === "apple"
-        ? t("premium.manageApple")
-        : opts.provider === "google"
-          ? t("premium.manageGoogle")
-          : t("premium.manageStripe"),
+    footnote: `${renews} ${manage}`,
     footer: t("common.footer"),
   });
   return sendEmail({

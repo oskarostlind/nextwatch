@@ -84,3 +84,36 @@ export async function getEntitlement(uid: string | null | undefined): Promise<En
 export async function isPremiumUser(uid: string | null | undefined): Promise<boolean> {
   return (await getEntitlement(uid)).isPremium;
 }
+
+/** Provperiodens längd i dagar (Oskars beslut 2026-10-15: 7 dagar på både månad och år). */
+export const PREMIUM_TRIAL_DAYS = 7;
+
+/**
+ * Har kontot NÅGONSIN haft Premium (eller ett köp i någon butik)? Används för
+ * provperioden: "7 dagar gratis" visas och Stripe-provperioden ges bara till
+ * den som aldrig haft Premium. Butikerna gör sin egen kontroll (Apple per
+ * Apple-id och prenumerationsgrupp, Google per Google-konto) — det här är vår
+ * sida, så vi aldrig LOVAR en provperiod till någon som redan haft en.
+ * Vid fel → false (hellre inget löfte än ett falskt).
+ */
+export async function hasEverHadPremium(uid: string | null | undefined): Promise<boolean> {
+  if (!uid) return false;
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: uid },
+      select: { plan: true, planSince: true, subProvider: true },
+    });
+    if (!u) return false; // ingen rad = aldrig köpt något
+    if (u.plan !== "free" || u.planSince || u.subProvider) return true;
+    const apple = await prisma.appleIapTransaction.findFirst({ where: { userId: uid }, select: { transactionId: true } });
+    if (apple) return true;
+    // google_play_purchases är rå SQL (ingen Prisma-modell) och kan saknas i
+    // en miljö där migreringen inte körts — då räknas den som tom.
+    const play = await prisma
+      .$queryRaw<Array<{ n: number }>>`SELECT 1 AS n FROM google_play_purchases WHERE user_id = ${uid} LIMIT 1`
+      .catch(() => [] as Array<{ n: number }>);
+    return play.length > 0;
+  } catch {
+    return true;
+  }
+}

@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 
 /**
  * Stripe webhook. Hanterar både:
- *  - Prenumeration (19 kr/mån): checkout.session.completed (mode=subscription)
- *    samt customer.subscription.created/updated/deleted → speglar status i DB.
+ *  - Prenumeration (månad 79 kr eller år 599 kr; befintliga ligger kvar på sitt
+ *    gamla pris): checkout.session.completed (mode=subscription) samt
+ *    customer.subscription.created/updated/deleted → speglar status i DB.
+ *    Planen spelar ingen roll för entitlementet — periodslutet gör det, och
+ *    status "trialing" (7 dagars provperiod) räknas som premium.
  *  - Lifetime (engångsköp): checkout.session.completed (mode=payment).
  *
  * Idempotent via upsert. Entitlement (premium ja/nej) beräknas i lib/entitlements
@@ -20,9 +23,26 @@ export const dynamic = "force-dynamic";
 type SubLike = Stripe.Subscription;
 
 function periodEndDate(sub: SubLike): Date | null {
-  // current_period_end är unix-sekunder.
-  const raw = (sub as unknown as { current_period_end?: number }).current_period_end;
-  return typeof raw === "number" ? new Date(raw * 1000) : null;
+  // current_period_end är unix-sekunder. Sedan API-versionen "basil" ligger det
+  // på prenumerationsraden (items.data[].current_period_end), inte på själva
+  // prenumerationen — läs båda så att årsplanens periodslut alltid kommer med.
+  const top = (sub as unknown as { current_period_end?: number }).current_period_end;
+  const items = (sub.items?.data ?? []) as unknown as Array<{ current_period_end?: number }>;
+  const fromItems = items
+    .map((i) => i.current_period_end)
+    .filter((n): n is number => typeof n === "number");
+  const raw = typeof top === "number" ? top : fromItems.length ? Math.max(...fromItems) : undefined;
+  if (typeof raw === "number") return new Date(raw * 1000);
+  // Under provperioden: trial_end är periodslutet.
+  return typeof sub.trial_end === "number" ? new Date(sub.trial_end * 1000) : null;
+}
+
+/** Månad/år ur prenumerationens pris (för välkomstmejlet). */
+function planOf(sub: SubLike): "monthly" | "yearly" | undefined {
+  const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
+  if (interval === "year") return "yearly";
+  if (interval === "month") return "monthly";
+  return undefined;
 }
 
 /** Slår upp uid: i första hand subscription/customer-metadata, annars via stripeCustomerId. */
@@ -78,7 +98,11 @@ async function applySubscription(uid: string, sub: SubLike): Promise<void> {
  * kontots språk. Idempotent per checkout-session — Stripe gör om webhooks.
  * Kastar aldrig: ett mejlfel ska inte ge 500 och få Stripe att försöka igen.
  */
-async function sendStripeWelcome(uid: string, session: Stripe.Checkout.Session): Promise<void> {
+async function sendStripeWelcome(
+  uid: string,
+  session: Stripe.Checkout.Session,
+  sub: SubLike | null,
+): Promise<void> {
   const u = await prisma.user.findUnique({
     where: { id: uid },
     select: { email: true, profile: { select: { uiLanguage: true } } },
@@ -88,6 +112,8 @@ async function sendStripeWelcome(uid: string, session: Stripe.Checkout.Session):
   await sendPremiumWelcomeEmail(to, u?.profile?.uiLanguage, {
     provider: "stripe",
     idempotencyKey: `premium-welcome/stripe/${session.id}`,
+    plan: sub ? planOf(sub) : undefined,
+    trial: sub?.status === "trialing",
   });
 }
 
@@ -131,8 +157,9 @@ export async function POST(req: NextRequest) {
             typeof session.subscription === "string"
               ? session.subscription
               : session.subscription?.id ?? null;
+          let sub: SubLike | null = null;
           if (subId) {
-            const sub = await stripe.subscriptions.retrieve(subId);
+            sub = await stripe.subscriptions.retrieve(subId);
             await applySubscription(uid, sub);
           } else {
             // Fallback: markera premium; subscription.created fyller i resten.
@@ -142,7 +169,7 @@ export async function POST(req: NextRequest) {
               create: { id: uid, plan: "premium", planSince: new Date(), subProvider: "stripe" },
             });
           }
-          await sendStripeWelcome(uid, session).catch((e) => console.error("[stripe/webhook] welcome mail", e));
+          await sendStripeWelcome(uid, session, sub).catch((e) => console.error("[stripe/webhook] welcome mail", e));
         } else if (session.payment_status === "paid" || session.status === "complete") {
           // Lifetime (engångsköp) – oförändrat beteende.
           const now = new Date();

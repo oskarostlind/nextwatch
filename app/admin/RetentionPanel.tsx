@@ -6,7 +6,7 @@
 // måttet — annars drar dagens nya ner "kvar efter 7 dagar".
 
 import { useMemo, useState } from "react";
-import { acquisitionLabel } from "@/lib/acquisition";
+import { acquisitionLabel, isMetaChannel } from "@/lib/acquisition";
 
 export type RetAgg = {
   n: number;
@@ -352,7 +352,7 @@ export default function RetentionPanel({
                         >
                           <td
                             className={`whitespace-nowrap border-b border-white/5 px-2.5 py-2 sm:px-3 ${
-                              s.source === "meta" || s.source === "ios_app" ? "font-semibold text-sky-300" : "text-white/80"
+                              isMetaChannel(s.source) || s.source === "ios_app" || s.source === "app" ? "font-semibold text-sky-300" : "text-white/80"
                             }`}
                           >
                             {acquisitionLabel(s.source)}

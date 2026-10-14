@@ -1809,5 +1809,30 @@
       "rated": "Rating {rating} saved",
       "rateFailed": "Couldn't save the rating. Try again."
     }
+  },
+  "fsDeck": {
+    "startSwiping": "Start swiping",
+    "starting": "Starting…",
+    "startFailed": "Couldn't start. Please try again.",
+    "haveAccount": "Have an account?",
+    "signIn": "Sign in",
+    "progressCount": "{count} of {total}",
+    "progressThen": "Then AI picks tonight's movie",
+    "progressAria": "{count} of {total} swipes – then AI picks tonight's movie",
+    "learning": "{count} liked – learning your taste",
+    "svcEyebrow": "Quick card",
+    "svcTitle": "Which services do you have?",
+    "svcBody": "Then we only show what you can actually watch tonight.",
+    "ageTitle": "How old are you?",
+    "ageHint": "Optional – for the right age rating",
+    "ageUnder15": "Under 15",
+    "age15to17": "15–17",
+    "age18plus": "18+",
+    "svcCta": "Only show what I can watch ({count})",
+    "svcPickOne": "Pick at least one service",
+    "svcSaving": "Saving…",
+    "svcSkip": "Skip",
+    "svcError": "Couldn't save. Please try again.",
+    "svcSaved": "Now only from your {count} services"
   }
 }

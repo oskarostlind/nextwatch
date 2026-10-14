@@ -15,20 +15,36 @@
 //   APPLE_IAP_ISSUER_ID        Issuer ID
 //   APPLE_IAP_KEY_ID           Key ID för API-nyckeln
 //   APPLE_IAP_PRIVATE_KEY      .p8-innehållet, med \n som radbrytningar
-//   APPLE_IAP_PREMIUM_MONTHLY  produkt-id, t.ex. "com.nextwatch.premium.monthly"
-// Valfri:
+//   APPLE_IAP_PREMIUM_MONTHLY  produkt-id för månadsplanen ("com.nextwatch.premium.monthly")
+// Valfria:
+//   APPLE_IAP_PRODUCT_YEARLY   produkt-id för årsplanen ("com.nextwatch.premium.yearly").
+//                              Osatt → årsplanen göms i appen (månad fungerar som förut).
+//                              APPLE_IAP_PREMIUM_YEARLY accepteras som alias.
 //   APPLE_IAP_BUNDLE_ID        default "com.nextwatch.app"
+//
+// Båda produkterna MÅSTE ligga i samma prenumerationsgrupp ("NextWatch
+// Premium") — då kan man byta plan utan dubbeldebitering, provperioden gäller
+// en gång per grupp, och subscriptions-endpointen nedan ser båda.
 
 import * as jose from "jose";
 import { prisma } from "@/lib/prisma";
 
-export function getIapProductIds(): { monthly: string | null } {
-  return { monthly: process.env.APPLE_IAP_PREMIUM_MONTHLY ?? null };
+export function getIapProductIds(): { monthly: string | null; yearly: string | null } {
+  const yearly = process.env.APPLE_IAP_PRODUCT_YEARLY || process.env.APPLE_IAP_PREMIUM_YEARLY || null;
+  return { monthly: process.env.APPLE_IAP_PREMIUM_MONTHLY || null, yearly };
+}
+
+/** Vilken plan ett produkt-id motsvarar, eller null om det inte är vårt. */
+export function iapPlanForProduct(productId: string | null | undefined): "monthly" | "yearly" | null {
+  if (!productId) return null;
+  const ids = getIapProductIds();
+  if (ids.monthly && productId === ids.monthly) return "monthly";
+  if (ids.yearly && productId === ids.yearly) return "yearly";
+  return null;
 }
 
 export function isKnownIapProduct(productId: string): boolean {
-  const ids = getIapProductIds();
-  return productId === ids.monthly && productId.length > 0;
+  return iapPlanForProduct(productId) !== null;
 }
 
 export function isAppleIapConfigured(): boolean {
@@ -50,7 +66,19 @@ type DecodedTransactionInfo = {
   expiresDate?: number; // unix-millisekunder
   purchaseDate?: number; // unix-millisekunder
   environment?: string;
+  /** 1 = introduktionserbjudande (t.ex. gratis provperiod), 2 = kampanj, 3 = erbjudandekod, 4 = win-back. */
+  offerType?: number;
+  /** "FREE_TRIAL" | "PAY_AS_YOU_GO" | "PAY_UP_FRONT" (när offerType är satt). */
+  offerDiscountType?: string;
+  /** Pris i milli-enheter (79 kr = 79000), om Apple skickar det. */
+  price?: number;
+  currency?: string;
 };
+
+/** True om transaktionen är starten på en gratis provperiod. */
+export function isFreeTrialTransaction(tx: { offerType?: number; offerDiscountType?: string }): boolean {
+  return tx.offerType === 1 && tx.offerDiscountType === "FREE_TRIAL";
+}
 
 /** Kortlivad JWT för App Store Server API (ES256, samma nyckelformat som APNs). */
 async function createAppStoreApiToken(): Promise<string> {
@@ -215,9 +243,80 @@ type SubscriptionStatusResponse = {
     lastTransactions?: Array<{
       status: number;
       signedTransactionInfo?: string;
+      signedRenewalInfo?: string;
     }>;
   }>;
 };
+
+type DecodedRenewalInfo = {
+  autoRenewProductId?: string;
+  autoRenewStatus?: number; // 1 = förnyas, 0 = avstängd
+  renewalPrice?: number; // milli-enheter
+  currency?: string;
+};
+
+type LatestAppleStatus = {
+  status: number;
+  tx: DecodedTransactionInfo;
+  renewal: DecodedRenewalInfo | null;
+};
+
+/**
+ * Senaste prenumerationsstatusen hos Apple för användarens senast kända
+ * transaktion. Går igenom ALLA grupper och transaktioner i svaret och väljer
+ * den med senast utgång — månad och år ligger i samma grupp, men skulle de
+ * hamna i olika grupper ska ändå den aktuella vinna. Null vid fel/okonfigurerat.
+ */
+async function fetchLatestAppleStatus(uid: string): Promise<LatestAppleStatus | null> {
+  if (!isAppleIapConfigured()) return null;
+
+  // Senaste kända transaktionen — vilken transaktion som helst i prenumerationen
+  // duger som nyckel mot subscriptions-endpointen.
+  const lastTx = await prisma.appleIapTransaction.findFirst({
+    where: { userId: uid },
+    orderBy: { purchasedAt: "desc" },
+    select: { transactionId: true, environment: true },
+  });
+  if (!lastTx) return null;
+
+  const token = await createAppStoreApiToken();
+  let response = await fetch(
+    `${getAppStoreBaseUrl(lastTx.environment ?? undefined)}/inApps/v1/subscriptions/${lastTx.transactionId}`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+  );
+  if (!response.ok && lastTx.environment !== "Sandbox") {
+    response = await fetch(
+      `${getAppStoreBaseUrl("Sandbox")}/inApps/v1/subscriptions/${lastTx.transactionId}`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+    );
+  }
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as SubscriptionStatusResponse;
+  let best: LatestAppleStatus | null = null;
+  for (const group of payload.data ?? []) {
+    for (const item of group.lastTransactions ?? []) {
+      if (!item.signedTransactionInfo) continue;
+      let tx: DecodedTransactionInfo;
+      try {
+        tx = assertTransactionFields(decodeSignedPayload<DecodedTransactionInfo>(item.signedTransactionInfo));
+      } catch {
+        continue;
+      }
+      if (best && (best.tx.expiresDate ?? 0) >= (tx.expiresDate ?? 0)) continue;
+      let renewal: DecodedRenewalInfo | null = null;
+      if (item.signedRenewalInfo) {
+        try {
+          renewal = decodeSignedPayload<DecodedRenewalInfo>(item.signedRenewalInfo);
+        } catch {
+          renewal = null;
+        }
+      }
+      best = { status: item.status, tx, renewal };
+    }
+  }
+  return best;
+}
 
 /**
  * Frågar Apple om aktuell prenumerationsstatus och speglar den i User.
@@ -227,37 +326,9 @@ type SubscriptionStatusResponse = {
  */
 export async function refreshAppleSubscription(uid: string): Promise<void> {
   try {
-    if (!isAppleIapConfigured()) return;
-
-    // Senaste kända transaktionen — vilken transaktion som helst i prenumerationen
-    // duger som nyckel mot subscriptions-endpointen.
-    const lastTx = await prisma.appleIapTransaction.findFirst({
-      where: { userId: uid },
-      orderBy: { purchasedAt: "desc" },
-      select: { transactionId: true, environment: true },
-    });
-    if (!lastTx) return;
-
-    const token = await createAppStoreApiToken();
-    let response = await fetch(
-      `${getAppStoreBaseUrl(lastTx.environment ?? undefined)}/inApps/v1/subscriptions/${lastTx.transactionId}`,
-      { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
-    );
-    if (!response.ok && lastTx.environment !== "Sandbox") {
-      response = await fetch(
-        `${getAppStoreBaseUrl("Sandbox")}/inApps/v1/subscriptions/${lastTx.transactionId}`,
-        { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
-      );
-    }
-    if (!response.ok) return;
-
-    const payload = (await response.json()) as SubscriptionStatusResponse;
-    const latest = payload.data?.[0]?.lastTransactions?.[0];
-    if (!latest?.signedTransactionInfo) return;
-
-    const tx = assertTransactionFields(
-      decodeSignedPayload<DecodedTransactionInfo>(latest.signedTransactionInfo)
-    );
+    const latest = await fetchLatestAppleStatus(uid);
+    if (!latest) return;
+    const { tx } = latest;
     const expiresAt = tx.expiresDate ? new Date(tx.expiresDate) : null;
 
     await prisma.user.update({
@@ -285,5 +356,36 @@ export async function refreshAppleSubscription(uid: string): Promise<void> {
       .catch(() => {});
   } catch (e) {
     console.warn("[appleIap] refreshAppleSubscription misslyckades:", e instanceof Error ? e.message : e);
+  }
+}
+
+export type StoreSubscriptionDetail = {
+  plan: "monthly" | "yearly" | null;
+  /** Det användaren faktiskt betalar per period (befintliga 19 kr-kunder ser 19 kr). */
+  amount: number | null;
+  currency: string | null;
+};
+
+/**
+ * Plan + pris för en befintlig Apple-prenumerant (för /premium och profilen).
+ * Priset tas från förnyelseinfon (= nästa debitering, där Apple behåller
+ * gamla priset för befintliga prenumeranter), annars från transaktionen.
+ * Kastar aldrig.
+ */
+export async function getAppleSubscriptionDetail(uid: string): Promise<StoreSubscriptionDetail | null> {
+  try {
+    const latest = await fetchLatestAppleStatus(uid);
+    if (!latest) return null;
+    const productId = latest.renewal?.autoRenewProductId ?? latest.tx.productId;
+    const milli = latest.renewal?.renewalPrice ?? latest.tx.price ?? null;
+    const currency = latest.renewal?.currency ?? latest.tx.currency ?? null;
+    return {
+      plan: iapPlanForProduct(productId) ?? iapPlanForProduct(latest.tx.productId),
+      amount: typeof milli === "number" ? milli / 1000 : null,
+      currency,
+    };
+  } catch (e) {
+    console.warn("[appleIap] getAppleSubscriptionDetail misslyckades:", e instanceof Error ? e.message : e);
+    return null;
   }
 }

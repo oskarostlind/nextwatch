@@ -178,11 +178,11 @@
       "subject": "Welcome to NextWatch Premium",
       "heading": "Premium is active",
       "intro": "Thanks for supporting NextWatch! Your Premium is active now and works on every device you're signed in on.",
-      "perks": "You get unlimited swipes, no ads, groups of up to 20 people and your full taste profile.",
+      "perks": "You get unlimited swipes, no ads, unlimited Pick for me, groups of up to 20 people and your full taste profile.",
       "cta": "Start swiping",
-      "manageStripe": "Your subscription renews automatically every month. Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
-      "manageApple": "Your subscription renews automatically every month. Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions.",
-      "manageGoogle": "Your subscription renews automatically every month. Google sends the receipt. Cancel in Google Play → Payments & subscriptions."
+      "manageStripe": "Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
+      "manageApple": "Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions.",
+      "manageGoogle": "Google sends the receipt. Cancel in Google Play → Payments & subscriptions."
     }
   },
   "filmChat": {
@@ -721,17 +721,17 @@
     "bulletAdFree": "Completely ad-free",
     "bulletGroups": "Groups of up to 20 people — free fits 3",
     "bulletSwipes": "Unlimited swipes — free includes 100 per day",
-    "bulletPick": "Pick for me: 20 AI picks a month – let NextWatch choose tonight's movie",
-    "bulletTaste": "Your taste profile: see which themes, directors and actors your swipes point to",
-    "buyCta": "Get Premium – SEK 19/month",
+    "bulletPick": "Unlimited Pick for me – let the AI choose tonight's movie",
+    "bulletTaste": "Your taste profile (Profile → Taste): see which themes, directors and actors your swipes point to",
+    "buyCta": "Get Premium",
     "checkoutFailed": "Couldn't start the payment.",
     "eula": "Terms of Use (EULA)",
     "eyebrow": "Upgrade",
-    "intro": "Remove ads and swipe without limits. SEK 19/month, no lock-in.",
-    "legalApple": "Payment is charged to your Apple account when you confirm the purchase. It renews within 24 hours before the end of the period unless you cancel before then. You manage and cancel the subscription in Settings on your device.",
+    "intro": "No ads, unlimited swipes and AI picks, bigger groups and your full taste profile.",
+    "legalApple": "Payment is charged to your Apple account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the period. Manage and cancel the subscription in your device's Settings.",
     "openingGooglePlay": "Opening Google Play…",
-    "legalGoogle": "Payment is charged to your Google account when you confirm the purchase. The subscription renews automatically every month until you cancel. Manage or cancel it in Google Play → Payments & subscriptions.",
-    "legalName": "<name>NextWatch Premium</name> — SEK 19 per month. The subscription renews automatically every month until you cancel.",
+    "legalGoogle": "Payment is charged to your Google account when you confirm the purchase. The subscription renews automatically until you cancel. Manage and cancel it in Google Play → Payments & subscriptions.",
+    "legalName": "<name>NextWatch Premium</name> — a subscription that renews automatically until you cancel.",
     "legalStripe": "Payment is handled by Stripe. You can cancel the subscription at any time.",
     "openingAppStore": "Opening the App Store…",
     "ourTerms": "Our terms",
@@ -740,12 +740,56 @@
     "restoreFailed": "Couldn't restore your purchases.",
     "restoring": "Restoring…",
     "startingStripe": "Starting Stripe…",
-    "subtitle": "SEK 19/month – cancel whenever you like."
+    "subtitle": "Yearly or monthly – cancel whenever you like."
   },
   "premiumSuccess": {
     "body": "Your premium should activate within a few seconds. Reload the page if it doesn't show up right away.",
     "title": "Thanks for your purchase!",
     "toGroups": "Go to groups"
+  },
+  "store": {
+    "plans": {
+      "yearly": "Yearly",
+      "monthly": "Monthly"
+    },
+    "period": {
+      "month": "month",
+      "year": "year"
+    },
+    "perMonth": "{price}/month",
+    "perYear": "{price}/year",
+    "yearlyPerMonth": "≈ {price}/month",
+    "save": "Save {pct}%",
+    "trialBadge": "{days} days free",
+    "ctaTrial": "Try {days} days free",
+    "ctaYearly": "Get Premium – {price}/year",
+    "ctaMonthly": "Get Premium – {price}/month",
+    "loading": "Loading prices…",
+    "unavailable": "Premium can't be purchased here right now. Please try again later.",
+    "planPickerLabel": "Choose a plan",
+    "legal": {
+      "summary": "<name>NextWatch Premium – {plan}</name>: {price} per {period}.",
+      "summaryTrial": "<name>NextWatch Premium – {plan}</name>: {days} days free, then {price} per {period}.",
+      "renew": "The subscription renews automatically every {period} at the same price until you cancel. Cancel at least 24 hours before the end of the period to avoid the next charge.",
+      "trialCancel": "Cancel at least 24 hours before the trial ends and you won't be charged anything.",
+      "apple": "Payment is charged to your Apple account when you confirm the purchase – with a trial, only when the trial ends. Manage and cancel the subscription in Settings → your name → Subscriptions.",
+      "google": "Payment is charged to your Google account when you confirm the purchase – with a trial, only when the trial ends. Manage and cancel the subscription in Google Play → Payments & subscriptions.",
+      "stripe": "Payments are handled by Stripe – with a trial, you're only charged when the trial ends. Cancel anytime in your profile under Manage subscription."
+    },
+    "current": {
+      "title": "You have Premium",
+      "planPrice": "{plan} · {price} per {period}",
+      "lifetime": "Premium forever (lifetime)",
+      "keepPrice": "Your price doesn't change – you keep the price you signed up for as long as your subscription runs.",
+      "manage": "Manage subscription",
+      "manageWeb": "Manage in your profile"
+    },
+    "email": {
+      "renews": "Your subscription renews automatically until you cancel.",
+      "renewsMonthly": "Your subscription renews automatically every month until you cancel.",
+      "renewsYearly": "Your subscription renews automatically every year until you cancel.",
+      "trial": "Your {days}-day free trial has started. You'll only be charged when it ends – cancel at least 24 hours before if you don't want to continue."
+    }
   },
   "profile": {
     "about": "About NextWatch",
@@ -865,7 +909,7 @@
     "tourWatchlist": "The watchlist walkthrough",
     "tourWatchlistHint": "Saved titles, rating what you've seen, and Watch now.",
     "upgradeCta": "Upgrade to Premium",
-    "upgradeHint": "Upgrade to Premium (SEK 19/month) for a completely ad-free experience.",
+    "upgradeHint": "Upgrade to Premium for a completely ad-free experience.",
     "usernameBlockedChars": "Unsupported characters are removed.",
     "usernameHint": "3–20 characters (a–z, 0–9, _, .) — visible to friends.",
     "usernameLabel": "Username",
@@ -1410,7 +1454,7 @@
   },
   "swipeLimit": {
     "body": "{limit} swipes a day are included for free. Come back tomorrow – or get Premium for unlimited swiping.",
-    "cta": "Get Premium – SEK 19/month",
+    "cta": "Get Premium – SEK 79/month",
     "heading": "You've hit today's limit",
     "opening": "Opening…",
     "resetHint": "The limit resets on a rolling basis through the day.",
@@ -1428,7 +1472,7 @@
     "networkError": "Network error.",
     "notEnoughData": "Swipe, rate and fill in favourites below — then we'll build a profile for you.",
     "premiumBody": "See which themes, directors and actors your swipes really point to — and get suggestions for genres you've missed.",
-    "premiumCta": "Get Premium – SEK 19/month",
+    "premiumCta": "Get Premium",
     "premiumTitle": "Taste profile is part of Premium",
     "rowBasedOn": "Based on",
     "rowCast": "Actors",
@@ -1508,10 +1552,10 @@
     "body": "That ad is over — it doesn't have to come back.",
     "bulletsLabel": "What you get",
     "close": "Close",
-    "cta": "Get Premium – SEK 19/month",
+    "cta": "Get Premium – SEK 79/month",
     "dismiss": "Not now",
     "heading": "Skip the ads with Premium",
-    "legal": "SEK 19/month, renews automatically until you cancel. Cancel any time.",
+    "legal": "NextWatch Premium: SEK 79/month (monthly). Renews automatically until you cancel – at least 24 hours before the end of the period. Cancel any time.",
     "loadingVideo": "Loading video…",
     "opening": "Opening…",
     "watchAd": "Watch a video – get {bonus} more swipes"
@@ -1783,7 +1827,7 @@
       "watchAdBusy": "Loading video…",
       "adFailed": "The video couldn't be shown right now. Try again in a moment.",
       "rewardLimit": "You've watched the maximum number of ads for today. Come back tomorrow.",
-      "premiumCta": "Premium · {count} picks a month, no ads · SEK 19/month",
+      "premiumCta": "Premium · {count} picks a month, no ads · SEK 79/month",
       "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
     },
     "error": {

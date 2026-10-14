@@ -13,6 +13,7 @@ import {
   getPlayProducts,
   grantPremiumFromPlay,
   isGooglePlayConfigured,
+  playPlanForBasePlan,
 } from "@/lib/googlePlay";
 import { apiMsg } from "@/lib/apiMessages";
 import { getEntitlement } from "@/lib/entitlements";
@@ -61,6 +62,8 @@ export async function POST(req: NextRequest) {
         await sendPremiumWelcomeEmail(u.email, u.profile?.uiLanguage, {
           provider: "google",
           idempotencyKey: `premium-welcome/google/${sub.orderId ?? token.slice(0, 40)}`,
+          plan: playPlanForBasePlan(sub.basePlanId) ?? undefined,
+          trial: sub.inFreeTrial,
         });
       }
     }
@@ -69,6 +72,8 @@ export async function POST(req: NextRequest) {
       ok: true,
       active: result.granted,
       productId: sub.productId,
+      plan: playPlanForBasePlan(sub.basePlanId),
+      trial: sub.inFreeTrial,
       expiresAt: sub.expiresAt,
     });
   } catch (error) {

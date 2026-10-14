@@ -2,7 +2,8 @@
 //
 // Publik konfiguration för iOS-köpflödet (produkt-id:n är publika per design —
 // de syns ändå i App Store). Klienten (lib/premiumPurchase.ts) hämtar detta
-// innan den startar ett StoreKit-köp.
+// innan den startar ett StoreKit-köp. products.yearly är null när
+// APPLE_IAP_PRODUCT_YEARLY saknas — då göms årsplanen i appen.
 
 import { NextResponse } from "next/server";
 import { getIapProductIds, isAppleIapConfigured } from "@/lib/appleIap";

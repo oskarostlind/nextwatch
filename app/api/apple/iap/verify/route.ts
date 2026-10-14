@@ -11,7 +11,9 @@ import { z } from "zod";
 import {
   fetchAppStoreTransaction,
   grantPremiumFromIap,
+  iapPlanForProduct,
   isAppleIapConfigured,
+  isFreeTrialTransaction,
   isKnownIapProduct,
 } from "@/lib/appleIap";
 import { apiMsg } from "@/lib/apiMessages";
@@ -88,6 +90,8 @@ export async function POST(req: NextRequest) {
         await sendPremiumWelcomeEmail(u.email, u.profile?.uiLanguage, {
           provider: "apple",
           idempotencyKey: `premium-welcome/apple/${transaction.transactionId}`,
+          plan: iapPlanForProduct(transaction.productId) ?? undefined,
+          trial: isFreeTrialTransaction(transaction),
         });
       }
     }
@@ -96,6 +100,8 @@ export async function POST(req: NextRequest) {
       ok: true,
       active: result.granted,
       productId: transaction.productId,
+      plan: iapPlanForProduct(transaction.productId),
+      trial: isFreeTrialTransaction(transaction),
       expiresAt,
     });
   } catch (error) {

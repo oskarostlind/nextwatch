@@ -8,8 +8,13 @@
 export type PickQuota = {
   enabled: boolean;            // rollout flag for THIS user
   premium: boolean;
-  premiumMonthly: number;      // 20
-  premiumLeft: number | null;  // null for free users
+  /**
+   * Premium = obegränsat med Välj åt mig (sedan 2026-10-15). UI:t visar
+   * "Obegränsat med Premium" och ALDRIG premiumLeft — det dolda dygnstaket
+   * (NW_PICK_PREMIUM_DAILY_CAP) finns bara mot missbruk.
+   */
+  unlimited: boolean;
+  premiumLeft: number | null;  // null for free users; premium: kvar av det DOLDA dygnstaket
   credits: number;             // ad credits balance
   rewardPicks: number;         // 3
   rewardsLeftToday: number;    // grants left today
@@ -53,11 +58,18 @@ export type PickRequestBody = {
   focus?: { tmdbId: number; mediaType: "movie" | "tv" };
   /** "Har sett den": markera fokus-titeln som sedd (som swipens "Sett"). */
   markSeen?: boolean;
+  /**
+   * Auto-förslag ("✦ AI väljer kvällens film", nya flödet): gratis, räknas
+   * aldrig mot kvoten, högst ett per användare och kalenderdygn (Stockholm) —
+   * ett andra anrop samma dygn returnerar samma förslag igen. Följdfråge-
+   * fälten (followUpOf/focus/markSeen) ignoreras.
+   */
+  auto?: boolean;
 };
 
 /** Snabbsvaren under en följdfråga (event-meta). */
-export type PickQuickReply = "seen" | "shorter" | "lighter" | "similar";
-export const PICK_QUICK_REPLIES: readonly PickQuickReply[] = ["seen", "shorter", "lighter", "similar"] as const;
+export type PickQuickReply = "seen" | "shorter" | "lighter" | "similar" | "surprise";
+export const PICK_QUICK_REPLIES: readonly PickQuickReply[] = ["seen", "shorter", "lighter", "similar", "surprise"] as const;
 
 export type PickResponse =
   | {
@@ -67,7 +79,9 @@ export type PickResponse =
       reason: string;
       quota: PickQuota;
       requestId: string;          // the ai_pick_requests row (history entry id)
-      sessionId: string | null;   // echoes PickRequestBody.sessionId
+      sessionId: string | null;   // echoes PickRequestBody.sessionId (auto: the session the day's auto pick was stored under)
+      /** true = dagens gratis auto-förslag (source 'auto'), aldrig debiterat. */
+      auto?: boolean;
     }
   | { ok: false; error: "no_quota" | "no_candidates" | "unavailable" | "disabled" | "bad_request"; quota?: PickQuota };
 
@@ -75,7 +89,8 @@ export type PickEventType =
   | "open" | "chip" | "submit" | "open_service" | "save" | "another" | "alt_select"
   | "paywall_view" | "ad_start" | "ad_complete" | "ad_fail" | "upsell_view" | "upsell_click" | "close"
   | "history_open" | "history_entry_open" | "followup" | "history_continue"
-  | "detail_open" | "share_open" | "rate" | "trailer";
+  | "detail_open" | "share_open" | "rate" | "trailer"
+  | "auto_reveal" | "auto_ok" | "auto_save" | "auto_close";
 
 /** Runtime-lista över tillåtna händelsetyper (vitlistan i /api/pick/event). */
 export const PICK_EVENT_TYPES: readonly PickEventType[] = [
@@ -83,6 +98,7 @@ export const PICK_EVENT_TYPES: readonly PickEventType[] = [
   "paywall_view", "ad_start", "ad_complete", "ad_fail", "upsell_view", "upsell_click", "close",
   "history_open", "history_entry_open", "followup", "history_continue",
   "detail_open", "share_open", "rate", "trailer",
+  "auto_reveal", "auto_ok", "auto_save", "auto_close",
 ] as const;
 
 /* ---------------- Historik ("chattarna", v2) ---------------- */
@@ -96,6 +112,8 @@ export type PickHistoryEntry = {
   pick: PickItem;
   alternatives: PickItem[];
   reason: string;
+  /** Dagens gratis auto-förslag (source 'auto'). */
+  auto: boolean;
 };
 
 export type PickHistorySession = {

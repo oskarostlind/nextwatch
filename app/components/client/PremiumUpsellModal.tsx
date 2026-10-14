@@ -3,34 +3,57 @@
 // Premium-CTA:n som visas EFTER en annons — ett bottenark, inte en ruta mitt på
 // skärmen. Triggas av maybeTriggerAdUpsell() (lib/adUpsellEvent.ts): på webben
 // när annonskortet lämnat däcket, i iOS-appen när AdMob-interstitialen stängts.
+// Dessutom av openPremiumUpsell() — köpknapparna i apparna (Välj åt mig,
+// swipegränsen, annonsplatsen) öppnar arket i stället för att köpa direkt, så
+// att 3.1.2-texten (PlanLegal) alltid står vid köptillfället.
 //
 // Punkterna är INTE nyskrivna för den här ytan — de läses ur samma
 // i18n-nycklar som /premium (namnrymden "premium": bulletAdFree, bulletSwipes,
-// bulletGroups, bulletTaste). Varje punkt motsvarar en gate som faktiskt finns
-// i koden (lib/ads.ts, lib/swipeLimit.ts, lib/groupLimits.ts,
-// lib/tasteFeature.ts) — se tabellen i CLAUDE.md. Ändras en gate ändras texten
-// på båda ställena samtidigt, och de kan aldrig glida isär.
+// bulletGroups, bulletTaste, bulletPick). Varje punkt motsvarar en gate som
+// faktiskt finns i koden (lib/ads.ts, lib/swipeLimit.ts, lib/groupLimits.ts,
+// lib/tasteFeature.ts, lib/aiPick/quota.ts) — se tabellen i CLAUDE.md. Ändras
+// en gate ändras texten på båda ställena samtidigt.
 //
-// Köpknappen går genom goPremium() (lib/premiumPurchase.ts) = Apple IAP i
-// iOS-appen, /premium på webben. Stripe får ALDRIG öppnas i appen (regel 3.1.1).
+// Planval (2026-10-15): årsplanen förvald, månad som alternativ, provperioden
+// när den gäller — samma PlanPicker/PlanLegal som /premium. Köpknappen går
+// genom goPremium(plan) (lib/premiumPurchase.ts) = Apple IAP i iOS-appen,
+// Google Play i Android-appen, /premium?plan=… på webben. Stripe får ALDRIG
+// öppnas i apparna (regel 3.1.1 / Play-policy).
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Check, Crown, PlayCircle, X } from "lucide-react";
 import { goPremium } from "@/lib/premiumPurchase";
 import { canOfferSwipeReward, watchRewardedForSwipes } from "@/lib/admobAds";
 import { notify } from "@/app/components/lib/notify";
 // maybeTriggerAdUpsell bor i lib/adUpsellEvent.ts — se kommentaren där om
 // varför den inte får ligga i den här (lat-laddade) filen.
-import { UPSELL_EVENT, maybeTriggerAdUpsell, markUpsellSatisfied } from "@/lib/adUpsellEvent";
+import {
+  UPSELL_EVENT,
+  maybeTriggerAdUpsell,
+  markUpsellSatisfied,
+  registerUpsellHost,
+  type UpsellEventDetail,
+} from "@/lib/adUpsellEvent";
 import { useTranslations } from "next-intl";
+import type { PremiumPlan } from "@/lib/premiumPurchase";
+import {
+  PlanLegal,
+  PlanPicker,
+  RestorePurchasesButton,
+  defaultPlan,
+  usePlanCta,
+  usePremiumOffers,
+  useStorePlatform,
+} from "./PremiumUpsellPlans";
 
-/** Samma fyra förmåner som /premium, i samma ordning. */
+/** Samma förmåner som /premium, i samma ordning. */
 const BENEFIT_KEYS = ["bulletAdFree", "bulletSwipes", "bulletGroups", "bulletTaste", "bulletPick"] as const;
 
 export default function PremiumUpsellModal() {
   const t = useTranslations("upsell");
   const tp = useTranslations("premium");
+  const ts = useTranslations("store");
   const [open, setOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [watching, setWatching] = useState(false);
@@ -38,11 +61,31 @@ export default function PremiumUpsellModal() {
   // på webben, och bara när servern har grants kvar idag (rewardedRemaining).
   const [rewardAvailable, setRewardAvailable] = useState(false);
   const [rewardBonus, setRewardBonus] = useState(100);
+  const [plan, setPlan] = useState<PremiumPlan | null>(null);
+  const [buyError, setBuyError] = useState("");
+  // Priserna hämtas först när arket öppnas första gången (inte vid varje
+  // sidladdning — de flesta ser aldrig arket).
+  const [everOpened, setEverOpened] = useState(false);
+  const offers = usePremiumOffers(everOpened);
+  const platform = useStorePlatform();
+  const ctaLabel = usePlanCta();
+  const dragControls = useDragControls();
 
   useEffect(() => {
-    const onUpsell = () => {
+    if (open) setEverOpened(true);
+  }, [open]);
+  useEffect(() => {
+    if (offers && !plan) setPlan(defaultPlan(offers));
+  }, [offers, plan]);
+  const selected = offers && plan ? offers[plan] : null;
+
+  useEffect(() => {
+    const unregister = registerUpsellHost();
+    const onUpsell = (e: Event) => {
       setRewardAvailable(false);
       setOpen(true);
+      const detail = (e as CustomEvent<UpsellEventDetail | undefined>).detail;
+      if (detail?.reward === false) return;
       if (!canOfferSwipeReward()) return;
       void fetch("/api/swipe/limit", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
@@ -61,6 +104,7 @@ export default function PremiumUpsellModal() {
     window.addEventListener(UPSELL_EVENT, onUpsell);
     window.addEventListener("nw:admob-ad-shown", onNativeAd);
     return () => {
+      unregister();
       window.removeEventListener(UPSELL_EVENT, onUpsell);
       window.removeEventListener("nw:admob-ad-shown", onNativeAd);
     };
@@ -89,14 +133,20 @@ export default function PremiumUpsellModal() {
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: "spring", stiffness: 340, damping: 32, mass: 0.9 }}
             drag="y"
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.6 }}
             onDragEnd={(_, info) => {
               if (info.offset.y > 80 || info.velocity.y > 600) setOpen(false);
             }}
           >
-            <div className="overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/95 shadow-[0_18px_60px_rgba(0,0,0,0.7)] backdrop-blur-xl">
-              <div className="flex cursor-grab justify-center pb-1 pt-2.5 active:cursor-grabbing">
+            <div className="max-h-[calc(100dvh-24px)] overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-neutral-900/95 shadow-[0_18px_60px_rgba(0,0,0,0.7)] backdrop-blur-xl">
+              {/* Dra-för-att-stänga bara från greppet — resten av arket scrollar. */}
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                className="flex cursor-grab touch-none justify-center pb-1 pt-2.5 active:cursor-grabbing"
+              >
                 <span className="h-1 w-9 rounded-full bg-white/20" />
               </div>
 
@@ -134,22 +184,38 @@ export default function PremiumUpsellModal() {
                   ))}
                 </ul>
 
-                <button
-                  type="button"
-                  disabled={buying}
-                  onClick={() => {
-                    setBuying(true);
-                    markUpsellSatisfied();
-                    void goPremium().finally(() => {
-                      setBuying(false);
-                      setOpen(false);
-                    });
-                  }}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3.5 text-[15px] font-semibold text-neutral-950 transition hover:bg-amber-300 active:scale-[0.98] disabled:opacity-50"
-                >
-                  <Crown className="h-4 w-4" />
-                  {buying ? t("opening") : t("cta")}
-                </button>
+                <div className="mt-4">
+                  {offers && plan ? (
+                    <PlanPicker offers={offers} value={plan} onChange={setPlan} disabled={buying} />
+                  ) : offers ? (
+                    <div className="space-y-2 text-center text-xs text-neutral-500">
+                      <p>{ts("unavailable")}</p>
+                      {platform !== "web" ? <RestorePurchasesButton onError={setBuyError} /> : null}
+                    </div>
+                  ) : (
+                    <p className="text-center text-xs text-neutral-500">{ts("loading")}</p>
+                  )}
+                </div>
+
+                {plan && selected ? (
+                  <button
+                    type="button"
+                    disabled={buying}
+                    onClick={() => {
+                      setBuying(true);
+                      setBuyError("");
+                      markUpsellSatisfied();
+                      void goPremium(plan).finally(() => {
+                        setBuying(false);
+                        setOpen(false);
+                      });
+                    }}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3.5 text-[15px] font-semibold text-neutral-950 transition hover:bg-amber-300 active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Crown className="h-4 w-4" />
+                    {buying ? t("opening") : ctaLabel(plan, selected)}
+                  </button>
+                ) : null}
 
                 {rewardAvailable && (
                   <button
@@ -182,9 +248,15 @@ export default function PremiumUpsellModal() {
                   {t("dismiss")}
                 </button>
 
-                {/* Pris, period och automatisk förnyelse i klartext vid
-                    köptillfället — App Store-riktlinje 3.1.2(c). */}
-                <p className="mt-2 text-center text-[11px] leading-relaxed text-neutral-600">{t("legal")}</p>
+                {/* Pris, period, provperiod, automatisk förnyelse, uppsägning,
+                    EULA/integritet och Återställ köp vid köptillfället — App
+                    Store-riktlinje 3.1.2(c), för den plan som är vald. */}
+                {offers && plan ? (
+                  <div className="mt-2 border-t border-white/10 pt-3 [&_p]:text-[11px]">
+                    <PlanLegal offers={offers} plan={plan} platform={platform} busy={buying} onError={setBuyError} />
+                  </div>
+                ) : null}
+                {buyError ? <p className="mt-2 text-center text-xs text-rose-300">{buyError}</p> : null}
               </div>
             </div>
           </motion.div>

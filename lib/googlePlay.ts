@@ -15,6 +15,12 @@
 //   GOOGLE_PLAY_PACKAGE_NAME      default "com.nextwatch.app"
 //   GOOGLE_PLAY_SUB_MONTHLY       prenumerations-id i Play Console (t.ex. "premium_monthly")
 //   GOOGLE_PLAY_BASE_PLAN_MONTHLY baserplanens id (t.ex. "monthly")
+// Valfri:
+//   GOOGLE_PLAY_BASE_PLAN_YEARLY  årsplanen som EGEN baserplan i SAMMA
+//                                 prenumeration (t.ex. "yearly"). Osatt → bara
+//                                 månadsplanen visas i Android-appen.
+// Provperioden (7 dagar) är ett erbjudande på respektive baserplan med
+// behörighet "Ny kund" — Play returnerar bara erbjudanden användaren får ta.
 
 import { prisma } from "@/lib/prisma";
 import { getGoogleAccessToken, getServiceAccount } from "@/lib/googleServiceAccount";
@@ -25,11 +31,25 @@ export function getPlayPackageName(): string {
   return process.env.GOOGLE_PLAY_PACKAGE_NAME ?? "com.nextwatch.app";
 }
 
-export function getPlayProducts(): { monthly: string | null; monthlyBasePlan: string | null } {
+export function getPlayProducts(): {
+  monthly: string | null;
+  monthlyBasePlan: string | null;
+  yearlyBasePlan: string | null;
+} {
   return {
     monthly: process.env.GOOGLE_PLAY_SUB_MONTHLY ?? null,
     monthlyBasePlan: process.env.GOOGLE_PLAY_BASE_PLAN_MONTHLY ?? null,
+    yearlyBasePlan: process.env.GOOGLE_PLAY_BASE_PLAN_YEARLY || null,
   };
+}
+
+/** Baserplan-id → vår plan (null om okänd/saknas). */
+export function playPlanForBasePlan(basePlanId: string | null | undefined): "monthly" | "yearly" | null {
+  if (!basePlanId) return null;
+  const p = getPlayProducts();
+  if (p.monthlyBasePlan && basePlanId === p.monthlyBasePlan) return "monthly";
+  if (p.yearlyBasePlan && basePlanId === p.yearlyBasePlan) return "yearly";
+  return null;
 }
 
 export function isGooglePlayConfigured(): boolean {
@@ -43,7 +63,13 @@ type SubscriptionV2 = {
   acknowledgementState?: string;
   linkedPurchaseToken?: string;
   testPurchase?: Record<string, unknown>;
-  lineItems?: Array<{ productId?: string; expiryTime?: string }>;
+  lineItems?: Array<{
+    productId?: string;
+    expiryTime?: string;
+    offerDetails?: { basePlanId?: string; offerId?: string };
+    autoRenewingPlan?: { recurringPrice?: { currencyCode?: string; units?: string; nanos?: number } };
+    offerPhase?: { freeTrial?: Record<string, unknown> };
+  }>;
 };
 
 export type PlaySubscription = {
@@ -54,6 +80,12 @@ export type PlaySubscription = {
   acknowledged: boolean;
   linkedPurchaseToken: string | null;
   test: boolean;
+  basePlanId: string | null;
+  /** Gratis provperiod pågår (Play skickar offerPhase.freeTrial). */
+  inFreeTrial: boolean;
+  /** Det förnyelsen kostar (befintliga kunder behåller sitt gamla pris i Play). */
+  recurringAmount: number | null;
+  recurringCurrency: string | null;
 };
 
 /** Hämtar prenumerationen från Google. Kastar vid nätverks-/API-fel. */
@@ -72,6 +104,11 @@ export async function fetchPlaySubscription(purchaseToken: string): Promise<Play
   const js = (await res.json()) as SubscriptionV2;
   const known = getPlayProducts().monthly;
   const item = js.lineItems?.find((l) => l.productId === known) ?? js.lineItems?.[0];
+  const price = item?.autoRenewingPlan?.recurringPrice;
+  const recurringAmount =
+    price && (price.units !== undefined || price.nanos !== undefined)
+      ? Number(price.units ?? 0) + (price.nanos ?? 0) / 1e9
+      : null;
   return {
     productId: item?.productId ?? null,
     state: js.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED",
@@ -80,6 +117,10 @@ export async function fetchPlaySubscription(purchaseToken: string): Promise<Play
     acknowledged: js.acknowledgementState === "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
     linkedPurchaseToken: js.linkedPurchaseToken ?? null,
     test: Boolean(js.testPurchase),
+    basePlanId: item?.offerDetails?.basePlanId ?? null,
+    inFreeTrial: Boolean(item?.offerPhase?.freeTrial),
+    recurringAmount: recurringAmount !== null && Number.isFinite(recurringAmount) ? recurringAmount : null,
+    recurringCurrency: price?.currencyCode ?? null,
   };
 }
 
@@ -184,5 +225,31 @@ export async function refreshGoogleSubscription(uid: string): Promise<void> {
     });
   } catch (e) {
     console.warn("[googlePlay] refresh misslyckades:", e instanceof Error ? e.message : e);
+  }
+}
+
+/**
+ * Plan + pris för en befintlig Google Play-prenumerant (för /premium).
+ * Kastar aldrig.
+ */
+export async function getGoogleSubscriptionDetail(
+  uid: string,
+): Promise<{ plan: "monthly" | "yearly" | null; amount: number | null; currency: string | null } | null> {
+  try {
+    if (!isGooglePlayConfigured()) return null;
+    const rows = await prisma.$queryRaw<Array<{ purchase_token: string }>>`
+      SELECT purchase_token FROM google_play_purchases
+      WHERE user_id = ${uid} ORDER BY updated_at DESC LIMIT 1`;
+    const token = rows[0]?.purchase_token;
+    if (!token) return null;
+    const sub = await fetchPlaySubscription(token);
+    return {
+      plan: playPlanForBasePlan(sub.basePlanId),
+      amount: sub.recurringAmount,
+      currency: sub.recurringCurrency,
+    };
+  } catch (e) {
+    console.warn("[googlePlay] detail misslyckades:", e instanceof Error ? e.message : e);
+    return null;
   }
 }

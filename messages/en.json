@@ -178,11 +178,11 @@
       "subject": "Welcome to NextWatch Premium",
       "heading": "Premium is active",
       "intro": "Thanks for supporting NextWatch! Your Premium is active now and works on every device you're signed in on.",
-      "perks": "You get unlimited swipes, no ads, groups of up to 20 people and your full taste profile.",
+      "perks": "You get unlimited swipes, no ads, unlimited Pick for me, groups of up to 20 people and your full taste profile.",
       "cta": "Start swiping",
-      "manageStripe": "Your subscription renews automatically every month. Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
-      "manageApple": "Your subscription renews automatically every month. Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions.",
-      "manageGoogle": "Your subscription renews automatically every month. Google sends the receipt. Cancel in Google Play → Payments & subscriptions."
+      "manageStripe": "Stripe sends the receipt in a separate email. You can cancel anytime in your profile under Settings → Manage subscription.",
+      "manageApple": "Apple sends the receipt. Cancel in iPhone Settings → your name → Subscriptions.",
+      "manageGoogle": "Google sends the receipt. Cancel in Google Play → Payments & subscriptions."
     }
   },
   "filmChat": {
@@ -476,6 +476,61 @@
     "step3": "Click ⋮ (three dots) in the top right → <export>Export</export>.",
     "step4": "Download the CSV file and pick it below."
   },
+  "invite": {
+    "card": {
+      "eyebrow": "Tonight",
+      "title": "Who are you watching with?",
+      "body": "Send a link. They swipe in the browser – no app, no account. When you both like the same film, it's a match.",
+      "likesFollow": "{count, plural, one {Your like comes along} other {Your # likes come along}}",
+      "reward": "You both get <b>{picks} AI picks</b> when your friend has swiped {votes} cards.",
+      "cta": "Invite someone",
+      "preview": "What your friend sees",
+      "copy": "Copy link",
+      "send": "Send the link",
+      "busy": "Creating the link…",
+      "solo": "I'm watching alone",
+      "copied": "Link copied – send it to your friend",
+      "failed": "Couldn't create the link. Please try again."
+    },
+    "share": {
+      "title": "Swipe movies with me tonight",
+      "text": "Help me find tonight's movie! Swipe in your browser – no app needed. When we both like the same one, it's a match."
+    },
+    "link": {
+      "hello": "Hi! {name} has liked {count, plural, one {# title} other {# titles}}",
+      "helloNoName": "Hi! Your friend has liked {count, plural, one {# title} other {# titles}}",
+      "helloEmpty": "Hi! Your friend wants to find a movie with you",
+      "title": "Swipe – when you both like the same one, it's a match",
+      "joining": "Opening your group…",
+      "error": "Something went wrong opening the group.",
+      "retry": "Try again",
+      "rewardToast": "Nice! You both got {picks} AI picks ✦"
+    },
+    "install": {
+      "text": "Get NextWatch to keep your group",
+      "cta": "Get the app",
+      "close": "Close"
+    },
+    "invalid": {
+      "title": "This link doesn't work",
+      "body": "The group no longer exists, or the link got garbled. Ask your friend for a new link – or start swiping on your own.",
+      "cta": "Open NextWatch",
+      "app": "Get the app"
+    },
+    "full": {
+      "title": "The group is full",
+      "body": "This group already has {max} people. Ask your friend to start a new group – or start swiping on your own."
+    },
+    "meta": {
+      "title": "Swipe movies together – NextWatch",
+      "titleNamed": "{name} wants to find a movie with you tonight",
+      "description": "Swipe in your browser – no app, no account. When you both like the same film, it's a match."
+    },
+    "push": {
+      "rewardTitle": "Your friend swiped ✦",
+      "rewardBody": "You both got {picks} AI picks. Let AI choose tonight's movie!"
+    }
+  },
   "landing": {
     "continueAsGuest": "Continue as guest",
     "createFreeAccount": "Create a free account",
@@ -620,8 +675,10 @@
     "keepSwiping": "Keep swiping",
     "moreInfo": "More info",
     "noDescription": "No description available.",
+    "noImage": "No image",
     "savedByMany": "{names} already had it on their watchlists.",
     "savedByOne": "{names} already had it on their watchlist.",
+    "trailer": "Trailer",
     "watchNowOn": "Watch now on {provider}",
     "youLike": "You like {list}."
   },
@@ -632,7 +689,10 @@
     "removeRating": "Remove rating",
     "saveRating": "Save rating ({value}/10)",
     "saving": "Saving…",
-    "skip": "Skip"
+    "skip": "Skip",
+    "pickToRate": "Pick a rating",
+    "ratingLow": "Not for me",
+    "ratingHigh": "Loved it"
   },
   "nav": {
     "discover": "Discover",
@@ -721,17 +781,17 @@
     "bulletAdFree": "Completely ad-free",
     "bulletGroups": "Groups of up to 20 people — free fits 3",
     "bulletSwipes": "Unlimited swipes — free includes 100 per day",
-    "bulletPick": "Pick for me: 20 AI picks a month – let NextWatch choose tonight's movie",
-    "bulletTaste": "Your taste profile: see which themes, directors and actors your swipes point to",
-    "buyCta": "Get Premium – SEK 19/month",
+    "bulletPick": "Unlimited Pick for me – let the AI choose tonight's movie",
+    "bulletTaste": "Your taste profile (Profile → Taste): see which themes, directors and actors your swipes point to",
+    "buyCta": "Get Premium",
     "checkoutFailed": "Couldn't start the payment.",
     "eula": "Terms of Use (EULA)",
     "eyebrow": "Upgrade",
-    "intro": "Remove ads and swipe without limits. SEK 19/month, no lock-in.",
-    "legalApple": "Payment is charged to your Apple account when you confirm the purchase. It renews within 24 hours before the end of the period unless you cancel before then. You manage and cancel the subscription in Settings on your device.",
+    "intro": "No ads, unlimited swipes and AI picks, bigger groups and your full taste profile.",
+    "legalApple": "Payment is charged to your Apple account when you confirm the purchase. The subscription renews automatically unless you cancel at least 24 hours before the end of the period. Manage and cancel the subscription in your device's Settings.",
     "openingGooglePlay": "Opening Google Play…",
-    "legalGoogle": "Payment is charged to your Google account when you confirm the purchase. The subscription renews automatically every month until you cancel. Manage or cancel it in Google Play → Payments & subscriptions.",
-    "legalName": "<name>NextWatch Premium</name> — SEK 19 per month. The subscription renews automatically every month until you cancel.",
+    "legalGoogle": "Payment is charged to your Google account when you confirm the purchase. The subscription renews automatically until you cancel. Manage and cancel it in Google Play → Payments & subscriptions.",
+    "legalName": "<name>NextWatch Premium</name> — a subscription that renews automatically until you cancel.",
     "legalStripe": "Payment is handled by Stripe. You can cancel the subscription at any time.",
     "openingAppStore": "Opening the App Store…",
     "ourTerms": "Our terms",
@@ -740,7 +800,7 @@
     "restoreFailed": "Couldn't restore your purchases.",
     "restoring": "Restoring…",
     "startingStripe": "Starting Stripe…",
-    "subtitle": "SEK 19/month – cancel whenever you like."
+    "subtitle": "Yearly or monthly – cancel whenever you like."
   },
   "premiumSuccess": {
     "body": "Your premium should activate within a few seconds. Reload the page if it doesn't show up right away.",
@@ -865,7 +925,7 @@
     "tourWatchlist": "The watchlist walkthrough",
     "tourWatchlistHint": "Saved titles, rating what you've seen, and Watch now.",
     "upgradeCta": "Upgrade to Premium",
-    "upgradeHint": "Upgrade to Premium (SEK 19/month) for a completely ad-free experience.",
+    "upgradeHint": "Upgrade to Premium for a completely ad-free experience.",
     "usernameBlockedChars": "Unsupported characters are removed.",
     "usernameHint": "3–20 characters (a–z, 0–9, _, .) — visible to friends.",
     "usernameLabel": "Username",
@@ -1223,6 +1283,19 @@
       "done": "Done! We'll let you know when {title} comes out 🔔"
     }
   },
+  "pushAsk": {
+    "title": "Want tonight's AI pick when you usually watch?",
+    "timeGroup": "Pick a time for the notification",
+    "previewTitle": "✦ Tonight's pick: {title}",
+    "previewTitleGeneric": "✦ Tonight's pick is ready",
+    "previewBody": "Based on what you liked. Tap and the AI picks something else if you want.",
+    "yes": "Yes, at {time}",
+    "notNow": "Not now",
+    "openSettings": "Open Settings",
+    "okAt": "OK, at {time}",
+    "deniedIos": "Notifications are turned off for NextWatch. Turn them on in Settings → NextWatch → Notifications and tonight's pick arrives at {time}.",
+    "deniedAndroid": "Notifications are turned off for NextWatch. Turn them on in your phone's Settings → Apps → NextWatch → Notifications and tonight's pick arrives at {time}."
+  },
   "report": {
     "alsoBlock": "Block this user too",
     "aUser": "user",
@@ -1402,15 +1475,21 @@
     "upgradeCta": "Upgrade to Premium",
     "whyThis": "Why this one?",
     "firstHint": {
+      "title": "Four ways to answer",
       "nope": "Nope",
+      "nopeSub": "Not for me",
       "like": "Like",
-      "title": "Drag right if you want to watch it, left if not.",
-      "more": "Drag up if you've already seen it. Tap the card for the plot and where to stream it."
+      "likeSub": "Want to watch",
+      "seen": "Seen",
+      "seenSub": "Rate it",
+      "tap": "Tap",
+      "tapSub": "Plot & where to stream",
+      "aria": "Drag the card right to like it, left for nope, up if you've already seen it. Tap the card to flip it for the plot and where to stream it."
     }
   },
   "swipeLimit": {
     "body": "{limit} swipes a day are included for free. Come back tomorrow – or get Premium for unlimited swiping.",
-    "cta": "Get Premium – SEK 19/month",
+    "cta": "Get Premium – SEK 79/month",
     "heading": "You've hit today's limit",
     "opening": "Opening…",
     "resetHint": "The limit resets on a rolling basis through the day.",
@@ -1428,7 +1507,7 @@
     "networkError": "Network error.",
     "notEnoughData": "Swipe, rate and fill in favourites below — then we'll build a profile for you.",
     "premiumBody": "See which themes, directors and actors your swipes really point to — and get suggestions for genres you've missed.",
-    "premiumCta": "Get Premium – SEK 19/month",
+    "premiumCta": "Get Premium",
     "premiumTitle": "Taste profile is part of Premium",
     "rowBasedOn": "Based on",
     "rowCast": "Actors",
@@ -1508,10 +1587,10 @@
     "body": "That ad is over — it doesn't have to come back.",
     "bulletsLabel": "What you get",
     "close": "Close",
-    "cta": "Get Premium – SEK 19/month",
+    "cta": "Get Premium – SEK 79/month",
     "dismiss": "Not now",
     "heading": "Skip the ads with Premium",
-    "legal": "SEK 19/month, renews automatically until you cancel. Cancel any time.",
+    "legal": "NextWatch Premium: SEK 79/month (monthly). Renews automatically until you cancel – at least 24 hours before the end of the period. Cancel any time.",
     "loadingVideo": "Loading video…",
     "opening": "Opening…",
     "watchAd": "Watch a video – get {bonus} more swipes"
@@ -1696,8 +1775,8 @@
     "close": "Close",
     "chipsAria": "Quick picks",
     "chips": {
-      "light": "Something light",
-      "short": "Max 90 min",
+      "light": "Lighter",
+      "short": "Shorter",
       "thrilling": "Thrilling",
       "surprise": "Surprise me"
     },
@@ -1773,17 +1852,17 @@
     },
     "welcomeLeft": "You have {count} free picks to try it out",
     "quotaLeft": "{count, plural, =0 {That was your last pick} one {You have 1 pick left} other {You have # picks left}}",
-    "premiumNudge": "With Premium you get {count} picks a month, no ads",
+    "premiumNudge": "With Premium the AI picks for you without limits – and no ads",
     "paywall": {
       "title": "Let NextWatch pick",
       "bodyFree": "Tell us what you're in the mood for and we'll pick a title – ideally something you liked but haven't watched yet.",
-      "bodyPremiumUsed": "You've used your {count} picks this month.",
-      "resetNote": "Your picks refill on the 1st of every month.",
+      "bodyPremiumUsed": "You've made a lot of picks today. More tomorrow!",
+      "resetNote": "Your picks refill at midnight.",
       "watchAd": "Watch a short ad → {count} picks",
       "watchAdBusy": "Loading video…",
       "adFailed": "The video couldn't be shown right now. Try again in a moment.",
       "rewardLimit": "You've watched the maximum number of ads for today. Come back tomorrow.",
-      "premiumCta": "Premium · {count} picks a month, no ads · SEK 19/month",
+      "premiumCta": "Premium · unlimited Pick for me, no ads",
       "unlocked": "Done! {count, plural, one {1 new pick} other {# new picks}} unlocked."
     },
     "error": {
@@ -1808,6 +1887,159 @@
       "rateHeading": "Seen it? What did you think?",
       "rated": "Rating {rating} saved",
       "rateFailed": "Couldn't save the rating. Try again."
+    }
+  },
+  "fsDeck": {
+    "startSwiping": "Start swiping",
+    "starting": "Starting…",
+    "startFailed": "Couldn't start. Please try again.",
+    "haveAccount": "Have an account?",
+    "signIn": "Sign in",
+    "progressCount": "{count} of {total}",
+    "progressThen": "Then AI picks tonight's movie",
+    "progressAria": "{count} of {total} swipes – then AI picks tonight's movie",
+    "learning": "{count} liked – learning your taste",
+    "svcEyebrow": "Quick card",
+    "svcTitle": "Which services do you have?",
+    "svcBody": "Then we only show what you can actually watch tonight.",
+    "ageTitle": "How old are you?",
+    "ageHint": "Optional – for the right age rating",
+    "ageUnder15": "Under 15",
+    "age15to17": "15–17",
+    "age18plus": "18+",
+    "svcCta": "Only show what I can watch ({count})",
+    "svcPickOne": "Pick at least one service",
+    "svcSaving": "Saving…",
+    "svcSkip": "Skip",
+    "svcError": "Couldn't save. Please try again.",
+    "svcSaved": "Now only from your {count} services"
+  },
+  "fsSave": {
+    "save": {
+      "title": "{count, plural, =0 {Save your taste} one {Save your movie} other {Save your # movies}}",
+      "titleWithPick": "{count, plural, =0 {Save tonight's pick} one {Save your movie and tonight's pick} other {Save your # movies and tonight's pick}}",
+      "bodyApple": "One tap – no forms. Your list follows you to every device and you can swipe with friends.",
+      "bodyEmail": "Your list follows you to every device and you can swipe with friends.",
+      "terms": "I accept the <terms>terms of use</terms> and the <privacy>privacy policy</privacy>, and agree that objectionable content or abusive behaviour is not tolerated.",
+      "termsHint": "Tick the box above to save.",
+      "emailCta": "Save with email",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@email.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Choose a password (at least 8 characters)",
+      "submit": "Save",
+      "saving": "Saving …",
+      "emailSent": "Saved! Confirm your email with the link we sent.",
+      "saved": "✓ Saved to your account",
+      "error": "Couldn't save. Please try again.",
+      "later": "Later"
+    },
+    "paywall": {
+      "savedChip": "✓ Saved to your account",
+      "eyebrow": "NextWatch Premium",
+      "titleTrial": "Try it free for {days} days",
+      "title": "Get more out of NextWatch",
+      "perks": {
+        "adFree": "Completely ad-free",
+        "swipes": "Unlimited swipes",
+        "pick": "Unlimited Pick for me",
+        "taste": "Your taste profile – see what you like and why",
+        "groups": "Groups of up to 20 people"
+      },
+      "planLabel": "Choose a plan",
+      "yearly": "Yearly",
+      "monthly": "Monthly",
+      "perYear": "{price}/year",
+      "perMonth": "{price}/month",
+      "planSubTrial": "{days} days free, then {price}",
+      "planSub": "{price}, renews automatically",
+      "ctaTrial": "Start {days} days free",
+      "cta": "Continue",
+      "openingAppStore": "Opening the App Store …",
+      "openingGooglePlay": "Opening Google Play …",
+      "openingCheckout": "Opening checkout …",
+      "notNow": "Not now",
+      "legalYearly": "<name>NextWatch Premium – yearly</name>: {price} per year. The subscription renews automatically every year at the same price until you cancel it.",
+      "legalMonthly": "<name>NextWatch Premium – monthly</name>: {price} per month. The subscription renews automatically every month at the same price until you cancel it.",
+      "legalTrial": "The first {days} days are free – cancel at least 24 hours before the trial ends and you won't be charged.",
+      "legalApple": "Payment is charged to your Apple account when you confirm the purchase (with a trial: when it ends). The subscription renews unless you cancel at least 24 hours before the end of the period. Manage and cancel it in Settings → your name → Subscriptions.",
+      "legalGoogle": "Payment is charged to your Google account when you confirm the purchase (with a trial: when it ends). The subscription renews unless you cancel at least 24 hours before the end of the period. Manage and cancel it in Google Play → Payments & subscriptions.",
+      "legalWeb": "Payment is handled by Stripe (with a trial: charged when it ends). The subscription renews unless you cancel at least 24 hours before the end of the period. You can cancel at any time.",
+      "eula": "Terms of Use (EULA)",
+      "terms": "Terms of use",
+      "privacy": "Privacy policy",
+      "restore": "Restore purchases",
+      "restoring": "Restoring …",
+      "restored": "Premium restored",
+      "restoreFailed": "Couldn't restore purchases.",
+      "startedTrial": "Your trial has started – welcome to Premium!",
+      "started": "Welcome to Premium!",
+      "error": "The purchase couldn't be completed. Please try again."
+    }
+  },
+  "pick2": {
+    "header": {
+      "subtitle": "Your AI for tonight's movie"
+    },
+    "thinking": {
+      "reading": "{count, plural, one {Reading your like …} other {Reading your # likes …}}",
+      "title": "Thinking …",
+      "sub": "Comparing up to 30 titles – both things you saved and new ones"
+    },
+    "card": {
+      "eyebrow": "Tonight's pick"
+    },
+    "thread": {
+      "auto": "✦ Tonight's pick"
+    },
+    "quota": {
+      "unlimited": "Unlimited with Premium",
+      "left": "{count, plural, =0 {No AI picks left} one {1 AI pick left} other {# AI picks left}}"
+    },
+    "saveTonight": "Save tonight's movie"
+  },
+  "store": {
+    "plans": {
+      "yearly": "Yearly",
+      "monthly": "Monthly"
+    },
+    "period": {
+      "month": "month",
+      "year": "year"
+    },
+    "perMonth": "{price}/month",
+    "perYear": "{price}/year",
+    "yearlyPerMonth": "≈ {price}/month",
+    "save": "Save {pct}%",
+    "trialBadge": "{days} days free",
+    "ctaTrial": "Try {days} days free",
+    "ctaYearly": "Get Premium – {price}/year",
+    "ctaMonthly": "Get Premium – {price}/month",
+    "loading": "Loading prices…",
+    "unavailable": "Premium can't be purchased here right now. Please try again later.",
+    "planPickerLabel": "Choose a plan",
+    "legal": {
+      "summary": "<name>NextWatch Premium – {plan}</name>: {price} per {period}.",
+      "summaryTrial": "<name>NextWatch Premium – {plan}</name>: {days} days free, then {price} per {period}.",
+      "renew": "The subscription renews automatically every {period} at the same price until you cancel. Cancel at least 24 hours before the end of the period to avoid the next charge.",
+      "trialCancel": "Cancel at least 24 hours before the trial ends and you won't be charged anything.",
+      "apple": "Payment is charged to your Apple account when you confirm the purchase – with a trial, only when the trial ends. Manage and cancel the subscription in Settings → your name → Subscriptions.",
+      "google": "Payment is charged to your Google account when you confirm the purchase – with a trial, only when the trial ends. Manage and cancel the subscription in Google Play → Payments & subscriptions.",
+      "stripe": "Payments are handled by Stripe – with a trial, you're only charged when the trial ends. Cancel anytime in your profile under Manage subscription."
+    },
+    "current": {
+      "title": "You have Premium",
+      "planPrice": "{plan} · {price} per {period}",
+      "lifetime": "Premium forever (lifetime)",
+      "keepPrice": "Your price doesn't change – you keep the price you signed up for as long as your subscription runs.",
+      "manage": "Manage subscription",
+      "manageWeb": "Manage in your profile"
+    },
+    "email": {
+      "renews": "Your subscription renews automatically until you cancel.",
+      "renewsMonthly": "Your subscription renews automatically every month until you cancel.",
+      "renewsYearly": "Your subscription renews automatically every year until you cancel.",
+      "trial": "Your {days}-day free trial has started. You'll only be charged when it ends – cancel at least 24 hours before if you don't want to continue."
     }
   }
 }

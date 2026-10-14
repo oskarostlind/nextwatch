@@ -23,9 +23,21 @@
 // Webben: visibilitychange, men inte när ett sidbyte pågår (beforeunload, eller
 // ett klick på en intern länk precis innan — Safari saknar beforeunload).
 // swipes = totalt på enheten, inte bara den här sidladdningen.
+// Systemrutor (Apple-inloggning, köp, push-tillstånd, ATT) gör appen inactive
+// utan att någon lämnat den — den som visar en sådan anropar
+// suppressExitTracking() (lib/funnel.ts) först, och då räknas ingen stängning.
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { funnel, funnelBeacon, funnelInit, funnelStart, funnelTotalSwipes, lastStep } from "@/lib/funnel";
+import {
+  exitTrackingSuppressed,
+  funnel,
+  funnelBeacon,
+  funnelInit,
+  funnelStart,
+  funnelTotalSwipes,
+  lastStep,
+  resumeExitTracking,
+} from "@/lib/funnel";
 
 /** /group/swipe → group/swipe, /title/123 → title. Siffror och koder bort. */
 function section(path: string): string {
@@ -73,6 +85,7 @@ export default function FunnelTracker() {
 
     const exit = () => {
       if (navigating) return; // sidbyte, inte en stängning
+      if (exitTrackingSuppressed()) return; // systemruta (Apple, köp, push, ATT)
       if (Date.now() - lastExitAt < 1500) return; // appStateChange + visibilitychange
       lastExitAt = Date.now();
       const t0 = funnelStart();
@@ -107,7 +120,10 @@ export default function FunnelTracker() {
     };
     const onVis = () => {
       if (document.visibilityState === "hidden") exit();
-      else checkReturn();
+      else {
+        resumeExitTracking();
+        checkReturn();
+      }
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onClick, true);
@@ -124,8 +140,10 @@ export default function FunnelTracker() {
         try {
           const { App } = await import("@capacitor/app");
           const h = await App.addListener("appStateChange", ({ isActive }) => {
-            if (isActive) checkReturn();
-            else exit();
+            if (isActive) {
+              resumeExitTracking();
+              checkReturn();
+            } else exit();
           });
           if (cancelled) void h.remove();
           else removeApp = () => void h.remove();

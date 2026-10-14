@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
     // är timestamptz (till skillnad från Prismas naiva UTC-kolumner), så ingen
     // AT TIME ZONE 'UTC'-dans behövs här.
     const SINCE = Prisma.sql`(((now() AT TIME ZONE 'Europe/Stockholm')::date - (${days}::int - 1))::timestamp AT TIME ZONE 'Europe/Stockholm')`;
-    const USER_OK = Prisma.sql`status = 'ok' AND source <> 'selftest'`;
+    // 'auto' (nya flödets gratis auto-förslag) räknas separat – det är inget val användaren gjort.
+    const USER_OK = Prisma.sql`status = 'ok' AND source NOT IN ('selftest', 'auto')`;
     const STALE_PENDING = Prisma.sql`(status = 'pending' AND created_at < now() - interval '45 seconds')`;
 
     const savedAgg = Prisma.sql`
@@ -98,6 +99,7 @@ export async function GET(req: NextRequest) {
           users: bigint;
           ok_premium: bigint;
           ok_credit: bigint;
+          ok_auto: bigint;
           finished: bigint;
           errors: bigint;
           no_candidates: bigint;
@@ -119,6 +121,7 @@ export async function GET(req: NextRequest) {
           count(DISTINCT user_id) FILTER (WHERE ${USER_OK})                             AS users,
           count(*) FILTER (WHERE status = 'ok' AND source = 'premium')                  AS ok_premium,
           count(*) FILTER (WHERE status = 'ok' AND source = 'credit')                   AS ok_credit,
+          count(*) FILTER (WHERE status = 'ok' AND source = 'auto')                     AS ok_auto,
           count(*) FILTER (WHERE source <> 'selftest'
                              AND (status IN ('ok', 'error', 'no_candidates') OR ${STALE_PENDING})) AS finished,
           count(*) FILTER (WHERE source <> 'selftest' AND (status = 'error' OR ${STALE_PENDING})) AS errors,
@@ -254,6 +257,7 @@ export async function GET(req: NextRequest) {
         users: num(k?.users),
         premium: num(k?.ok_premium),
         credit: num(k?.ok_credit),
+        auto: num(k?.ok_auto),
         finished: num(k?.finished),
         errors: num(k?.errors),
         noCandidates: num(k?.no_candidates),

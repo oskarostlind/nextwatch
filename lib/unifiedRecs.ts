@@ -38,6 +38,7 @@ import {
   type GenreStats,
 } from "@/lib/genreStats";
 import { fillMissingRatings } from "@/lib/omdbRating";
+import { pendingGroupLikeKeys, type PendingLikeKey } from "@/lib/referral";
 
 export type { MatchEvidence, MediaType, SwipeMediaFilter };
 
@@ -137,6 +138,14 @@ export type UnifiedRecsParams = {
    * Opt-in (push-komposern); utan flaggan är svaret oförändrat.
    */
   withEvidence?: boolean;
+  /**
+   * Nya flödet del 6 ("värdens gillade först"): i en LÄNKGRUPP (rad i
+   * referral_links) läggs titlar som andra medlemmar gillat — och som `uid`
+   * inte röstat på/betygsatt — först i leken, filtrerade genom samma regler som
+   * resten (se fetchLeadCandidates). Bara när `uid` är medlem. Sätts av
+   * app/api/recs/unified på första sidan; cron och push sätter den inte.
+   */
+  leadGroupLikes?: boolean;
 };
 
 /* ---------- Provider Mapping ---------- */
@@ -430,12 +439,123 @@ async function fetchGroupWatchlistCandidates(opts: {
   return results.filter((r): r is { id: number; tmdbType: MediaType; item: TMDBListItem } => r !== null);
 }
 
+/* -------- Andra medlemmars gillade först (länkgrupper, nya flödet del 6) -------- */
+
+/** Högst så här länge får förturen hålla svaret, räknat från anropets start. */
+const LEAD_BUDGET_MS = 3_500;
+/** Högst så många förtursade titlar per lek. */
+const LEAD_MAX = 15;
+
+type TmdbLeadDetails = TmdbDetailsLite & {
+  content_ratings?: { results?: { iso_3166_1: string; rating?: string }[] };
+};
+
+function seTvRatingOf(d: TmdbLeadDetails): string | null {
+  const r = d.content_ratings?.results?.find((x) => x.iso_3166_1 === "SE")?.rating?.trim();
+  return r ? r : null;
+}
+
+/**
+ * Slår upp de förtursade titlarna (andra medlemmars LIKE) och släpper bara
+ * igenom dem som resten av gruppleken också hade släppt igenom:
+ *   - medietyp enligt gruppens film/serie-filter;
+ *   - gruppens tjänster i regionen (samma krav som discover/watchlist-
+ *     kandidaterna) när gruppen har tjänster;
+ *   - SE-åldersgräns för gruppens yngsta medlem (resolveMaxCert) — för film
+ *     OCH serie (content_ratings). Saknad klassning godtas bara när taket
+ *     ändå är vuxenläget, precis som fetchGroupWatchlistCandidates;
+ *   - barnheuristiken (isKidsLikely) när showKidsContent är av;
+ *   - kvalitetsgolvet (belowQualityFloor).
+ * Saknas data (TMDB-fel, ingen titel) släpps titeln hellre än att visas.
+ * Ett anrop per titel med append_to_response, genom concurrency-grinden.
+ */
+async function fetchLeadCandidates(opts: {
+  keys: PendingLikeKey[];
+  locale: string;
+  region: string;
+  usedProviderIds: number[];
+  certMax: string;
+  wantMovie: boolean;
+  wantTv: boolean;
+  showKidsContent: boolean;
+}): Promise<UnifiedItem[]> {
+  const { keys, locale, region, usedProviderIds, certMax, wantMovie, wantTv, showKidsContent } = opts;
+  const wanted = keys.filter((k) => (k.mediaType === "movie" ? wantMovie : wantTv)).slice(0, LEAD_MAX);
+  if (wanted.length === 0) return [];
+  const providerSet = new Set(usedProviderIds);
+  const certCap = SE_CERT_RANK[certMax] ?? 15;
+
+  const results = await Promise.all(
+    wanted.map(async (k): Promise<UnifiedItem | null> => {
+      const path = k.mediaType === "movie" ? `/movie/${k.tmdbId}` : `/tv/${k.tmdbId}`;
+      const d = await tmdbGet<TmdbLeadDetails>(
+        path,
+        {
+          language: locale,
+          append_to_response:
+            k.mediaType === "movie" ? "watch/providers,release_dates" : "watch/providers,content_ratings",
+        },
+        "force-cache",
+      ).catch(() => null);
+      if (!d) return null;
+      const title = (d.title || d.name || "").trim();
+      if (!title) return null;
+
+      if (providerSet.size > 0) {
+        const flat = d["watch/providers"]?.results?.[region]?.flatrate ?? [];
+        if (!flat.some((p) => providerSet.has(p.provider_id))) return null;
+      }
+
+      const cert = k.mediaType === "movie" ? seCertificationOf(d) : seTvRatingOf(d);
+      if (cert === null) {
+        if (certCap < 15) return null;
+      } else {
+        const rank = SE_CERT_RANK[cert];
+        if (rank === undefined || rank > certCap) return null;
+      }
+
+      const item: TMDBListItem = { ...d, genre_ids: d.genre_ids ?? (d.genres ?? []).map((g) => g.id) };
+      if (belowQualityFloor(item)) return null;
+      if (!showKidsContent && isKidsLikely(item.genre_ids, k.mediaType)) return null;
+
+      return {
+        id: k.tmdbId,
+        tmdbType: k.mediaType,
+        title,
+        year: yearFrom(item),
+        poster_path: item.poster_path ?? null,
+        vote_average: item.vote_average,
+      };
+    }),
+  );
+  return results.filter((r): r is UnifiedItem => r !== null);
+}
+
 /* ---------------- Core pipeline ---------------- */
 
 export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<UnifiedRecsResult> {
-  const { uid, region, locale, groupCode, page = 1, fromTmdbPage, forceAllMedia = false, withEvidence = false } = params;
+  const {
+    uid,
+    region,
+    locale,
+    groupCode,
+    page = 1,
+    fromTmdbPage,
+    forceAllMedia = false,
+    withEvidence = false,
+    leadGroupLikes = false,
+  } = params;
 
   try {
+    // Förturens DB-fråga (bara nycklar) startas direkt, parallellt med resten
+    // av DB-läsningen. Resultatet används först när medlemskapet är bekräftat
+    // nedan. pendingGroupLikeKeys kastar aldrig.
+    const leadStartedAt = Date.now();
+    const leadKeysPromise: Promise<PendingLikeKey[]> =
+      groupCode && leadGroupLikes
+        ? pendingGroupLikeKeys({ groupCode, uid, limit: LEAD_MAX })
+        : Promise.resolve([]);
+
     // Genre-listorna beror bara på locale — starta dem redan här, parallellt
     // med DB-läsningen, i stället för efter discover-skanningen. .catch-vakten
     // hindrar en obehandlad rejection om något tidigare steg kastar innan
@@ -579,6 +699,29 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
     const showKidsContent = isGroup
       ? memberProfiles.length > 0 && memberProfiles.every((p) => p.showKidsContent === true)
       : profile.showKidsContent === true;
+
+    // Andra medlemmars gillade först (länkgrupper). Kräver medlemskap — annars
+    // skulle vem som helst med en kod kunna läsa gruppens smak. TMDB-uppslagen
+    // löper parallellt med discover-skanningen nedan.
+    const leadPromise: Promise<UnifiedItem[]> =
+      leadGroupLikes && isGroup && groupMemberIds.includes(uid)
+        ? leadKeysPromise
+            .then((keys) =>
+              keys.length > 0
+                ? fetchLeadCandidates({
+                    keys,
+                    locale,
+                    region,
+                    usedProviderIds,
+                    certMax,
+                    wantMovie,
+                    wantTv,
+                    showKidsContent,
+                  })
+                : [],
+            )
+            .catch(() => [])
+        : Promise.resolve([]);
 
     // Smak-konfidens: ju mer signaler (betyg, sparade, deklarerade favoriter),
     // desto mer väger smakmodellen och desto mindre väger ren popularitet. Nya
@@ -1369,6 +1512,19 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       if (filled != null) items[i].vote_average = filled;
     }
 
+    // Förturen: väntar högst till LEAD_BUDGET_MS efter anropets start (oftast
+    // redan klar, eftersom pipelinen ovan tar längre). För sent = ingen förtur.
+    const leadWaitMs = Math.max(0, LEAD_BUDGET_MS - (Date.now() - leadStartedAt));
+    const lead = await Promise.race([
+      leadPromise,
+      new Promise<UnifiedItem[]>((resolve) => setTimeout(() => resolve([]), leadWaitMs)),
+    ]);
+    let finalItems = items;
+    if (lead.length > 0) {
+      const leadIds = new Set(lead.map((it) => `${it.tmdbType}_${it.id}`));
+      finalItems = [...lead, ...items.filter((it) => !leadIds.has(`${it.tmdbType}_${it.id}`))];
+    }
+
     return {
       ok: true,
       mode: isGroup ? "group" : "individual",
@@ -1377,7 +1533,7 @@ export async function computeUnifiedRecs(params: UnifiedRecsParams): Promise<Uni
       region,
       usedProviderIds,
       mediaFilter,
-      items,
+      items: finalItems,
       nextTmdbPage: Math.min(scannedTo + 1, 501),
       broadened,
     };

@@ -10,6 +10,13 @@
 //   - minst COOLDOWN_MS mellan två prompter oavsett trigger.
 // "premium" är undantaget: den visas vid varje köpförsök av en gäst, eftersom
 // ett köp på ett konto utan inloggning kan gå förlorat (se ensureAccountBeforePremium).
+//
+// "Nya flödet" (docs/nya-flodet.md): medan en NY enhets första session pågår
+// (lib/firstSession.ts, eligible och step !== "done") räknas och visas inga
+// "swipes"/"watchlist"-puffar — sparakortet (SaveSheet) äger den frågan då.
+// Räknarna börjar när flödet är klart. Befintliga enheter påverkas inte.
+
+import { getFs } from "./firstSession";
 
 export type NudgeTrigger = "swipes" | "watchlist" | "group" | "friend" | "premium";
 
@@ -84,6 +91,8 @@ function bump(key: string): number {
  * stället för att försvinna för gott.
  */
 export function trackSwipeForNudge(kind: "like" | "dislike" | "seen"): void {
+  const fs = getFs();
+  if (fs.eligible && fs.step !== "done") return;
   const swipes = bump(K_SWIPES);
   if (kind === "like" && bump(K_LIKES) >= LIKES_THRESHOLD && nudgeAllowed("watchlist")) {
     nudgeSignup("watchlist");

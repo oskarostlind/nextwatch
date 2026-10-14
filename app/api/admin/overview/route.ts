@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/adminAuth";
 import { getAdmobEarnings, admobConfigured } from "@/lib/admobReport";
+import { normalizeAcquisition, type AcqPlatform, type PaidKind } from "@/lib/acquisition";
 
 // Prenumerationspriset (kr/mån) för MRR-estimatet. Medvetet ett estimat:
 // premium-antal × pris, i stället för att dra in App Store Connect Sales API —
@@ -70,32 +71,66 @@ export async function GET() {
     // Källor senaste 30 d (lib/acquisition.ts). Besök = första besök per
     // webbläsare/app-installation; nya användare = alla nya rader (även
     // anonyma gäster); konton = de med e-post eller Apple-inloggning.
+    //
+    // Grupperas på källa + medium + referrer så att gamla rader kan klassas om
+    // vid läsning (normalizeAcquisition: "meta" → Instagram/Facebook via
+    // referrern, "ios_app" → plattform i stället för källa).
     prisma.acquisitionVisit
-      .groupBy({ by: ["source"], where: { createdAt: { gte: d30 } }, _count: { _all: true } })
-      .catch(() => []),
-    prisma.user
-      .groupBy({ by: ["acqSource"], where: { createdAt: { gte: d30 } }, _count: { _all: true } })
+      .groupBy({ by: ["source", "medium", "referrer"], where: { createdAt: { gte: d30 } }, _count: { _all: true } })
       .catch(() => []),
     prisma.user
       .groupBy({
-        by: ["acqSource"],
+        by: ["acqSource", "acqMedium", "acqReferrer"],
+        where: { createdAt: { gte: d30 } },
+        _count: { _all: true },
+      })
+      .catch(() => []),
+    prisma.user
+      .groupBy({
+        by: ["acqSource", "acqMedium", "acqReferrer"],
         where: { createdAt: { gte: d30 }, OR: [{ email: { not: null } }, { appleSub: { not: null } }] },
         _count: { _all: true },
       })
       .catch(() => []),
   ]);
 
-  // Slå ihop de tre grupperingarna till en rad per källa.
-  const srcMap = new Map<string, { source: string | null; visits: number; users: number; accounts: number }>();
-  const row = (s: string | null) => {
-    const k = s ?? "__unknown";
-    if (!srcMap.has(k)) srcMap.set(k, { source: s, visits: 0, users: 0, accounts: 0 });
-    return srcMap.get(k)!;
+  // Slå ihop de tre grupperingarna till en rad per kanal (efter omklassning),
+  // med betald/organisk-uppdelning, och en separat tabell per plattform.
+  type Counts = { visits: number; users: number; accounts: number };
+  const zero = (): Counts => ({ visits: 0, users: 0, accounts: 0 });
+  type SrcRow = Counts & { source: string | null; split: Record<PaidKind, Counts> };
+  const srcMap = new Map<string, SrcRow>();
+  const platMap = new Map<AcqPlatform, Counts>();
+  const add = (
+    raw: { source: string | null; medium: string | null; referrer: string | null },
+    field: keyof Counts,
+    n: number
+  ) => {
+    const norm = normalizeAcquisition(raw);
+    const k = norm.channel ?? "__unknown";
+    let r = srcMap.get(k);
+    if (!r) {
+      r = { source: norm.channel, ...zero(), split: { paid: zero(), organic: zero(), unknown: zero() } };
+      srcMap.set(k, r);
+    }
+    r[field] += n;
+    if (norm.paid) r.split[norm.paid][field] += n;
+    // Okänd källa (konton före spårningen) har ingen känd plattform heller.
+    if (norm.channel) {
+      const pl = platMap.get(norm.platform) ?? zero();
+      pl[field] += n;
+      platMap.set(norm.platform, pl);
+    }
   };
-  for (const v of visitsBySource) row(v.source).visits = v._count._all;
-  for (const u of usersBySource) row(u.acqSource).users = u._count._all;
-  for (const a of accountsBySource) row(a.acqSource).accounts = a._count._all;
+  for (const v of visitsBySource) add({ source: v.source, medium: v.medium, referrer: v.referrer }, "visits", v._count._all);
+  for (const u of usersBySource) add({ source: u.acqSource, medium: u.acqMedium, referrer: u.acqReferrer }, "users", u._count._all);
+  for (const a of accountsBySource)
+    add({ source: a.acqSource, medium: a.acqMedium, referrer: a.acqReferrer }, "accounts", a._count._all);
   const sources = [...srcMap.values()].sort((a, b) => b.visits + b.users - (a.visits + a.users));
+  const platforms = (["web", "ios_app", "android_app"] as const).map((platform) => ({
+    platform,
+    ...(platMap.get(platform) ?? zero()),
+  }));
 
   return NextResponse.json({
     ok: true,
@@ -123,6 +158,7 @@ export async function GET() {
     admob: admob ?? null,
     admobConfigured: admobConfigured(),
     sources,
+    platforms,
     latestPurchases: latestPurchases.map((p) => ({
       amountSEK: p.amountTotal / 100,
       currency: p.currency,

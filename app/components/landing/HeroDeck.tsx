@@ -15,7 +15,7 @@ import { pose, spreadForWidth, type Pose } from "@/lib/deckVisuals";
 import { addAnonLike } from "@/lib/anonLikes";
 import type { HeroCard } from "@/lib/curatedHero";
 import LoginSheet from "../auth/LoginSheet";
-import GuestEntryButton from "../auth/GuestEntryButton";
+import StartSwipingButton from "./StartSwipingButton";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
 
@@ -26,11 +26,12 @@ const VISIBLE_BEHIND = 4;
 const DIST_THRESHOLD = 110;
 const VELOCITY_THRESHOLD = 700;
 
-// Fyra kort, sedan gaten. Kort investering, men besökaren når frågan innan hen
-// hinner tröttna — och blockkanten gör att slutet syns komma redan från första
-// swipen. Ingen mjuk gate: med bara fyra kort skulle den hinna landa en swipe
-// innan den hårda och bara vara i vägen.
-const HARD_GATE_AT = 4;
+// Ingen spärr längre ("nya flödet", 2026-10-15, docs/nya-flodet.md). Fram till
+// dess låstes demoleken efter fyra kort med ett "skapa konto / fortsätt som
+// gäst"-kort — 63 % swipade aldrig ett demokort och 15 % lämnade startsidan
+// utan att välja. Nu går demokorten runt så länge man vill, och huvudknappen
+// "Börja swipa" tar en rakt in i den riktiga leken som gäst. I apparna visas
+// startsidan inte alls (AuthGate skapar gästen tyst).
 
 /* ------------------------------------------------------------------ */
 
@@ -44,14 +45,12 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
   const reduce = usePrefersReducedMotion();
 
   const swipes = index;
-  const hardGate = swipes >= HARD_GATE_AT;
 
-  // Tratt: startsidan visad / spelad / gate-kortet nått (lib/funnel.ts).
+  // Tratt: startsidan visad / spelad (lib/funnel.ts).
   React.useEffect(() => funnel("landing_view"), []);
   React.useEffect(() => {
     if (swipes >= 1) funnel("hero_swipe");
-    if (hardGate) funnel("hero_gate");
-  }, [swipes, hardGate]);
+  }, [swipes]);
 
   // Drag-läget som en motion value: allt bakom leken härleds ur den utan
   // att någonsin trigga en React-render under draget.
@@ -76,7 +75,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
   /* --- spöksvajp: sidan utför gesten själv en gång, så den slipper skrivas ut --- */
   React.useEffect(() => {
-    if (reduce || touched || hardGate) return;
+    if (reduce || touched) return;
     let cancelled = false;
     const t = window.setTimeout(() => {
       if (cancelled) return;
@@ -90,7 +89,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [reduce, touched, hardGate, controls]);
+  }, [reduce, touched, controls]);
 
   function commit(dir: "left" | "right") {
     const card = top;
@@ -105,8 +104,8 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
       .then(() => {
         if (dir === "right") {
           setLiked((p) => [...p, card]);
-          // Överlever navigering och spelas upp mot profilen vid registrering —
-          // det är vad gaten lovar. Se lib/anonLikes.ts.
+          // Överlever navigering och spelas upp mot gästprofilen när man
+          // trycker "Börja swipa" (createGuestProfile). Se lib/anonLikes.ts.
           addAnonLike({
             tmdbId: card.id,
             mediaType: "movie",
@@ -136,8 +135,6 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         }
       });
   }
-
-  const remaining = Math.max(0, HARD_GATE_AT - swipes);
 
   return (
     // AppShell lägger redan pt-[env(safe-area-inset-top)] på <main> för publika
@@ -217,23 +214,6 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         }}
         onPointerDown={() => setTouched(true)}
       >
-        {/* Blockkanten: ETT element som läses som ~40 kvarvarande kort, och som
-            krymper synligt för varje swipe. Därför känns den hårda gaten komma
-            i fingret istället för att dimpa ner som en modal. */}
-        <motion.div
-          aria-hidden
-          className="absolute left-1/2 w-[92%] -translate-x-1/2 rounded-b-[10px]"
-          style={{
-            top: "100%",
-            height: 16,
-            transformOrigin: "top center",
-            background:
-              "repeating-linear-gradient(to bottom, rgba(255,255,255,0.22) 0px, rgba(255,255,255,0.22) 2px, rgba(0,0,0,0.55) 2px, rgba(0,0,0,0.55) 3px)",
-          }}
-          animate={{ scaleY: Math.max(0.08, remaining / HARD_GATE_AT) }}
-          transition={{ type: "spring", stiffness: 220, damping: 28 }}
-        />
-
         {behind.map((card, i) => (
           <BehindCard
             key={`slot-${i}`}
@@ -245,11 +225,8 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           />
         ))}
 
-        {hardGate ? (
-          <GateCard accent={top?.accent ?? "#fff"} liked={liked} reduce={reduce} />
-        ) : (
-          <motion.div
-            className="absolute inset-0 touch-none"
+        <motion.div
+          className="absolute inset-0 touch-none"
             style={{ x, rotate, zIndex: 10 }}
             animate={controls}
             drag="x"
@@ -276,39 +253,13 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
               {t("nope")}
             </motion.div>
           </motion.div>
-        )}
       </div>
 
-      {hardGate ? (
-        // Gatens knappar ligger UNDER kortet, där ✕/♥ satt. Fram till
-        // 2026-10-12 låg de inne i kortet: innehållet var högre än kortet på
-        // alla iPhone-storlekar, så ✕/♥-raden hamnade ovanpå "Skapa gratis
-        // konto" och ett tryck på knappen träffade ✕ eller ♥ i stället.
-        <div className="relative z-20 mt-9 flex w-full max-w-[330px] flex-col items-stretch gap-2 px-6">
-          <a
-            href="/onboarding?intent=account"
-            onClick={() => funnel("cta_signup")}
-            className="relative w-full rounded-xl py-3 text-center text-[15px] font-semibold text-black transition-transform active:scale-[0.98]"
-            style={{
-              background: `linear-gradient(180deg, ${top?.accent ?? "#fff"} 0%, ${top?.accent ?? "#fff"}D9 100%)`,
-              boxShadow: `0 8px 24px -8px ${top?.accent ?? "#fff"}`,
-            }}
-          >
-            {t("createFreeAccount")}
-          </a>
-          {/* Gästvägen infriar samma löfte som kontot — likesen spelas upp mot
-              gästprofilen (se GuestEntryButton) — men utan onboarding. */}
-          <GuestEntryButton
-            label={t("continueAsGuest")}
-            className="w-full rounded-xl border border-white/15 bg-white/5 py-2.5 text-[14px] font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-60"
-          />
-        </div>
-      ) : (
-      <div className="relative z-20 mt-9 flex flex-col items-center gap-3">
+      <div className="relative z-20 mt-9 flex w-full max-w-[330px] flex-col items-center gap-3 px-6">
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => !hardGate && commit("left")}
+            onClick={() => commit("left")}
             aria-label={t("nope")}
             className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-white/15 bg-white/5 text-lg text-rose-300 transition hover:bg-white/10"
           >
@@ -316,7 +267,7 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
           </button>
           <button
             type="button"
-            onClick={() => !hardGate && commit("right")}
+            onClick={() => commit("right")}
             aria-label={t("like")}
             className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-white/15 bg-white/5 text-lg text-emerald-300 transition hover:bg-white/10"
           >
@@ -326,14 +277,10 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
         <p className="text-[13px] text-white/40">
           {top ? `${top.title}${top.year ? ` · ${top.year}` : ""}` : ""}
         </p>
-        {/* Lägsta tröskeln in i riktiga appen, synlig utan att stjäla fokus från
-            leken. Gestalten är en textlänk, inte en knapp — heron äger ytan. */}
-        <GuestEntryButton
-          label={t("guestEntry")}
-          className="text-[13px] font-medium text-white/45 underline decoration-white/25 underline-offset-4 transition hover:text-white/80 disabled:opacity-60"
-        />
+        {/* Huvudknappen: rakt in i den riktiga leken som gäst. Demokorten man
+            gillat följer med (createGuestProfile → replayAnonLikesInBackground). */}
+        <StartSwipingButton accent={top?.accent ?? "#22d3ee"} />
       </div>
-      )}
       </div>
 
       <Pile liked={liked} reduce={reduce} />
@@ -459,94 +406,6 @@ function Poster({ card }: { card: HeroCard }) {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Gaten är nästa kort i leken, inte en modal ovanpå den. Den går att dra i men
- * committar aldrig — motståndet i gesten du precis lärt dig ÄR låset.
- *
- * Den är också sidans enda infosektion, medvetet. En feature-lista högst upp
- * hade gjort startsidan till den SaaS-sida vi försöker undvika; här kommer
- * samma information i det enda ögonblick besökaren själv frågar "vad får jag?".
- * Löftena är dessutom bara sådant hen precis har bevisat för sig själv.
- */
-function GateCard({
-  accent,
-  liked,
-  reduce,
-}: {
-  accent: string;
-  liked: HeroCard[];
-  reduce: boolean;
-}) {
-  const t = useTranslations("landing");
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-260, 260], [-8, 8]);
-  const fan = liked.slice(-5);
-
-  return (
-    <motion.div
-      className="absolute inset-0 z-10 touch-none"
-      style={{ x, rotate }}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.2}
-    >
-      <div
-        className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-[10px] bg-[#121212] px-4 py-5 text-center"
-        style={{ border: `3px solid ${accent}`, boxShadow: "0 18px 40px -12px rgba(0,0,0,0.9)" }}
-      >
-        {/* Investeringen som föremål, inte som räknetal: högen du byggt reser
-            sig ur det hopfällda kortet. */}
-        <div className="relative h-[92px] w-full shrink-0">
-          {fan.map((card, i) => {
-            const mid = (fan.length - 1) / 2;
-            const d = i - mid;
-            return (
-              <motion.div
-                key={card.id}
-                // x/rotate måste ligga i motion-props, inte i en transform-sträng
-                // i style: framer skriver sin egen transform och kör över den.
-                initial={reduce ? false : { y: 26, x: d * 34, rotate: d * 7, opacity: 0 }}
-                animate={{ y: 0, x: d * 34, rotate: d * 7, opacity: 1 }}
-                transition={{ delay: reduce ? 0 : 0.08 * i, type: "spring", stiffness: 300, damping: 24 }}
-                className="absolute left-1/2 top-0 h-[92px] w-[62px] overflow-hidden rounded-[5px] border-2 border-white/85"
-                style={{
-                  marginLeft: -31,
-                  transformOrigin: "bottom center",
-                  boxShadow: "0 8px 18px -6px rgba(0,0,0,0.9)",
-                  zIndex: 10 - Math.abs(d),
-                }}
-              >
-                {card.poster ? (
-                  <Image src={card.poster} alt="" fill sizes="62px" className="object-cover" />
-                ) : null}
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-[19px] font-semibold leading-tight tracking-tight text-white">
-            {t("filmsWaiting", { count: liked.length })}
-          </p>
-          {/* Tre löften — och varje löfte är något besökaren precis bevisat själv. */}
-          <ul className="mt-1 space-y-1 text-left text-[12.5px] leading-snug text-white/65 [@media(max-height:740px)]:hidden">
-            <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> {t("promiseTaste")}
-            </li>
-            <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> {t("promiseGroup")}
-            </li>
-            <li className="flex gap-2">
-              <span style={{ color: accent }}>—</span> {t("promiseStreaming")}
-            </li>
-          </ul>
-        </div>
-
-      </div>
-    </motion.div>
   );
 }
 

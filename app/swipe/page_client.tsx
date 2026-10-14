@@ -25,7 +25,7 @@ import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { getSoloDeckSnapshot, hasSoloCard, pinSoloCard } from "@/lib/swipeDeckStore";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
-import { goPremium } from "@/lib/premiumPurchase";
+import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { trackSwipeForNudge } from "@/lib/signupNudge";
 import { reportSwipeLimitFrom } from "@/lib/swipeLimitEvent";
 import DeckPosterPreload from "@/app/components/client/DeckPosterPreload";
@@ -46,13 +46,22 @@ import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
-import { maybeTriggerAdUpsell } from "@/lib/adUpsellEvent";
+import { maybeTriggerAdUpsell, openPremiumUpsell } from "@/lib/adUpsellEvent";
 import { CardSkeleton } from "@/app/components/ui/Skeletons";
 import { useLocale, useTranslations } from "next-intl";
 import { funnel, funnelSwipe } from "@/lib/funnel";
 import { recordLike, requestReleasePushAsk } from "@/lib/engagement";
 import FirstCardHint, { markFirstCardHintDone, shouldShowFirstCardHint } from "@/app/components/client/FirstCardHint";
 import PickLauncher from "@/app/components/pick/PickLauncher";
+import { recordFsSwipe, useFirstSession } from "@/lib/firstSession";
+import FirstSessionHost from "@/app/components/firstSession/FirstSessionHost";
+import FsProgress from "@/app/components/firstSession/deck/FsProgress";
+import GuestLoginLink from "@/app/components/firstSession/deck/GuestLoginLink";
+import {
+  FS_SERVICES_AT,
+  servicesCardDone,
+  syncFsOwner,
+} from "@/app/components/firstSession/deck/fsDeck";
 
 /* ---------- overlays som bara syns efter en interaktion ----------
    Allt här nedanför renderas bakom ett boolean-state och är osynligt vid
@@ -69,6 +78,10 @@ const ShareTitleModal = dynamic(() => import("@/app/components/client/ShareTitle
 });
 // Laddas bara för profiler utan tjänster — alla andra betalar inget för den.
 const ProviderPromptSheet = dynamic(() => import("@/app/components/client/ProviderPromptSheet"), {
+  ssr: false,
+});
+// Tjänste-/ålderskortet i nya flödet — bara nya enheter utan tjänster.
+const ServicesAgeCard = dynamic(() => import("@/app/components/firstSession/deck/ServicesAgeCard"), {
   ssr: false,
 });
 const SwipeLimitWall = dynamic(() => import("@/app/components/client/SwipeLimitWall"), {
@@ -497,6 +510,33 @@ export default function SwipePageClient({
     });
   }, []);
 
+  // "Nya flödet" (docs/nya-flodet.md, lib/firstSession.ts). Bara enheter som
+  // markerats eligible vid kallstarten berörs — för alla andra är fs.eligible
+  // false och allt nedan är avstängt (samma beteende som innan).
+  const fs = useFirstSession();
+  const fsRunning = fs.eligible && fs.step !== "done";
+  const fsInDeck = fs.eligible && fs.step === "deck" && mode !== "group";
+  // Bjud in-kortet (steg "invite") ligger på kortytan som nästa kort i leken —
+  // knapparna döljs medan det visas, precis som för tjänstekortet.
+  const fsInviteCard = fs.eligible && fs.step === "invite";
+  // Byts nw_uid (inloggning på ett ANNAT befintligt konto) avslutas flödet. En
+  // gäst som blir konto behåller sitt id och fortsätter (se syncFsOwner).
+  const myUid = me?.userId ?? null;
+  useEffect(() => syncFsOwner(myUid), [myUid]);
+  // null = inte läst än (localStorage läses först efter hydreringen).
+  const [svcCardDone, setSvcCardDone] = useState<boolean | null>(null);
+  useEffect(() => setSvcCardDone(servicesCardDone()), []);
+  const showServicesCard =
+    fsInDeck && needsProviders && svcCardDone === false && fs.swipes >= FS_SERVICES_AT;
+  const onServicesCardDone = useCallback(
+    (reloadDeck: boolean) => {
+      setSvcCardDone(true);
+      // Den cachade leken byggdes utan tjänstefilter/åldersgräns — bygg om den.
+      if (reloadDeck) void retrySoloDeck();
+    },
+    [retrySoloDeck],
+  );
+
   const undoStackRef = useRef<UndoEntry[]>([]);
 
   const [flippedId, setFlippedId] = useState<string | null>(null);
@@ -694,6 +734,7 @@ export default function SwipePageClient({
   function handleDislike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("dislike");
+    if (mode !== "group") recordFsSwipe(null);
     recordUndo(c, "dislike");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -707,6 +748,9 @@ export default function SwipePageClient({
   function handleLike(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("like");
+    if (mode !== "group") {
+      recordFsSwipe({ tmdbId: c.tmdbId, mediaType: c.mediaType, title: c.title, poster: c.poster ?? null });
+    }
     // "Kommer snart": fråga om push FÖRE recordLike, så att den här frågan
     // hinner öppnas och den allmänna push-frågan (som LIKED_EVENT väcker) står
     // tillbaka i stället för att två ark staplas.
@@ -747,6 +791,7 @@ export default function SwipePageClient({
   function handleSeen(c: Card): void {
     if (c.kind === "ad") { dismissAdCard(c); return; }
     funnelSwipe("seen");
+    if (mode !== "group") recordFsSwipe(null);
     recordUndo(c, "seen");
     markSeen(c.id);
     hideFor7Days(c.tmdbId);
@@ -918,7 +963,12 @@ export default function SwipePageClient({
     <div className="relative flex min-h-0 flex-1 flex-col">
       <SwipeLimitWall />
       <PremiumUpsellModal />
-      {needsProviders ? <ProviderPromptSheet /> : null}
+      {/* Nya enheter under första sessionen får tjänstekortet i leken i stället
+          (ServicesAgeCard nedan) — alla andra får arket precis som förut. */}
+      {needsProviders && !fsRunning ? <ProviderPromptSheet /> : null}
+      {/* FirstSessionHost monteras på kortytan längre ner (InviteCard ska ligga
+          exakt där filmkortet ligger). Övriga steg är fixed/portalade ark och
+          påverkas inte av var de monteras. */}
       {/* Stacken renderar kort 0–2; värm posters för 3..7 så nästa kort aldrig
           poppar in halvladdat. Samma sizes som Fronts <Image> — annars värms
           fel bildvariant. */}
@@ -950,6 +1000,11 @@ export default function SwipePageClient({
           <ProfileAvatarButton me={me} />
         </div>
       </div>
+
+      {/* Bara enheter i nya flödet (de har aldrig sett startsidan och dess
+          inloggning) — befintliga gäster har haft sin väg in sedan förut. */}
+      {mode === "individual" && fs.eligible ? <GuestLoginLink /> : null}
+      {fsInDeck ? <FsProgress swipes={fs.swipes} likes={fs.likes.length} /> : null}
 
       <MatchOverlay
         open={soloMatch !== null}
@@ -1071,6 +1126,17 @@ export default function SwipePageClient({
           Slut på förslag nu.
         </div>
       )}
+      {/* Samma geometri som filmkortet (inset-x-1 top-2, max 420 px): kortet ÄR
+          nästa kort i leken, inte en modal. Knapparna döljs medan det visas. */}
+      {showServicesCard ? (
+        <div className="absolute inset-x-1 top-2 bottom-0 z-30 mx-auto max-w-[min(100%,420px)] p-0.5">
+          <ServicesAgeCard onDone={onServicesCardDone} />
+        </div>
+      ) : null}
+      {/* Nya flödets steg. InviteCard tar samma geometri som tjänstekortet
+          ovan (inset-x-1 top-2 bottom-0, max 420 px) relativt den här ytan.
+          Lärchipen bor i progress-raden (FsProgress), inte på kortet. */}
+      <FirstSessionHost />
       </div>
 
       {/* Knapparna: 60 px hög rad vars mitt ligger på kortets underkant (se
@@ -1078,6 +1144,7 @@ export default function SwipePageClient({
           knapparna hamnar på kortet under; bara knapparna själva tar tryck.
           Info-knappen är borta: ett tryck på kortet vänder det redan. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2 z-30 flex h-[60px] items-center justify-center">
+        {showServicesCard || fsInviteCard ? null : (
         <ActionDock
           disabled={!cards[0] || feedLoading}
           // Knapptryck har ingen fingerhastighet — ge fjädern en syntetisk knuff
@@ -1086,6 +1153,7 @@ export default function SwipePageClient({
           onUndo={handleUndo}
           onLike={() => swipeOut("right", 900)}
         />
+        )}
       </div>
       </div>
 
@@ -1219,7 +1287,7 @@ const DeckCard = memo(function DeckCard({
           seenRotate={STAMP_ROTATE_DONE}
         />
       ) : null}
-      {top ? <FirstCardHint visible={top.hint} /> : null}
+      {top ? <FirstCardHint visible={top.hint} x={top.x} y={top.y} /> : null}
     </motion.div>
   );
 });
@@ -1341,6 +1409,12 @@ export function StaticCard({
 
 /* ---------- Annonskort (AdSense på webb, AdMob på iOS i Fas 2) ---------- */
 
+/** Annonsplatsens premium-CTA: arket i apparna, /premium på webben. */
+function openAdSlotPremium() {
+  if (isNativeStoreApp() && openPremiumUpsell({ reward: false })) return;
+  void goPremium();
+}
+
 function AdCard({ adId, dockInset = false }: { adId: string; dockInset?: boolean }) {
   const t = useTranslations("swipe");
   const client = adsenseClientId();
@@ -1376,13 +1450,15 @@ function AdCard({ adId, dockInset = false }: { adId: string; dockInset?: boolean
           data-full-width-responsive="true"
         />
       ) : (
-        // Platshållaren är en premium-CTA: tap -> köpflöde (iOS) / /premium (webb).
+        // Platshållaren är en premium-CTA: tap -> premiumarket i apparna
+        // (PlanPicker + PlanLegal = full 3.1.2-text, aldrig direktköp) /
+        // /premium på webben.
         <div
           role="button"
           tabIndex={0}
-          onClick={() => void goPremium()}
+          onClick={openAdSlotPremium}
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") void goPremium();
+            if (e.key === "Enter" || e.key === " ") openAdSlotPremium();
           }}
           className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center"
         >

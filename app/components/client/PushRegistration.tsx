@@ -11,6 +11,7 @@ import {
   blockingSheetOpen,
   likeCount,
 } from "@/lib/engagement";
+import { getFs } from "@/lib/firstSession";
 
 /**
  * Soft-ask före OS-dialogen: iOS ger EN chans att fråga — nekad OS-dialog kan
@@ -35,6 +36,71 @@ function snoozeSoftAsk(): void {
   } catch {
     /* privat läge — frågan återkommer, acceptabelt */
   }
+}
+
+/**
+ * Nya flödet (docs/nya-flodet.md, steg 7): en enhet som går igenom första
+ * sessionen får notisfrågan i PushAskSheet efter kvällens AI-val i stället.
+ * Den allmänna frågan efter första gilla står tillbaka tills flödet är klart.
+ * Befintliga enheter har inget flödestillstånd (eligible=false) → som förut.
+ */
+function firstSessionActive(): boolean {
+  try {
+    const fs = getFs();
+    return fs.eligible && fs.step !== "done";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Återanvändbara push-hjälpare (används av PushAskSheet i nya flödet).
+ *
+ * register() triggar "registration"-händelsen, som PushRegistration (monterad i
+ * AppShell) alltid lyssnar på och skickar till /api/push/register — därför
+ * räcker det att anropa register() här.
+ */
+export type PushPermission = "granted" | "denied" | "prompt" | "unsupported";
+
+/** OS-läget för notiser. "prompt" = OS-dialogen kan visas (inkl. Androids andra chans). */
+export async function getPushPermission(): Promise<PushPermission> {
+  if (!Capacitor.isNativePlatform()) return "unsupported";
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const r = (await PushNotifications.checkPermissions()).receive;
+    if (r === "granted" || r === "denied") return r;
+    return "prompt";
+  } catch {
+    return "unsupported";
+  }
+}
+
+/**
+ * Visar OS-dialogen (om den kan visas) och registrerar enheten vid ja.
+ * Redan beviljat → bara register() (idempotent, samma token). Kastar aldrig.
+ */
+export async function requestPushPermissionAndRegister(): Promise<PushPermission> {
+  if (!Capacitor.isNativePlatform()) return "unsupported";
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    const r = (await PushNotifications.requestPermissions()).receive;
+    if (r === "granted") {
+      try {
+        await PushNotifications.register();
+      } catch {
+        /* behörigheten finns; token försöks igen vid nästa förgrund */
+      }
+      return "granted";
+    }
+    return r === "denied" ? "denied" : "prompt";
+  } catch {
+    return "unsupported";
+  }
+}
+
+/** Skjut upp den allmänna frågan (samma 3 dygn som "Inte nu" i den). */
+export function snoozePushSoftAsk(): void {
+  snoozeSoftAsk();
 }
 
 /**
@@ -198,6 +264,7 @@ export default function PushRegistration() {
               if (
                 !softAskSnoozed() &&
                 likeCount() >= PUSH_ASK_AFTER_LIKES &&
+                !firstSessionActive() &&
                 !blockingSheetOpen() &&
                 !releaseAskOpen.current
               ) {
@@ -215,13 +282,8 @@ export default function PushRegistration() {
 
         // Soft-askens "Ja": nu FÅR vi visa OS-dialogen.
         requestAndRegister.current = async () => {
-          try {
-            const perm = await PushNotifications.requestPermissions();
-            funnel(perm.receive === "granted" ? "push_granted" : "push_denied");
-            if (perm.receive === "granted") await PushNotifications.register();
-          } catch {
-            /* ignorera */
-          }
+          const perm = await requestPushPermissionAndRegister();
+          if (perm !== "unsupported") funnel(perm === "granted" ? "push_granted" : "push_denied");
         };
 
         // "Kommer snart"-like: fråga om push för just den titeln — även om
@@ -260,28 +322,40 @@ export default function PushRegistration() {
           funnel("push_release_ask");
         };
         releaseYes.current = async () => {
-          try {
-            const perm = await PushNotifications.requestPermissions();
-            funnel(perm.receive === "granted" ? "push_release_granted" : "push_release_denied");
-            if (perm.receive === "granted") {
-              await PushNotifications.register();
-              return true;
-            }
-          } catch {
-            /* ignorera */
-          }
-          return false;
+          const perm = await requestPushPermissionAndRegister();
+          if (perm === "unsupported") return false;
+          funnel(perm === "granted" ? "push_release_granted" : "push_release_denied");
+          return perm === "granted";
         };
         // Liten paus så arket inte dyker upp medan kortet fortfarande flyger ut.
         // Kortare än LIKED-pausen (1200 ms) så att den allmänna frågan ser att
         // release-frågan redan är öppen och står tillbaka.
+        // Ligger ett annat ark öppet (t.ex. AI-arket "Välj åt mig", som nya
+        // flödet öppnar av sig självt) väntar frågan tills det stängts — två
+        // ark ovanpå varandra blir oläsbart. Ger upp efter RELEASE_WAIT_MAX_MS.
+        const RELEASE_WAIT_STEP_MS = 700;
+        const RELEASE_WAIT_MAX_MS = 3 * 60 * 1000;
+        let releaseTimer: number | null = null;
         const onReleaseAsk = (e: Event) => {
           const title = (e as CustomEvent<{ title?: string }>).detail?.title?.trim() || "";
           if (!title) return;
-          window.setTimeout(() => void askForRelease(title), 450);
+          const deadline = Date.now() + RELEASE_WAIT_MAX_MS;
+          const tryAsk = () => {
+            releaseTimer = null;
+            if (blockingSheetOpen()) {
+              if (Date.now() < deadline) releaseTimer = window.setTimeout(tryAsk, RELEASE_WAIT_STEP_MS);
+              return;
+            }
+            void askForRelease(title);
+          };
+          if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+          releaseTimer = window.setTimeout(tryAsk, 450);
         };
         window.addEventListener(RELEASE_ASK_EVENT, onReleaseAsk);
-        cleanupFns.push(() => window.removeEventListener(RELEASE_ASK_EVENT, onReleaseAsk));
+        cleanupFns.push(() => {
+          window.removeEventListener(RELEASE_ASK_EVENT, onReleaseAsk);
+          if (releaseTimer !== null) window.clearTimeout(releaseTimer);
+        });
 
         await ensureRegistered();
 

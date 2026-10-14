@@ -3,16 +3,21 @@
 // Kvoten för "Välj åt mig". Servern är enda sanningen — klienten visar bara
 // det som kommer härifrån.
 //
-// Regler (Oskars beslut 2026-10-13):
-//   - Premium: NW_PICK_PREMIUM_MONTHLY (20) val per KALENDERMÅNAD i
-//     Europe/Stockholm. Därefter kan de fylla på med rewarded video som gratis.
+// Regler (Oskars beslut 2026-10-13, premium ändrat 2026-10-15):
+//   - Premium: OBEGRÄNSAT. Ett dolt rimlighetstak mot missbruk,
+//     NW_PICK_PREMIUM_DAILY_CAP (100) val per KALENDERDYGN i Europe/Stockholm,
+//     visas aldrig i UI:t. Når någon taket kan de fylla på med rewarded video
+//     som gratis (samma krediter), annars väntar de till midnatt.
 //   - Gratis: 0 val som standard. Varje tittad rewarded video ger
 //     NW_PICK_REWARD_PICKS (3) krediter, max NW_PICK_REWARD_MAX_PER_DAY (10)
 //     videor per kalenderdygn (anti-fusk: belöningen litar på klientens event,
 //     samma som swipe-bonusen — taket begränsar vad ett fusk kan ge).
 //   - credits = summa grants.picks − antal 'ok'-förfrågningar med source
 //     'credit' (all tid). premiumUsed = antal 'ok' med source 'premium' i
-//     innevarande månad.
+//     innevarande kalenderdygn.
+//   - Auto-förslaget (source 'auto', nya flödet) räknas ALDRIG — varken mot
+//     premium eller krediter. Högst ett lyckat per användare och kalenderdygn
+//     (reserveAutoPick nedan); ett andra anrop samma dygn får samma förslag.
 //   - Debiteringsordning: premium med kvar → 'premium'; annars krediter → 'credit';
 //     annars 402. Bara status 'ok' förbrukar — fel och no_candidates aldrig.
 //
@@ -28,7 +33,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeEntitlement } from "@/lib/entitlements";
 import { isPickEnabledFor } from "@/lib/aiPick/rollout";
-import { stockholmDayStart, stockholmMonthStart } from "@/lib/aiPick/time";
+import { stockholmDayStart } from "@/lib/aiPick/time";
 import type { PickQuota } from "@/lib/aiPick/types";
 
 /* ---------------- Konfiguration (env, läses vid anrop) ---------------- */
@@ -40,7 +45,8 @@ function envInt(name: string, fallback: number): number {
 }
 
 export type PickConfig = {
-  premiumMonthly: number;
+  /** Dolt dygnstak för premium (obegränsat i UI:t). */
+  premiumDailyCap: number;
   rewardPicks: number;
   rewardMaxPerDay: number;
   /** Gratis val för nya konton (innan reklamlåset) — för att locka in dem. */
@@ -61,7 +67,7 @@ function envDate(name: string, fallback: string): Date {
 
 export function pickConfig(): PickConfig {
   return {
-    premiumMonthly: envInt("NW_PICK_PREMIUM_MONTHLY", 20),
+    premiumDailyCap: envInt("NW_PICK_PREMIUM_DAILY_CAP", 100),
     rewardPicks: envInt("NW_PICK_REWARD_PICKS", 3),
     rewardMaxPerDay: envInt("NW_PICK_REWARD_MAX_PER_DAY", 10),
     welcomePicks: envInt("NW_PICK_WELCOME_PICKS", 5),
@@ -79,7 +85,7 @@ export type ChargeSource = "premium" | "credit";
 /* ---------------- Ren aritmetik (testbar utan DB) ---------------- */
 
 export type PickUsage = {
-  /** 'ok' (+ färska 'pending') med source 'premium' i innevarande månad. */
+  /** 'ok' (+ färska 'pending') med source 'premium' i innevarande kalenderdygn. */
   premiumUsed: number;
   /** 'ok' (+ färska 'pending') med source 'credit', all tid. */
   creditUsed: number;
@@ -98,7 +104,7 @@ export function computeQuota(input: {
   cfg: PickConfig;
 }): PickQuota {
   const { enabled, premium, usage, cfg } = input;
-  const premiumLeft = premium ? Math.max(0, cfg.premiumMonthly - usage.premiumUsed) : null;
+  const premiumLeft = premium ? Math.max(0, cfg.premiumDailyCap - usage.premiumUsed) : null;
   // Välkomstvalen ligger i samma kreditpott som reklamvalen och förbrukas först.
   const credits = Math.max(0, usage.welcomePicks + usage.grantedPicks - usage.creditUsed);
   const welcomeLeft = Math.max(0, usage.welcomePicks - usage.creditUsed);
@@ -107,7 +113,7 @@ export function computeQuota(input: {
   return {
     enabled,
     premium,
-    premiumMonthly: cfg.premiumMonthly,
+    unlimited: premium,
     premiumLeft,
     credits,
     rewardPicks: cfg.rewardPicks,
@@ -139,19 +145,20 @@ function consumingWhere(now: Date): Prisma.AiPickRequestWhereInput {
 }
 
 async function loadUsage(db: Db, uid: string, now: Date): Promise<PickUsage> {
-  const monthStart = stockholmMonthStart(now);
   const dayStart = stockholmDayStart(now);
   const consuming = consumingWhere(now);
   const cfg = pickConfig();
   const [premiumUsed, creditUsed, grantAgg, grantsToday, user] = await Promise.all([
     db.aiPickRequest.count({
-      where: { AND: [{ userId: uid, source: "premium", createdAt: { gte: monthStart } }, consuming] },
+      where: { AND: [{ userId: uid, source: "premium", createdAt: { gte: dayStart } }, consuming] },
     }),
     db.aiPickRequest.count({
       where: { AND: [{ userId: uid, source: "credit" }, consuming] },
     }),
     db.aiPickGrant.aggregate({ where: { userId: uid }, _sum: { picks: true } }),
-    db.aiPickGrant.count({ where: { userId: uid, createdAt: { gte: dayStart } } }),
+    // Bara belöningsvideor räknas mot dygnstaket – värvningsbelöningar (source
+    // 'referral', lib/referral.ts) får inte äta upp det.
+    db.aiPickGrant.count({ where: { userId: uid, source: "rewarded", createdAt: { gte: dayStart } } }),
     db.user.findUnique({ where: { id: uid }, select: { createdAt: true } }),
   ]);
   return {
@@ -246,6 +253,115 @@ export async function reservePick(
     },
     { maxWait: 5000, timeout: 10000 },
   );
+}
+
+/* ---------------- Auto-förslaget (gratis, 1/dygn) ---------------- */
+
+/** Max antal FÖRSÖK (alla statusar) per dygn — ett lyckat räcker, fel får försökas om. */
+export const AUTO_MAX_ATTEMPTS_PER_DAY = 3;
+
+/** Env-kill switch utan deploy: NW_PICK_AUTO=0 stänger av auto-förslaget. */
+export function autoPickEnabled(): boolean {
+  const v = (process.env.NW_PICK_AUTO ?? "").trim().toLowerCase();
+  return !(v === "0" || v === "off" || v === "false");
+}
+
+/**
+ * Auto-förslaget är till för NYA användare (nya flödets första session) — inte
+ * ett gratis LLM-anrop per dygn för alla. Tillåtet bara när användarraden
+ * (konto eller gästprofil, samma rad) skapades för högst
+ * NW_PICK_AUTO_MAX_AGE_DAYS dygn sedan (default 7; 0 = ingen åldersgräns).
+ * Saknad rad / fel → nej.
+ */
+export async function autoPickAllowedFor(uid: string, now = new Date()): Promise<boolean> {
+  const env = (process.env.NW_PICK_AUTO_MAX_AGE_DAYS ?? "").trim();
+  const parsed = env === "" ? NaN : Number(env);
+  const days = Number.isFinite(parsed) && parsed >= 0 ? parsed : 7;
+  if (days === 0) return true;
+  try {
+    const u = await prisma.user.findUnique({ where: { id: uid }, select: { createdAt: true } });
+    if (!u) return false;
+    return now.getTime() - u.createdAt.getTime() <= days * 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+export type AutoRow = {
+  id: string;
+  status: string;
+  createdAt: Date;
+  sessionId: string | null;
+  reason: string | null;
+  result: Prisma.JsonValue | null;
+};
+
+const AUTO_ROW_SELECT = {
+  id: true,
+  status: true,
+  createdAt: true,
+  sessionId: true,
+  reason: true,
+  result: true,
+} as const;
+
+export type AutoReserveResult =
+  /** Dagens auto-förslag finns redan → visa det igen (inget nytt LLM-anrop). */
+  | { kind: "done"; row: AutoRow }
+  /** Ett annat anrop (förhämtningen, en annan flik) håller på just nu. */
+  | { kind: "busy"; requestId: string }
+  /** För många misslyckade försök idag. */
+  | { kind: "limit" }
+  | { kind: "reserved"; requestId: string };
+
+/**
+ * Reserverar dagens auto-förslag under samma lås som reservePick: finns ett
+ * 'ok' i dag → "done"; pågår ett → "busy"; annars en ny 'pending'-rad med
+ * source 'auto'. Raden räknas aldrig av loadUsage (som bara räknar
+ * premium/credit), så auto-förslaget kan aldrig debiteras.
+ */
+export async function reserveAutoPick(uid: string, input: ReserveInput): Promise<AutoReserveResult> {
+  return prisma.$transaction(
+    async (tx) => {
+      await lockUser(tx, uid);
+      const now = new Date();
+      const rows = await tx.aiPickRequest.findMany({
+        where: { userId: uid, source: "auto", createdAt: { gte: stockholmDayStart(now) } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: AUTO_ROW_SELECT,
+      });
+      const ok = rows.find((r) => r.status === "ok");
+      if (ok) return { kind: "done" as const, row: ok };
+      const fresh = rows.find(
+        (r) => r.status === "pending" && now.getTime() - r.createdAt.getTime() < PENDING_STALE_MS,
+      );
+      if (fresh) return { kind: "busy" as const, requestId: fresh.id };
+      if (rows.length >= AUTO_MAX_ATTEMPTS_PER_DAY) return { kind: "limit" as const };
+      const row = await tx.aiPickRequest.create({
+        data: {
+          userId: uid,
+          source: "auto",
+          status: "pending",
+          prompt: input.prompt,
+          chips: input.chips,
+          mediaFilter: input.mediaFilter,
+          sessionId: input.sessionId,
+        },
+        select: { id: true },
+      });
+      return { kind: "reserved" as const, requestId: row.id };
+    },
+    { maxWait: 5000, timeout: 10000 },
+  );
+}
+
+/** En auto-rad (för att vänta in ett pågående anrop). null om den saknas. */
+export async function loadAutoRow(uid: string, requestId: string): Promise<AutoRow | null> {
+  return prisma.aiPickRequest.findFirst({
+    where: { id: requestId, userId: uid, source: "auto" },
+    select: AUTO_ROW_SELECT,
+  });
 }
 
 /** Loggrad för selftest — debiterar aldrig (source 'selftest'). */

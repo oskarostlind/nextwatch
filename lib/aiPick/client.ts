@@ -92,6 +92,79 @@ export async function requestPick(body: PickRequestBody): Promise<PickResponse> 
   }
 }
 
+/* ---------------- Auto-förslaget (nya flödet) ---------------- */
+
+type AutoPickOk = Extract<PickResponse, { ok: true }>;
+
+const AUTO_STORE_KEY = "nw_pick_auto_v1";
+
+let autoMemo: { day: string; res: AutoPickOk } | null = null;
+let autoInFlight: Promise<PickResponse> | null = null;
+
+/** Lokal kalenderdag — svaret gäller bara samma dag (servern räknar Stockholm). */
+function localDay(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function readAutoStore(): AutoPickOk | null {
+  const day = localDay();
+  if (autoMemo && autoMemo.day === day) return autoMemo.res;
+  try {
+    const raw = window.sessionStorage.getItem(AUTO_STORE_KEY);
+    if (!raw) return null;
+    const j = JSON.parse(raw) as { day?: string; res?: AutoPickOk };
+    if (j?.day !== day || !j.res || j.res.ok !== true || !j.res.pick) return null;
+    autoMemo = { day, res: j.res };
+    return j.res;
+  } catch {
+    return null;
+  }
+}
+
+function writeAutoStore(res: AutoPickOk): void {
+  const entry = { day: localDay(), res };
+  autoMemo = entry;
+  try {
+    window.sessionStorage.setItem(AUTO_STORE_KEY, JSON.stringify(entry));
+  } catch {
+    /* privat läge — minnet räcker */
+  }
+}
+
+/**
+ * Redan hämtat auto-förslag (minnet/sessionStorage), utan nätverk. Används för
+ * att hoppa över "tänker"-animationen när förhämtningen hunnit klart.
+ */
+export function peekAutoPick(): AutoPickOk | null {
+  if (typeof window === "undefined") return null;
+  return readAutoStore();
+}
+
+/**
+ * POST /api/pick { auto: true } — dagens gratis auto-förslag. Räknas aldrig
+ * mot kvoten och servern ger samma förslag igen samma dygn, så det är säkert
+ * att förhämta (efter 7 swipes) och anropa igen när arket öppnas: samtidiga
+ * anrop delar ett löfte och ett lyckat svar cachas i minnet + sessionStorage.
+ * Fel cachas inte (nästa anrop försöker igen). Kastar aldrig.
+ */
+export function fetchAutoPick(opts: { mediaFilter?: PickRequestBody["mediaFilter"] } = {}): Promise<PickResponse> {
+  const cached = peekAutoPick();
+  if (cached) return Promise.resolve(cached);
+  if (autoInFlight) return autoInFlight;
+  const body: PickRequestBody = { auto: true, sessionId: newPickSessionId() };
+  if (opts.mediaFilter) body.mediaFilter = opts.mediaFilter;
+  autoInFlight = requestPick(body)
+    .then((res) => {
+      if (res.ok) writeAutoStore(res);
+      return res;
+    })
+    .finally(() => {
+      autoInFlight = null;
+    });
+  return autoInFlight;
+}
+
 /**
  * Ett id per "konversation" i arket — skickas med varje förfrågan så att
  * historiken kan gruppera dem. Servern godtar [A-Za-z0-9_-], max 64 tecken.

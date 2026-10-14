@@ -23,6 +23,7 @@ type PickStats = {
     users: number;
     premium: number;
     credit: number;
+    auto?: number;
     finished: number;
     errors: number;
     noCandidates: number;
@@ -334,7 +335,7 @@ export default function PickPanel() {
             <Tile
               label="Premium-andel"
               value={pct(p.premium, p.premium + p.credit)}
-              sub={`${n0(p.premium)} premium · ${n0(p.credit)} kredit`}
+              sub={`${n0(p.premium)} premium · ${n0(p.credit)} kredit · ${n0(p.auto ?? 0)} auto-förslag`}
             />
             <Tile
               label="Öppnade i tjänst"

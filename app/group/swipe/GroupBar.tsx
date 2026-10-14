@@ -55,7 +55,10 @@ export default function GroupBar({ code }: { code: string }) {
   const mediaLabelKey = swipeMediaFilterShortLabelKey(mediaFilter);
 
   const invite = async () => {
-    const url = `${location.origin}/group/swipe?code=${encodeURIComponent(code)}`;
+    // /g/<kod> (app/g/[code]): vännen swipar direkt i webbläsaren — gästprofil
+    // och medlemskap sköts av länksidan. Den gamla /group/swipe?code=-länken
+    // gav en icke-medlem en lek där varje röst nekades (403).
+    const url = `${location.origin}/g/${encodeURIComponent(code)}`;
     try {
       const n = navigator as ShareCapableNavigator;
       if (typeof n.share === "function") {

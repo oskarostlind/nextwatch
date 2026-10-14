@@ -54,6 +54,14 @@ export async function GET(req: Request) {
     : loadUpcomingForUser({ uid, region, locale, forceAllMedia });
   upcomingPromise.catch(() => {}); // vakt mot obehandlad rejection före await
 
+  // Nya flödet del 6 ("värdens gillade först"): i en LÄNKGRUPP (rad i
+  // referral_links), på FÖRSTA sidan (ny lek, ingen from-markör), läggs titlar
+  // som andra medlemmar redan gillat först — filtrerade genom samma regler som
+  // resten av leken (ålder för yngsta medlemmen, gruppens tjänster,
+  // barnheuristik, kvalitetsgolv) och högst 3,5 s från anropets start. Allt det
+  // sker i computeUnifiedRecs (leadGroupLikes), som också kräver medlemskap.
+  const leadGroupLikes = Boolean(groupCode) && pageNum === 1 && !fromTmdbPage;
+
   // Film/serie-filtret läses annars server-side: solo från
   // Profile.swipeMediaFilter, grupp från Group.mediaFilter.
   const result = await computeUnifiedRecs({
@@ -64,6 +72,7 @@ export async function GET(req: Request) {
     page: pageNum,
     fromTmdbPage,
     forceAllMedia,
+    leadGroupLikes,
   });
   if (!result.ok) return fail(result.message, result.status);
 

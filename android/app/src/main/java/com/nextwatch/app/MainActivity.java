@@ -4,6 +4,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
@@ -25,6 +27,17 @@ public class MainActivity extends BridgeActivity {
         }
 
         createNotificationChannels();
+
+        // Skyddsnät: webbsidan döljer launch-skärmen själv (SplashScreenHide.tsx,
+        // 5 s tak). Kör sidans JS inte alls (gammal WebView, nätverksfel) skulle
+        // appen annars fastna på loggan — då släpper vi den härifrån.
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (getBridge() == null || getBridge().getWebView() == null) return;
+            getBridge().getWebView().evaluateJavascript(
+                "try{var p=window.Capacitor&&window.Capacitor.Plugins;p&&p.SplashScreen&&p.SplashScreen.hide()}catch(e){}",
+                null
+            );
+        }, 10000);
     }
 
     /** Kanal-id:n måste matcha lib/fcm.ts (channelFor). */

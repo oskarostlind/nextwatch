@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "244074717455",
+    "project_id": "nextwatch-20fb2",
+    "storage_bucket": "nextwatch-20fb2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:244074717455:android:0558e148d4373f423d1e7a",
+        "android_client_info": {
+          "package_name": "com.nextwatch.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "244074717455-ha3dkjvb5kkejmor3n227rcah0hikhsa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrUA77WbQAtBaQcNwyowpODKO4Qfye9qM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "244074717455-ha3dkjvb5kkejmor3n227rcah0hikhsa.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

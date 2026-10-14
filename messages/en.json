@@ -1223,6 +1223,19 @@
       "done": "Done! We'll let you know when {title} comes out 🔔"
     }
   },
+  "pushAsk": {
+    "title": "Want tonight's AI pick when you usually watch?",
+    "timeGroup": "Pick a time for the notification",
+    "previewTitle": "✦ Tonight's pick: {title}",
+    "previewTitleGeneric": "✦ Tonight's pick is ready",
+    "previewBody": "Based on what you liked. Tap and the AI picks something else if you want.",
+    "yes": "Yes, at {time}",
+    "notNow": "Not now",
+    "openSettings": "Open Settings",
+    "okAt": "OK, at {time}",
+    "deniedIos": "Notifications are turned off for NextWatch. Turn them on in Settings → NextWatch → Notifications and tonight's pick arrives at {time}.",
+    "deniedAndroid": "Notifications are turned off for NextWatch. Turn them on in your phone's Settings → Apps → NextWatch → Notifications and tonight's pick arrives at {time}."
+  },
   "report": {
     "alsoBlock": "Block this user too",
     "aUser": "user",

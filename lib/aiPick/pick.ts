@@ -15,6 +15,14 @@
 // generisk lokaliserad motivering. Användaren fick ett val → status 'ok', men
 // felet loggas i `error`.
 //
+// Auto-förslaget (mode "auto", nya flödet 2026-10-15): samma pipeline men
+// gratis — reserveAutoPick() skriver raden med source 'auto', som kvoten aldrig
+// räknar. Högst ett lyckat per användare och kalenderdygn: finns dagens redan
+// returneras det igen (ur `result`) utan nytt LLM-anrop. Prompten får
+// "AUTOMATIC PICK"-reglerna (sparade likes först) och SAVED-prioriteten är
+// alltid "strong". Inga följdfrågor — chipsen under förslaget är vanliga
+// (debiterade) följdfrågor i samma session.
+//
 // v2: alltid två alternativ när poolen räcker (modellens giltiga först, sedan
 // fillAlternatives), och 'ok'-raden sparar motivering + ögonblicksbild
 // (`reason`, `result`) och klientens `session_id` för historiken.
@@ -54,12 +62,17 @@ import {
 } from "@/lib/aiPick/followup";
 import { markPickSeen } from "@/lib/aiPick/seen";
 import {
+  autoPickEnabled,
   createSelftestRequest,
   finishPickRequest,
   getPickQuota,
+  loadAutoRow,
+  reserveAutoPick,
   reservePick,
+  type AutoRow,
   type FinishData,
 } from "@/lib/aiPick/quota";
+import { parseHistoryResult } from "@/lib/aiPick/history";
 import { stockholmClock } from "@/lib/aiPick/time";
 import type { PickChipId, PickItem, PickQuota, PickResponse } from "@/lib/aiPick/types";
 
@@ -72,6 +85,8 @@ export type NormalizedPickBody = {
   followUpOf: string | null;
   focus: { tmdbId: number; mediaType: "movie" | "tv" } | null;
   markSeen: boolean;
+  /** Auto-förslaget (nya flödet). Routen kör då mode "auto"; selftest använder bara prompten. */
+  auto: boolean;
 };
 
 export type RunPickOptions = {
@@ -80,7 +95,8 @@ export type RunPickOptions = {
   /** nw_region-cookien; null → profilens region → "SE". */
   region: string | null;
   uiLocale: AppLocale;
-  mode: "user" | "selftest";
+  /** "auto" = dagens gratis auto-förslag (debiteras aldrig, 1/dygn). */
+  mode: "user" | "selftest" | "auto";
 };
 
 export type PickDebug = {
@@ -163,6 +179,37 @@ function emptyDebug(): PickDebug {
   };
 }
 
+/** Hur länge ett auto-anrop väntar in ett annat som redan pågår (förhämtningen). */
+const AUTO_WAIT_MS = 20_000;
+const AUTO_POLL_MS = 800;
+
+async function waitForAutoRow(uid: string, requestId: string): Promise<AutoRow | null> {
+  const deadline = Date.now() + AUTO_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, AUTO_POLL_MS));
+    const row = await loadAutoRow(uid, requestId).catch(() => null);
+    if (!row) return null;
+    if (row.status !== "pending") return row;
+  }
+  return null;
+}
+
+/** Dagens redan gjorda auto-förslag som svar — null om ögonblicksbilden rensats. */
+function autoReplay(row: AutoRow, quota: PickQuota): PickResponse | null {
+  const snap = parseHistoryResult(row.result);
+  if (!snap) return null;
+  return {
+    ok: true,
+    pick: snap.pick,
+    alternatives: snap.alternatives,
+    reason: row.reason ?? "",
+    quota,
+    requestId: row.id,
+    sessionId: row.sessionId,
+    auto: true,
+  };
+}
+
 function altLog(c: PickCandidate) {
   return { tmdbId: c.tmdbId, mediaType: c.mediaType, fromSaved: c.fromSaved };
 }
@@ -171,10 +218,13 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
   const t0 = Date.now();
   const debug = emptyDebug();
   const { uid, body, uiLocale, mode } = opts;
+  const isAuto = mode === "auto";
+  // Auto-promptens regler även i selftest (&auto=1), så den går att utvärdera.
+  const autoStyle = isAuto || (mode === "selftest" && body.auto);
 
   const [quota0, conversation] = await Promise.all([
     getPickQuota(uid),
-    body.sessionId
+    body.sessionId && !autoStyle
       ? loadConversation(uid, body.sessionId).catch((err) => {
           // Utan historiken blir det en vanlig fråga — hellre det än ett fel.
           console.error("[aiPick] kunde inte läsa samtalet", err);
@@ -186,7 +236,10 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     // Ingen användarrad bakom cookien (anonym besökare).
     return { status: 401, body: { ok: false, error: "disabled" }, debug };
   }
-  if (mode === "user" && !quota0.enabled) {
+  if (mode !== "selftest" && !quota0.enabled) {
+    return { status: 403, body: { ok: false, error: "disabled", quota: quota0 }, debug };
+  }
+  if (isAuto && !autoPickEnabled()) {
     return { status: 403, body: { ok: false, error: "disabled", quota: quota0 }, debug };
   }
   // Utan nyckel kan vi inte leverera ett AI-val — svara innan något debiteras.
@@ -197,7 +250,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
 
   // Följdfråga: tolka meddelandet i samtalets sammanhang (lib/aiPick/followup.ts).
   const turns = conversation.turns;
-  const focus = resolveFocus(turns, body.followUpOf, body.focus);
+  const focus = autoStyle ? null : resolveFocus(turns, body.followUpOf, body.focus);
   const merged: MergedConversation | null =
     turns.length > 0
       ? mergeConversationIntent({ turns, prompt: body.prompt, chips: body.chips, clientFilter: body.mediaFilter, focus })
@@ -224,7 +277,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
   // "Har sett den" (+ markSeen från klienten): spara som swipens "Sett".
   // Före debiteringen och oberoende av den — det är ett faktum om användaren,
   // inte en del av valet. selftest sparar ALDRIG, rapporterar bara.
-  if (body.markSeen && focus) {
+  if (body.markSeen && focus && !autoStyle) {
     const label = itemLabel(focus) ?? "";
     if (mode === "selftest") {
       if (debug.followUp) debug.followUp.markSeen = { item: label, result: "would_mark" };
@@ -250,6 +303,19 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     const r = await reservePick(uid, quota0.premium, quota0.enabled, reserveInput);
     if (!r.ok) return { status: 402, body: { ok: false, error: "no_quota", quota: r.quota }, debug };
     requestId = r.requestId;
+  } else if (isAuto) {
+    const r = await reserveAutoPick(uid, reserveInput);
+    if (r.kind === "done" || r.kind === "busy") {
+      // Samma dygn igen (eller förhämtningen pågår): samma förslag, inget nytt anrop.
+      const row = r.kind === "done" ? r.row : await waitForAutoRow(uid, r.requestId);
+      const replay = row && row.status === "ok" ? autoReplay(row, quota0) : null;
+      if (replay) return { status: 200, body: replay, debug };
+      return { status: r.kind === "done" ? 429 : 503, body: { ok: false, error: "unavailable", quota: quota0 }, debug };
+    }
+    if (r.kind === "limit") {
+      return { status: 429, body: { ok: false, error: "unavailable", quota: quota0 }, debug };
+    }
+    requestId = r.requestId;
   } else {
     requestId = await createSelftestRequest(uid, reserveInput);
   }
@@ -261,7 +327,8 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
   const freshQuota = async (): Promise<PickQuota> => (await getPickQuota(uid)) ?? quota0;
 
   try {
-    const priority = savedPriority();
+    // Auto: sparade likes först, oavsett PICK_SAVED_PRIORITY.
+    const priority = autoStyle ? "strong" : savedPriority();
     const set = await buildCandidates({
       uid,
       region: opts.region,
@@ -313,7 +380,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
     debug.runtimeRelaxedTo = set.runtimeRelaxedTo;
 
     const byKey = new Map(set.candidates.map((c) => [c.key, c] as const));
-    const system = buildSystemPrompt({ uiLocale, priority, followUp: merged !== null });
+    const system = buildSystemPrompt({ uiLocale, priority, followUp: merged !== null, auto: autoStyle });
     const user = buildUserMessage({
       clock: stockholmClock(),
       mediaFilter: set.effectiveFilter,
@@ -415,6 +482,7 @@ export async function runPick(opts: RunPickOptions): Promise<RunPickResult> {
         quota: await freshQuota(),
         requestId,
         sessionId: body.sessionId,
+        ...(isAuto ? { auto: true } : {}),
       },
       debug,
     };
@@ -437,6 +505,7 @@ export function normalizePickBody(b: {
   followUpOf?: string;
   focus?: { tmdbId: number; mediaType: "movie" | "tv" };
   markSeen?: boolean;
+  auto?: boolean;
 }): NormalizedPickBody {
   const prompt = sanitizeUserText(b.prompt ?? "", 300);
   return {
@@ -451,5 +520,6 @@ export function normalizePickBody(b: {
         ? { tmdbId: b.focus.tmdbId, mediaType: b.focus.mediaType }
         : null,
     markSeen: b.markSeen === true,
+    auto: b.auto === true,
   };
 }

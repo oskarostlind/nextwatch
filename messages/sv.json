@@ -1696,9 +1696,9 @@
     "close": "Stäng",
     "chipsAria": "Snabbval",
     "chips": {
-      "light": "Något lätt",
-      "short": "Max 90 min",
-      "thrilling": "Spännande",
+      "light": "Lättare",
+      "short": "Kortare",
+      "thrilling": "Spänning",
       "surprise": "Överraska mig"
     },
     "inputPlaceholder": "Vad är du sugen på?",
@@ -1773,17 +1773,17 @@
     },
     "welcomeLeft": "Du har {count} gratis val att testa med",
     "quotaLeft": "{count, plural, =0 {Det var ditt sista val} one {Du har 1 val kvar} other {Du har # val kvar}}",
-    "premiumNudge": "Med Premium får du {count} val i månaden utan reklam",
+    "premiumNudge": "Med Premium väljer AI:n obegränsat – utan reklam",
     "paywall": {
       "title": "Låt NextWatch välja",
       "bodyFree": "Säg vad du är sugen på så väljer vi en titel åt dig – helst något du redan gillat men inte hunnit se.",
-      "bodyPremiumUsed": "Du har använt dina {count} val den här månaden.",
-      "resetNote": "Dina val fylls på igen den 1:a varje månad.",
+      "bodyPremiumUsed": "Du har gjort väldigt många val idag. Fler i morgon!",
+      "resetNote": "Dina val fylls på igen vid midnatt.",
       "watchAd": "Se en kort reklam → {count} val",
       "watchAdBusy": "Laddar video…",
       "adFailed": "Videon gick inte att visa just nu. Försök igen om en stund.",
       "rewardLimit": "Du har sett max antal reklamfilmer för idag. Kom tillbaka i morgon.",
-      "premiumCta": "Premium · {count} val i månaden, ingen reklam · 19 kr/mån",
+      "premiumCta": "Premium · obegränsat med Välj åt mig, ingen reklam",
       "unlocked": "Klart! {count, plural, one {1 nytt val} other {# nya val}} upplåsta."
     },
     "error": {
@@ -1809,5 +1809,26 @@
       "rated": "Betyg {rating} sparat",
       "rateFailed": "Kunde inte spara betyget. Försök igen."
     }
+  },
+  "pick2": {
+    "header": {
+      "subtitle": "Din AI för kvällens film"
+    },
+    "thinking": {
+      "reading": "{count, plural, one {Läser ditt gilla …} other {Läser dina # gilla …}}",
+      "title": "Tänker …",
+      "sub": "Jämför upp till 30 titlar – både sådant du sparat och nytt"
+    },
+    "card": {
+      "eyebrow": "Kvällens val"
+    },
+    "thread": {
+      "auto": "✦ Kvällens val"
+    },
+    "quota": {
+      "unlimited": "Obegränsat med Premium",
+      "left": "{count, plural, =0 {Inga AI-val kvar} one {1 AI-val kvar} other {# AI-val kvar}}"
+    },
+    "saveTonight": "Spara kvällens film"
   }
 }

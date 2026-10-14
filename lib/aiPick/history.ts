@@ -5,8 +5,9 @@
 // ai_pick_requests; v2 lägger till session_id (klientens id per konversation i
 // arket), reason och result ({ pick, alternatives } som PickItem).
 //
-// Visas: status 'ok', source 'premium'/'credit' (aldrig selftest) och
-// result IS NOT NULL. Rader utan session_id är en egen session ("r:" + id).
+// Visas: status 'ok', source 'premium'/'credit'/'auto' (aldrig selftest) och
+// result IS NOT NULL. 'auto' = dagens gratis auto-förslag (nya flödet), märks
+// med `auto: true` i inlägget. Rader utan session_id är en egen session ("r:" + id).
 // Sessioner nyast först, inlägg inom en session äldst → nyast. Sidindelning på
 // sessionens SENASTE inlägg (`before`).
 //
@@ -37,6 +38,8 @@ export type HistoryRow = {
   mediaFilter: string | null;
   reason: string | null;
   result: unknown;
+  /** ai_pick_requests.source — 'auto' märks i historiken. */
+  source?: string | null;
 };
 
 function isPickItem(v: unknown): v is PickItem {
@@ -96,6 +99,7 @@ export function groupPickHistory(
       pick: res.pick,
       alternatives: res.alternatives,
       reason: r.reason ?? "",
+      auto: r.source === "auto",
     };
     const list = bySession.get(key);
     if (list) list.push(entry);
@@ -118,7 +122,7 @@ export function groupPickHistory(
 const visibleWhere = (uid: string): Prisma.AiPickRequestWhereInput => ({
   userId: uid,
   status: "ok",
-  source: { in: ["premium", "credit"] },
+  source: { in: ["premium", "credit", "auto"] },
   // Dokumenterad form för "inte NULL" på Json?-fält (DB-null och JSON-null).
   NOT: { result: { equals: Prisma.AnyNull } },
 });
@@ -141,6 +145,7 @@ export async function loadPickHistory(
       mediaFilter: true,
       reason: true,
       result: true,
+      source: true,
     },
   });
 

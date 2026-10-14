@@ -35,8 +35,20 @@
 // Monetisering (se PICK_SPEC):
 //   - Gratis: 0 val utan vidare. Belöningsvideo (bara native iOS) → +N val.
 //     Premium-CTA visas alltid för gratisanvändare (på webben är den enda vägen).
-//   - Premium: 20 val/månad. Slut → belöningsvideo som påfyllnad (iOS), annars
-//     bara beskedet att månaden nollställs.
+//   - Premium: obegränsat (sedan 2026-10-15) — UI:t säger "Obegränsat med
+//     Premium". Ett dolt dygnstak finns mot missbruk; nås det visas paywall-
+//     vyn med "fler i morgon" + belöningsvideo som påfyllnad (iOS).
+//
+// AI 2.0 (2026-10-15): mörkt glasark med tunn cyan→violett kant, ✦ i en
+// roterande ring som signatur, synlig "tänker"-fas (gillade affischer skannas
+// av ett ljussvep), svaret skrivs fram ord för ord och förslaget ligger i ett
+// glödande kort. Byggstenarna (AiMark, ThinkingScan, AiReply …) i PickParts.
+//
+// `reveal` (nya flödet, app/components/firstSession/AiReveal.tsx): arket
+// öppnas av sig självt med dagens GRATIS auto-förslag (POST /api/pick
+// { auto: true }). Finns svaret redan (förhämtat) hoppas "tänker" över. Under
+// förslaget sitter "Spara kvällens film"; chipsen är vanliga följdfrågor i
+// auto-förslagets session.
 // Premium-CTA:n: på webben → /premium (Stripe). I iOS-appen startar knappen i
 // paywall-vyn Apple-köpet direkt via goPremium() (samma som PremiumUpsellModal)
 // — /premium i appen upplevdes som "webbens premium". Pris/period/förnyelse
@@ -66,7 +78,6 @@ import {
   RefreshCw,
   Shuffle,
   Smile,
-  Sparkles,
   X,
   Zap,
   type LucideIcon,
@@ -79,14 +90,20 @@ import type {
   PickQuickReply,
   PickQuota,
   PickRequestBody,
+  PickResponse,
 } from "@/lib/aiPick/types";
 import { getPickStatus, newPickSessionId, requestPick, trackPickEvent } from "@/lib/aiPick/client";
 import { watchRewardedForPicks } from "@/lib/admobAds";
 import { goPremium, isNativeStoreApp } from "@/lib/premiumPurchase";
 import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider";
 import { notify } from "@/app/components/lib/notify";
+import { readCachedWatchlist } from "@/lib/watchlistData";
 import {
+  AiMark,
   AiReply,
+  AiStyles,
+  aiGradientBg,
+  aiGradientText,
   AskBubble,
   askText,
   focusRing,
@@ -94,6 +111,7 @@ import {
   PickCard,
   Poster,
   Pulse,
+  ThinkingScan,
   TypingReply,
   type AskEcho,
 } from "@/app/components/pick/PickParts";
@@ -106,7 +124,30 @@ import {
   usePickHistory,
 } from "@/app/components/pick/PickHistory";
 
-type View = "ask" | "loading" | "result" | "paywall" | "error" | "history" | "historyDetail";
+type View = "ask" | "thinking" | "loading" | "result" | "paywall" | "error" | "history" | "historyDetail";
+
+/**
+ * Nya flödet: arket öppnas av sig självt med dagens gratis auto-förslag.
+ * Ägs av app/components/firstSession/AiReveal.tsx.
+ */
+export type PickReveal = {
+  /** Förhämtat svar (då hoppas "tänker" över), annars null. */
+  ready: PickResponse | null;
+  /** Hämtar auto-förslaget (delar löfte/cache med förhämtningen). */
+  load: () => Promise<PickResponse>;
+  /** Affischer för "tänker"-skanningen (det användaren gillade i leken). */
+  posters: (string | null)[];
+  /** Antal gillade — "Läser dina N gilla …". */
+  likes: number;
+  /** Förslaget visas (funnel ai_auto_ok). */
+  onShown?: (res: Extract<PickResponse, { ok: true }>) => void;
+  /** "Spara kvällens film" — titeln är redan sparad i watchlisten när den anropas. */
+  onSaved: (item: PickItem, quota: PickQuota | null) => void;
+  /** Funktionen är avstängd för användaren (403) — steget hoppar vidare. */
+  onDisabled?: () => void;
+  /** Förslaget i huvudplatsen ändrades (nytt svar via chips/följdfråga eller inbytt alternativ). */
+  onPickChange?: (item: PickItem) => void;
+};
 type ErrorKind = "no_candidates" | "unavailable" | "disabled";
 type Query = { prompt?: string; chips?: PickChipId[]; mediaFilter: "both" | "movie" | "tv" };
 
@@ -120,6 +161,7 @@ type Turn = {
   reason: string;
 };
 
+// Etiketterna (pick.chips.*): Lättare / Kortare / Spänning / Överraska mig.
 const CHIPS: { id: PickChipId; icon: LucideIcon }[] = [
   { id: "light", icon: Smile },
   { id: "short", icon: Clock },
@@ -137,8 +179,11 @@ const VIEW_FADE = { duration: 0.16, ease: "easeOut" as const };
 /** Hur många tidigare turer som syns hopfällda ovanför det aktuella förslaget. */
 const THREAD_ROWS = 2;
 
-/** Snabbsvaren under tråden — max fyra, i den här ordningen. */
-const QUICK_REPLIES: readonly PickQuickReply[] = ["seen", "shorter", "lighter", "similar"];
+/** Snabbsvaren under tråden, i den här ordningen (raden scrollar i sidled). */
+const QUICK_REPLIES: readonly PickQuickReply[] = ["lighter", "shorter", "surprise", "seen", "similar"];
+
+/** Chipstil för AI-arket (snabbval och snabbsvar). */
+const chipClass = `shrink-0 whitespace-nowrap rounded-full border border-cyan-200/35 bg-cyan-400/[0.07] text-cyan-50 transition hover:border-cyan-200/60 hover:bg-cyan-400/[0.12] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 ${focusRing}`;
 
 /** pendingScroll-värde: scrolla så att den aktuella turen börjar överst. */
 const SCROLL_TO_CURRENT = -1;
@@ -224,12 +269,16 @@ export default function PickSheet({
   open,
   onClose,
   initialQuota,
+  reveal,
 }: {
   open: boolean;
   onClose: () => void;
   initialQuota: PickQuota | null;
+  /** Nya flödet: öppna med dagens auto-förslag (se PickReveal). */
+  reveal?: PickReveal | null;
 }) {
   const t = useTranslations("pick");
+  const t2 = useTranslations("pick2");
   const tu = useTranslations("upsell");
   const locale = useLocale();
   const router = useRouter();
@@ -274,6 +323,10 @@ export default function PickSheet({
   const [unlocked, setUnlocked] = useState<number | null>(null);
 
   const [loadingStep, setLoadingStep] = useState(0);
+  // Turen vars svar skrivs fram just nu (bara nya svar — aldrig historik).
+  const [typingId, setTypingId] = useState<string | null>(null);
+  const stopTyping = useCallback(() => setTypingId(null), []);
+  const [savingTonight, setSavingTonight] = useState(false);
 
   // Sessionstillstånd (nollställs vid varje öppning)
   const sessionId = useRef<string>("");
@@ -320,10 +373,57 @@ export default function PickSheet({
     setText("");
     setReply("");
     setScrollTick(null);
+    setTypingId(null);
+    setSavingTonight(false);
 
     const q = initialQuota;
     setQuota(q);
-    if (q && q.totalLeft <= 0) goPaywall(q);
+    if (reveal) {
+      // Nya flödet: dagens gratis auto-förslag. Förhämtat → direkt till svaret
+      // (som ändå skrivs fram), annars syns "tänker" tills det kommer.
+      const applyAuto = (res: Extract<PickResponse, { ok: true }>) => {
+        if (res.sessionId && /^[A-Za-z0-9_-]{1,64}$/.test(res.sessionId)) sessionId.current = res.sessionId;
+        shownIds.current = Array.from(new Set([res.pick, ...res.alternatives].map((x) => x.tmdbId)));
+        lastQuery.current = { mediaFilter };
+        lastAsk.current = { kind: "auto" };
+        const turn: Turn = {
+          id: res.requestId || "local-auto",
+          ask: { kind: "auto" },
+          pick: res.pick,
+          main: res.pick,
+          alts: res.alternatives.slice(0, 2),
+          reason: res.reason,
+        };
+        setTurns([turn]);
+        setTypingId(turn.id);
+        if (res.quota) setQuota(res.quota);
+        pendingScroll.current = 0;
+        go("result");
+        trackPickEvent("auto_ok", { tmdbId: res.pick.tmdbId, fromSaved: res.pick.fromSaved });
+        reveal.onShown?.(res);
+      };
+      if (reveal.ready?.ok) {
+        applyAuto(reveal.ready);
+      } else {
+        go("thinking");
+        void reveal.load().then((res) => {
+          if (seq !== requestSeq.current) return;
+          if (res.ok) {
+            applyAuto(res);
+            return;
+          }
+          if (res.quota) setQuota(res.quota);
+          if (res.error === "disabled") {
+            reveal.onDisabled?.();
+            return;
+          }
+          // Inget auto-förslag (dagens försök slut, nätet …): vanliga frågan.
+          const qq = res.quota ?? q;
+          if (qq && qq.totalLeft <= 0) goPaywall(qq);
+          else go("ask");
+        });
+      }
+    } else if (q && q.totalLeft <= 0) goPaywall(q);
     else go("ask");
 
     void getPickStatus({ fresh: true }).then((fresh) => {
@@ -361,7 +461,7 @@ export default function PickSheet({
 
   /* ----- roterande statusrad under laddning ----- */
   useEffect(() => {
-    if (view !== "loading") return;
+    if (view !== "loading" && view !== "thinking") return;
     setLoadingStep(0);
     const id = window.setInterval(
       () => setLoadingStep((s) => Math.min(s + 1, LOADING_KEYS.length - 1)),
@@ -425,6 +525,7 @@ export default function PickSheet({
           reason: res.reason,
         };
         setTurns((prev) => [...prev, turn]);
+        setTypingId(turn.id);
         setPendingAsk(null);
         // Premium-nudge: en gång per arksession, aldrig för premium.
         if (!res.quota.premium && !nudgeUsed.current) {
@@ -470,6 +571,21 @@ export default function PickSheet({
   }, [scrollTick]);
 
   const current = turns.length > 0 ? turns[turns.length - 1] : null;
+
+  // Nya flödet: berätta för stegets ägare vilket förslag som gäller just nu
+  // (spara-arket och notisfrågan läser det).
+  const revealRef = useRef(reveal);
+  useEffect(() => {
+    revealRef.current = reveal;
+  }, [reveal]);
+  const currentMain = current?.main ?? null;
+  const currentMainKey = currentMain ? itemKey(currentMain) : null;
+  useEffect(() => {
+    if (!open || !currentMain) return;
+    revealRef.current?.onPickChange?.(currentMain);
+    // Bara när titeln i huvudplatsen byts (nyckeln), inte vid varje ny objektreferens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentMainKey]);
 
   const onChip = (id: PickChipId) => {
     trackPickEvent("chip", { chip: id });
@@ -563,9 +679,9 @@ export default function PickSheet({
   );
 
   const saveItem = useCallback(
-    async (item: PickItem, from: "thread" | "history") => {
+    async (item: PickItem, from: "thread" | "history" | "reveal"): Promise<boolean> => {
       const key = itemKey(item);
-      if (savingRef.current) return;
+      if (savingRef.current) return false;
       savingRef.current = true;
       setSavingKey(key);
       try {
@@ -585,8 +701,10 @@ export default function PickSheet({
         setSavedKeys((s) => new Set(s).add(key));
         trackPickEvent("save", { tmdbId: item.tmdbId, fromSaved: item.fromSaved, from });
         notify(t("savedToast"));
+        return true;
       } catch {
         notify(t("saveFailed"));
+        return false;
       } finally {
         savingRef.current = false;
         setSavingKey(null);
@@ -594,6 +712,21 @@ export default function PickSheet({
     },
     [t]
   );
+
+  /**
+   * "Spara kvällens film" (reveal): samma väg som detaljarkets Spara
+   * (/api/watchlist/like) — redan sparad räcker. Sedan tar flödets ägare över.
+   */
+  const onSaveTonight = async () => {
+    if (!reveal || !current || savingTonight) return;
+    const item = current.main;
+    setSavingTonight(true);
+    const ok = isSaved(item) ? true : await saveItem(item, "reveal");
+    setSavingTonight(false);
+    if (!ok) return;
+    trackPickEvent("auto_save", { tmdbId: item.tmdbId, fromSaved: item.fromSaved });
+    reveal.onSaved(item, quota);
+  };
 
   const openService = (item: PickItem, provider: string, from: "thread" | "history") =>
     trackPickEvent("open_service", { tmdbId: item.tmdbId, provider, fromSaved: item.fromSaved, from });
@@ -718,14 +851,32 @@ export default function PickSheet({
   if (typeof document === "undefined") return null;
 
   const premium = Boolean(quota?.premium);
-  const monthly = quota?.premiumMonthly ?? 20;
+  const unlimited = Boolean(quota?.unlimited ?? quota?.premium);
   const rewardPicks = quota?.rewardPicks ?? 3;
-  const showQuotaLine = quota !== null && quota.totalLeft <= 1;
+  // Premium ser aldrig en siffra (det dolda dygnstaket), bara "Obegränsat".
+  const showQuotaLine = quota !== null && !unlimited && quota.totalLeft <= 1;
   const inHistory = view === "history" || view === "historyDetail";
+  const autoLabel = t2("thread.auto");
 
   const quotaLine = showQuotaLine ? (
     <p className="text-center text-xs text-white/45">{t("quotaLeft", { count: Math.max(0, quota.totalLeft) })}</p>
   ) : null;
+
+  /** Kort kvotetikett i skrivradens fot: "Obegränsat med Premium" / "N AI-val kvar". */
+  const quotaLabel = quota
+    ? unlimited
+      ? t2("quota.unlimited")
+      : t2("quota.left", { count: Math.max(0, quota.totalLeft) })
+    : null;
+
+  // "Tänker": det användaren gillat (reveal: leken; annars watchlistens cache).
+  // Läses bara medan AI:n tänker (localStorage, ingen nätverkstrafik).
+  const thinking = view === "loading" || view === "thinking";
+  const thinkPosters: (string | null)[] = !thinking
+    ? []
+    : reveal
+      ? reveal.posters
+      : (readCachedWatchlist() ?? []).slice(0, 5).map((w) => w.posterUrl);
 
   /** Tidigare turer som hopfällda rader; ett tryck fäller ut kortet på plats. */
   const threadRows = (list: Turn[]) =>
@@ -761,7 +912,7 @@ export default function PickSheet({
               </button>
               {expanded ? (
                 <div id={panelId} className="space-y-2.5 px-3 pb-3 pt-1">
-                  <AskBubble text={askText(tn.ask, t)} lines={3} />
+                  {tn.ask.kind === "auto" ? null : <AskBubble text={askText(tn.ask, t, autoLabel)} lines={3} />}
                   <PickCard
                     key={itemKey(tn.main)}
                     size="compact"
@@ -786,7 +937,7 @@ export default function PickSheet({
 
   // Första frågan. När tråden har turer används skrivraden i stället.
   const askView = (
-    <div className="space-y-4">
+    <div className="nwai-rise space-y-4">
       <p className="text-sm leading-relaxed text-white/55">{t("subtitle")}</p>
 
       {unlocked !== null ? (
@@ -801,9 +952,9 @@ export default function PickSheet({
             key={id}
             type="button"
             onClick={() => onChip(id)}
-            className={`flex min-h-12 items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-sm font-medium text-white/85 transition hover:border-white/20 hover:bg-white/[0.08] active:scale-[0.98] ${focusRing}`}
+            className={`flex min-h-12 items-center gap-2.5 rounded-2xl border border-cyan-200/25 bg-cyan-400/[0.06] px-4 py-3 text-left text-sm font-semibold text-cyan-50 transition hover:border-cyan-200/50 hover:bg-cyan-400/[0.11] active:scale-[0.98] ${focusRing}`}
           >
-            <Icon className="h-4 w-4 shrink-0 text-white/50" aria-hidden />
+            <Icon className="h-4 w-4 shrink-0 text-violet-300" aria-hidden />
             {t(`chips.${id}`)}
           </button>
         ))}
@@ -817,13 +968,13 @@ export default function PickSheet({
           enterKeyHint="send"
           placeholder={t("inputPlaceholder")}
           aria-label={t("inputAria")}
-          className="h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[16px] text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+          className="h-12 min-w-0 flex-1 rounded-full border border-cyan-200/25 bg-white/[0.04] px-5 text-[16px] text-white placeholder:text-white/35 focus:border-cyan-200/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
         />
         <button
           type="submit"
           disabled={!text.trim()}
           aria-label={t("send")}
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-neutral-950 transition hover:bg-cyan-300 active:scale-95 disabled:bg-white/10 disabled:text-white/35 disabled:active:scale-100 ${focusRing}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${aiGradientBg} text-[#0b0b10] transition active:scale-95 disabled:bg-none disabled:bg-white/10 disabled:text-white/35 disabled:active:scale-100 ${focusRing}`}
         >
           <ArrowUp className="h-5 w-5" strokeWidth={2.5} aria-hidden />
         </button>
@@ -835,45 +986,29 @@ export default function PickSheet({
       {quota && !premium && quota.welcomeLeft > 1 && quota.totalLeft > 1 ? (
         <p className="text-center text-xs text-white/55">{t("welcomeLeft", { count: quota.welcomeLeft })}</p>
       ) : null}
+      {unlimited ? <p className="text-center text-xs text-violet-200/70">{t2("quota.unlimited")}</p> : null}
       {quota && quota.totalLeft > 0 ? quotaLine : null}
     </div>
   );
 
+  // Första frågans laddning och auto-förslaget: AI:n "tänker" synligt —
+  // gillade affischer skannas medan statusraden byter text.
   const loadingView = (
-    <div aria-busy="true" aria-label={t("loadingAria")} className="space-y-3">
+    <div className="space-y-3">
       {threadRows(turns.slice(-THREAD_ROWS))}
-      {pendingAsk ? <AskBubble text={askText(pendingAsk, t)} /> : null}
-      <div className="flex gap-4">
-        <Pulse className="aspect-[2/3] w-[92px] shrink-0 rounded-xl" />
-        <div className="min-w-0 flex-1 space-y-2.5 pt-1">
-          <Pulse className="h-4 w-28 rounded-full" />
-          <Pulse className="h-6 w-4/5" />
-          <Pulse className="h-3.5 w-3/5" />
-          <div className="flex gap-1.5 pt-1">
-            <Pulse className="h-7 w-7" />
-            <Pulse className="h-7 w-7" />
-          </div>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Pulse className="h-3.5 w-full" />
-        <Pulse className="h-3.5 w-11/12" />
-      </div>
-      <Pulse className="h-12 w-full rounded-2xl" />
-      <div className="flex h-5 items-center justify-center gap-2 text-sm text-white/55" aria-live="polite">
-        <Sparkles className="h-3.5 w-3.5 text-white/40" aria-hidden />
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={loadingStep}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={VIEW_FADE}
-          >
-            {t(`loading.${LOADING_KEYS[loadingStep]}`)}
-          </motion.span>
-        </AnimatePresence>
-      </div>
+      {pendingAsk ? <AskBubble text={askText(pendingAsk, t, autoLabel)} /> : null}
+      <ThinkingScan
+        posters={thinkPosters}
+        label={t("loadingAria")}
+        title={
+          view === "thinking" && reveal
+            ? reveal.likes > 0
+              ? t2("thinking.reading", { count: reveal.likes })
+              : t2("thinking.title")
+            : t(`loading.${LOADING_KEYS[loadingStep]}`)
+        }
+        sub={view === "thinking" ? t(`loading.${LOADING_KEYS[loadingStep]}`) : t2("thinking.sub")}
+      />
     </div>
   );
 
@@ -894,7 +1029,7 @@ export default function PickSheet({
 
       {following && pendingAsk ? (
         <div className="space-y-3" aria-busy="true">
-          <AskBubble text={askText(pendingAsk, t)} lines={3} />
+          <AskBubble text={askText(pendingAsk, t, autoLabel)} lines={3} />
           <TypingReply label={t("followUp.typingAria")} />
           <div className="flex gap-3">
             <Pulse className="aspect-[2/3] w-16 shrink-0 rounded-lg" />
@@ -907,11 +1042,13 @@ export default function PickSheet({
         </div>
       ) : current ? (
         <div data-pick-current className="space-y-3">
-          <AskBubble text={askText(current.ask, t)} lines={3} />
-          <AiReply text={current.reason} />
+          {current.ask.kind === "auto" ? null : <AskBubble text={askText(current.ask, t, autoLabel)} lines={3} />}
+          <AiReply text={current.reason} typing={typingId === current.id} onTyped={stopTyping} />
+          <div className="nwai-rise nwai-glow rounded-[20px] bg-white/[0.04] p-3.5">
           <PickCard
             size="full"
             titleId="pick-result-title"
+            eyebrow={t2("card.eyebrow")}
             main={current.main}
             pickKey={itemKey(current.pick)}
             reason={current.reason}
@@ -924,6 +1061,7 @@ export default function PickSheet({
             onOpenService={(it, p) => openService(it, p, "thread")}
             onOpenDetail={(it) => openDetail(it, "thread")}
           />
+          </div>
 
           <button
             type="button"
@@ -934,8 +1072,6 @@ export default function PickSheet({
             {t("another")}
           </button>
 
-          {quotaLine}
-
           {nudge && !premium ? (
             <button
               type="button"
@@ -943,7 +1079,7 @@ export default function PickSheet({
               className={`mx-auto flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-center text-xs text-white/45 transition hover:text-white/75 ${focusRing}`}
             >
               <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {t("premiumNudge", { count: monthly })}
+              {t("premiumNudge")}
             </button>
           ) : null}
         </div>
@@ -967,17 +1103,21 @@ export default function PickSheet({
         aria-label={t("followUp.quickAria")}
         className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {QUICK_REPLIES.map((q) => (
-          <button
-            key={q}
-            type="button"
-            disabled={loadingReply}
-            onClick={() => sendFollowUp(t(`followUp.quick.${q}`), q)}
-            className={`min-h-10 shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-3.5 text-[13px] font-medium text-white/65 transition hover:bg-white/[0.07] hover:text-white/85 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 ${focusRing}`}
-          >
-            {t(`followUp.quick.${q}`)}
-          </button>
-        ))}
+        {QUICK_REPLIES.map((q) => {
+          // "Överraska mig" återanvänder snabbvalets etikett (chips.surprise).
+          const label = q === "surprise" ? t("chips.surprise") : t(`followUp.quick.${q}`);
+          return (
+            <button
+              key={q}
+              type="button"
+              disabled={loadingReply}
+              onClick={() => sendFollowUp(label, q)}
+              className={`min-h-10 px-3.5 text-[13px] font-semibold ${chipClass}`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
       <form onSubmit={onReplySubmit} className="flex items-center gap-2">
         <input
@@ -991,17 +1131,33 @@ export default function PickSheet({
           autoComplete="off"
           placeholder={t("followUp.placeholder")}
           aria-label={t("followUp.aria")}
-          className="h-11 min-w-0 flex-1 text-ellipsis rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-[16px] text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+          className="h-11 min-w-0 flex-1 text-ellipsis rounded-full border border-cyan-200/25 bg-white/[0.04] px-4 text-[16px] text-white placeholder:text-white/35 focus:border-cyan-200/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
         />
         <button
           type="submit"
           disabled={!reply.trim() || loadingReply}
           aria-label={t("send")}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-neutral-950 transition hover:bg-cyan-300 active:scale-95 disabled:bg-white/10 disabled:text-white/35 disabled:active:scale-100 ${focusRing}`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${aiGradientBg} text-[#0b0b10] transition active:scale-95 disabled:bg-none disabled:bg-white/10 disabled:text-white/35 disabled:active:scale-100 ${focusRing}`}
         >
           <ArrowUp className="h-5 w-5" strokeWidth={2.5} aria-hidden />
         </button>
       </form>
+      {/* Kvoten + (nya flödet) "Spara kvällens film". */}
+      {quotaLabel || (reveal && current) ? (
+        <div className="mt-2 flex min-h-[46px] items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-xs text-white/45">{quotaLabel}</span>
+          {reveal && current ? (
+            <button
+              type="button"
+              onClick={() => void onSaveTonight()}
+              disabled={savingTonight || loadingReply}
+              className={`flex h-[46px] shrink-0 items-center rounded-[14px] bg-neutral-100 px-[18px] text-[15px] font-extrabold text-neutral-950 transition hover:bg-white active:scale-[0.98] disabled:opacity-60 ${focusRing}`}
+            >
+              {t2("saveTonight")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -1009,13 +1165,13 @@ export default function PickSheet({
   const rewardsLeft = quota?.rewardsLeftToday ?? 1;
   const paywallView = (
     <div className="space-y-4 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-400/20">
-        <Sparkles className="h-7 w-7" aria-hidden />
+      <div className="mx-auto flex h-14 w-14 items-center justify-center">
+        <AiMark size={52} />
       </div>
       <div>
         <h3 className="text-lg font-semibold text-white">{t("paywall.title")}</h3>
         <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-white/60">
-          {premium ? t("paywall.bodyPremiumUsed", { count: monthly }) : t("paywall.bodyFree")}
+          {premium ? t("paywall.bodyPremiumUsed") : t("paywall.bodyFree")}
         </p>
       </div>
 
@@ -1025,7 +1181,7 @@ export default function PickSheet({
             type="button"
             onClick={() => void onWatchAd()}
             disabled={adBusy}
-            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 text-[15px] font-semibold text-neutral-950 transition hover:bg-cyan-300 active:scale-[0.98] disabled:opacity-60 ${focusRing}`}
+            className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl ${aiGradientBg} px-4 text-[15px] font-semibold text-neutral-950 transition active:scale-[0.98] disabled:opacity-60 ${focusRing}`}
           >
             <PlayCircle className="h-5 w-5" aria-hidden />
             {adBusy ? t("paywall.watchAdBusy") : t("paywall.watchAd", { count: rewardPicks })}
@@ -1049,11 +1205,11 @@ export default function PickSheet({
             className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold transition active:scale-[0.98] ${focusRing} ${
               canAd
                 ? "border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                : "bg-cyan-400 text-neutral-950 hover:bg-cyan-300"
+                : `${aiGradientBg} text-neutral-950`
             }`}
           >
             <Crown className="h-4 w-4 shrink-0" aria-hidden />
-            <span>{buying ? tu("opening") : t("paywall.premiumCta", { count: monthly })}</span>
+            <span>{buying ? tu("opening") : t("paywall.premiumCta")}</span>
           </button>
         ) : (
           <p className="text-xs text-white/45">{t("paywall.resetNote")}</p>
@@ -1183,7 +1339,7 @@ export default function PickSheet({
     ? threadView
     : view === "ask"
       ? askView
-      : view === "loading"
+      : view === "loading" || view === "thinking"
         ? loadingView
         : view === "paywall"
           ? paywallView
@@ -1248,8 +1404,9 @@ export default function PickSheet({
             aria-modal="true"
             aria-labelledby="pick-sheet-title"
             tabIndex={-1}
-            className={`relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-[28px] border-t border-white/10 bg-neutral-900 shadow-[0_-18px_60px_rgba(0,0,0,0.6)] outline-none ${
-              inThread ? "h-[88dvh]" : ""
+            // Tunn cyan→violett kant (1 px gradient bakom ytan) + svag violett glöd.
+            className={`relative flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-[30px] bg-[linear-gradient(160deg,rgba(34,211,238,0.85),rgba(167,139,250,0.75)_45%,rgba(34,211,238,0.15)_80%)] px-px pt-px shadow-[0_-24px_90px_rgba(124,58,237,0.32)] outline-none ${
+              inThread || view === "thinking" ? "h-[88dvh]" : ""
             }`}
             // Med tangentbordet uppe: arket får hela den synliga höjden (minus
             // en liten glipa) i stället för 88dvh, som på iOS inte krymper.
@@ -1271,6 +1428,9 @@ export default function PickSheet({
               if (info.offset.y > 90 || info.velocity.y > 600) requestClose();
             }}
           >
+            <AiStyles />
+            {/* Glasytan innanför kanten. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[29px] bg-[radial-gradient(130%_55%_at_50%_0%,rgba(16,32,42,0.97)_0%,rgba(11,11,16,0.97)_55%,rgba(9,9,12,0.98)_100%)]">
             {/* Draghandtag + rubrik: hela den här ytan drar arket (innehållet
                 nedanför scrollar fritt och tar inte drag-gesten). */}
             <div
@@ -1278,7 +1438,7 @@ export default function PickSheet({
               onPointerDown={(e) => dragControls.start(e)}
             >
               <div className="flex justify-center pb-1 pt-2.5">
-                <span className="h-1 w-9 rounded-full bg-white/20" />
+                <span className="h-1 w-[38px] rounded-full bg-white/[0.22]" />
               </div>
               <div className="flex items-center gap-1 px-5 pb-2">
                 {inHistory ? (
@@ -1292,12 +1452,20 @@ export default function PickSheet({
                     <ChevronLeft className="h-5 w-5" aria-hidden />
                   </button>
                 ) : (
-                  <Sparkles className="mr-1 h-5 w-5 text-cyan-300" aria-hidden />
+                  <span className="mr-1.5">
+                    <AiMark />
+                  </span>
                 )}
-                <h2 id="pick-sheet-title" className="min-w-0 flex-1 truncate text-[17px] font-semibold text-white">
-                  {headerTitle}
-                </h2>
-                {!inHistory && view !== "loading" ? (
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="pick-sheet-title"
+                    className={`truncate text-[17px] font-extrabold tracking-[-0.01em] ${inHistory ? "text-white" : aiGradientText}`}
+                  >
+                    {headerTitle}
+                  </h2>
+                  {inHistory ? null : <p className="truncate text-xs text-white/45">{t2("header.subtitle")}</p>}
+                </div>
+                {!inHistory && view !== "loading" && view !== "thinking" ? (
                   <button
                     type="button"
                     onClick={openHistory}
@@ -1342,6 +1510,7 @@ export default function PickSheet({
             </div>
 
             {inThread ? composer : null}
+            </div>
           </motion.div>
         </div>
       ) : null}

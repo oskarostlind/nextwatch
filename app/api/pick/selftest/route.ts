@@ -1,7 +1,7 @@
 // app/api/pick/selftest/route.ts
 //
 // GET /api/pick/selftest?uid=…&prompt=…&chips=light,short&media=both&exclude=1,2&lang=sv&session=abc
-//     [&followUpOf=<requestId>&focus=tv:1408&markSeen=1]
+//     [&followUpOf=<requestId>&focus=tv:1408&markSeen=1] [&auto=1]
 //
 // Kör HELA "Välj åt mig"-pipelinen för en användare utan att debitera
 // (loggas med source 'selftest') och returnerar PickResponse + debug
@@ -73,6 +73,8 @@ export async function GET(req: Request) {
     followUpOf: sp.get("followUpOf") || undefined,
     focus: parseFocus(sp.get("focus")),
     markSeen: sp.get("markSeen") === "1" || sp.get("markSeen") === "true" ? true : undefined,
+    // &auto=1: auto-förslagets prompt (sparade likes först) — loggas ändå som selftest.
+    auto: sp.get("auto") === "1" || sp.get("auto") === "true" ? true : undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "bad_request", issues: parsed.error.issues }, { status: 400 });

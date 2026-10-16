@@ -1,6 +1,8 @@
 "use client";
 
-// "Har du konto? Logga in" — diskret länk högst upp i leken för gäster.
+// "Har du konto? Logga in" — diskret länk högst upp i leken för ALLA gäster
+// (inte bara nya enheter: efter utloggning i appen skapas en gäst tyst, och
+// utan länken fanns ingen synlig väg tillbaka till kontot).
 // Sedan kallstarten (docs/nya-flodet.md) visar appen aldrig startsidan, så den
 // här länken är vägen in för den som redan har ett konto (t.ex. efter en
 // ominstallation eller utloggning). Inloggning byter nw_uid, och då avslutar
@@ -21,7 +23,22 @@ export default function GuestLoginLink() {
   useEffect(() => {
     let cancelled = false;
     void getAccountStatus().then((s) => {
-      if (!cancelled) setGuest(Boolean(s && s.hasProfile && !s.hasAccount));
+      if (cancelled) return;
+      const isGuestNow = Boolean(s && s.hasProfile && !s.hasAccount);
+      setGuest(isGuestNow);
+      // Efter "Logga ut" (LogoutButton → /?login=1 → AuthGate → /swipe?login=1)
+      // öppnas inloggningen direkt: den som loggar ut vill nästan alltid logga in
+      // igen, ofta på ett annat konto.
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("login") === "1") {
+          url.searchParams.delete("login");
+          window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+          if (isGuestNow) setOpen(true);
+        }
+      } catch {
+        /* ignorera */
+      }
     });
     return () => {
       cancelled = true;

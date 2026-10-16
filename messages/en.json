@@ -529,6 +529,14 @@
     "push": {
       "rewardTitle": "Your friend swiped ✦",
       "rewardBody": "You both got {picks} AI picks. Let AI choose tonight's movie!"
+    },
+    "later": {
+      "title": "Invite a friend with a link",
+      "inlineTitle": "Share a link – works for anyone",
+      "body": "Your friend swipes right in the browser – no app or account needed. Your likes come along, and when you both like the same title it's a match.",
+      "reward": "You both get {picks} AI picks when your friend has swiped {votes} cards.",
+      "share": "Share link",
+      "copy": "Copy"
     }
   },
   "landing": {

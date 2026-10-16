@@ -15,6 +15,7 @@ import { GROUP_ACTIVE_STEPS, GROUPS_START_STEPS } from "@/lib/tours/coachSteps";
 import type { PublicMember } from "../GroupClient";
 import { useTranslations } from "next-intl";
 import { nudgeSignup } from "@/lib/signupNudge";
+import InviteLinkPanel from "./InviteLinkPanel";
 
 type GroupResponse = {
   code?: string;
@@ -445,6 +446,7 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
         <Modal open={inviteOpen} onClose={() => setInviteOpen(false)}>
           <div className="p-2">
             <h3 className="mb-4 text-xl font-bold">{t("inviteFriendsHeading")}</h3>
+            <InviteLinkPanel variant="inline" />
             <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
               {friends.map((f) => (
                 <li key={f.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-3">
@@ -477,6 +479,15 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
   return (
     <div className="space-y-4" data-tour="group-join-create">
       {error && <div className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-400">{error}</div>}
+
+      {/* Bjud in med länk — samma som kortet i första sessionen, men alltid
+          här. Länken skapar gruppen åt dig, så vyn byter direkt. */}
+      <InviteLinkPanel
+        onGroupReady={(c) => {
+          setCode(c);
+          router.refresh();
+        }}
+      />
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
         <h3 className="mb-1 font-semibold">{t("joinGroupHeading")}</h3>
@@ -521,4 +532,4 @@ export default function GroupTab({ initialCode, initialRegion, initialMembers, i
       <CoachMarkTour tourId="groups-tour" steps={GROUPS_START_STEPS} />
     </div>
   );
-}
+}

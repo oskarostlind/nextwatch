@@ -1631,13 +1631,17 @@ function Front({
       {/* Med dockInset ligger knapparna över de nedersta ~30 px: titeln lyfts
           44 px (pb 16 → 60) och skrimmet blir högre och mörkare, så texten
           läses lika bra en bit upp på postern. */}
-      <div className={`pointer-events-none absolute inset-x-0 bottom-0 p-4 ${dockInset ? "pb-[3.75rem]" : ""}`}>
-        <div
-          className={`bg-gradient-to-t to-transparent ${
-            dockInset ? "h-40 from-black/95 via-black/70" : "h-28 from-black/90"
-          }`}
-        />
-        <div className="-mt-24 px-1">
+      {/* Skrimmet går kant till kant och ända ner till kortets underkant. Förr
+          låg gradienten INUTI p-4-rutan och slutade ovanför knapparna — en
+          mörk ruta med hårda kanter och postern synlig runt om (syntes tydligt
+          på ljusa postrar, Oskar 2026-10-16). */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent px-5 pt-24 ${
+          dockInset ? "from-black/95 via-black/65 pb-[3.75rem]" : "from-black/90 via-black/45 pb-4"
+        }`}
+      >
+        {/* pr-14: betygsbrickan ligger nere till höger på samma höjd. */}
+        <div className="pr-14">
           <div className="text-lg font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
             {card.title}
             {card.year ? <span className="ml-2 opacity-80">({card.year})</span> : null}

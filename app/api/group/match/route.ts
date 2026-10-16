@@ -156,9 +156,11 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Gäster heter "Gäst"/"Guest" — "Gäst och Gäst hade den redan i sina
+    // watchlists" (länkgruppen i nya flödet, 2026-10-16) säger ingenting.
     const savedBy = savers
       .map((s) => s.user.profile?.displayName?.trim())
-      .filter((n): n is string => Boolean(n));
+      .filter((n): n is string => Boolean(n) && !/^(gäst|guest)$/i.test(n as string));
 
     const match = details
       ? { ...details, providers: toProviderLinks(details, showPaidOptions) }

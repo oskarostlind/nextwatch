@@ -1485,7 +1485,8 @@
       "tap": "Tryck",
       "tapSub": "Handling & var den streamas",
       "aria": "Dra kortet åt höger för att gilla, åt vänster för nej, uppåt om du redan sett den. Tryck på kortet för att vända det och se handling och var den streamas."
-    }
+    },
+    "availableOn": "Finns på {service}"
   },
   "swipeLimit": {
     "body": "{limit} swipes per dag ingår gratis. Kom igen imorgon – eller bli Premium för obegränsat swipande.",

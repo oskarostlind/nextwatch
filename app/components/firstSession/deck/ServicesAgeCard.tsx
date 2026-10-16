@@ -41,7 +41,7 @@ const PROVIDERS = [
 type AgeBand = "u15" | "15_17" | "18p";
 const AGE_BANDS: AgeBand[] = ["u15", "15_17", "18p"];
 
-export default function ServicesAgeCard({ onDone }: { onDone: (reloadDeck: boolean) => void }) {
+export default function ServicesAgeCard({ onDone }: { onDone: (reloadDeck: boolean, providers?: string[]) => void }) {
   const t = useTranslations("fsDeck");
   const [selected, setSelected] = useState<string[]>([]);
   const [age, setAge] = useState<AgeBand | null>(null);
@@ -105,7 +105,7 @@ export default function ServicesAgeCard({ onDone }: { onDone: (reloadDeck: boole
       funnel("provider_saved", { count: selected.length, as: "card" });
       notify(t("svcSaved", { count: selected.length }));
       markServicesCardDone();
-      onDone(true);
+      onDone(true, selected);
     } catch {
       setError(true);
       setSaving(false);
@@ -156,16 +156,18 @@ export default function ServicesAgeCard({ onDone }: { onDone: (reloadDeck: boole
                 aria-pressed={on}
                 onClick={() => toggle(p)}
                 className={[
-                  "relative flex h-[52px] items-center justify-center gap-1.5 rounded-[14px] border px-1.5 text-[12.5px] font-semibold text-neutral-100 transition-colors active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
+                  "relative flex h-[52px] items-center justify-center gap-1 rounded-[14px] border px-1 text-[12px] font-semibold tracking-[-0.01em] text-neutral-100 transition-colors active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
                   on ? "border-[#22d3ee] bg-[rgba(34,211,238,0.14)]" : "border-white/10 bg-[#1b1b1e]",
                 ].join(" ")}
               >
                 {src ? (
-                  <span className="relative inline-flex h-6 w-6 shrink-0 overflow-hidden rounded-md">
-                    <Image src={src} alt="" width={24} height={24} className="h-full w-full object-cover" unoptimized />
+                  <span className="relative inline-flex h-5 w-5 shrink-0 overflow-hidden rounded-md">
+                    <Image src={src} alt="" width={20} height={20} className="h-full w-full object-cover" unoptimized />
                   </span>
                 ) : null}
-                <span className="line-clamp-1 min-w-0 text-left leading-tight">{p}</span>
+                {/* 390 px bred skärm: "SkyShowtime" och "Prime Video" klipptes med
+                    line-clamp-1 — två rader får plats i 52 px. */}
+                <span className="line-clamp-2 min-w-0 text-left leading-[1.15]">{p}</span>
                 {on ? (
                   <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-[#22d3ee] text-neutral-950">
                     <Check className="h-2.5 w-2.5" strokeWidth={3.5} />

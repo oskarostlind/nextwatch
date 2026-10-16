@@ -1485,7 +1485,8 @@
       "tap": "Tap",
       "tapSub": "Plot & where to stream",
       "aria": "Drag the card right to like it, left for nope, up if you've already seen it. Tap the card to flip it for the plot and where to stream it."
-    }
+    },
+    "availableOn": "On {service}"
   },
   "swipeLimit": {
     "body": "{limit} swipes a day are included for free. Come back tomorrow – or get Premium for unlimited swiping.",

@@ -5,8 +5,9 @@
 // som app/api/recs/unified/route.ts (se lib/unifiedRecs.ts).
 //
 // Trots namnet är utskicket inte längre dagligt per användare. Cron-schemat
-// ligger i Vercel-dashboarden (INTE i repot) och körs fortfarande varje dag —
-// takten bestäms här inne i stället, av två skäl:
+// ligger i vercel.json: en post per timme 06–21 UTC (Hobby tillåter bara
+// dagliga scheman, så varje timme är en egen post). Takten per användare
+// bestäms här inne, av två skäl:
 //   1. En push om dagen är för mycket. lastRecPushSentAt hindrar en ny
 //      recs-push inom NW_REC_PUSH_MIN_HOURS (default 60 h → 2–3 per vecka).
 //   2. Den som slutat använda appen ska inte ha ett filmtips utan en
@@ -18,9 +19,9 @@
 // vanligt dagligt tips med växlande vinkel, fredagens tre förslag eller en
 // påminnelse om något som legat länge i watchlisten.
 //
-// Valfritt läge NW_PUSH_HOURLY=1: då ska routen anropas varje timme (GitHub
-// Actions, se .github/workflows/push-cron.yml) och varje användare får sitt tips
-// i sin egen vanliga swipe-timme (lib/pushRecs/timing.ts). Utan env: som förut.
+// Läge NW_PUSH_HOURLY=1: varje användare får sitt tips i sin egen vanliga
+// swipe-timme (lib/pushRecs/timing.ts), med upp till två timmars marginal om
+// en körning uteblir. Utan env: alla får det vid NW_PUSH_DEFAULT_HOUR (19).
 // Har användaren valt en tid i notisfrågan (profiles.push_hour, nya flödet
 // 2026-10-15) vinner den över typvärdet — preferredPushHour() sköter det.
 export const runtime = "nodejs";
@@ -40,6 +41,9 @@ import {
   hourlyModeEnabled,
   preferredPushHour,
   stockholmParts,
+  defaultHour,
+  isWithinPushHour,
+  isSweepHour,
   weeklyPicksDue,
   type RecPushType,
 } from "@/lib/pushRecs";
@@ -268,7 +272,13 @@ export async function GET(req: Request) {
   // recs-körningen nedan. Tiden det tar äter av samma budget (deadline räknas
   // från startedAt), så en långsam sweep betyder färre filmtips den här
   // körningen — inte en kapad funktion: kön roterar på lastDailyRecAt.
-  const release = await sweepReleaseNotifications();
+  //
+  // Cronen körs nu varje timme 06–21 UTC; ingen ska väckas av ett släpp-pling
+  // klockan sju en lördag. Utanför fönstret ligger de kvar till nästa körning.
+  const sweepHour = stockholmParts(new Date(now)).hour;
+  const release = isSweepHour(sweepHour)
+    ? await sweepReleaseNotifications()
+    : { sent: 0, refreshed: 0, failed: 0 };
   // "Bevaka": titlar som inte gick att streama när användaren tryckte —
   // pling när de finns på någon av hens tjänster (lib/streamFollows.ts).
   const stream = await sweepStreamFollows();
@@ -363,10 +373,12 @@ export async function GET(req: Request) {
         return;
       }
 
-      // ---- 1) Timgrind (bara NW_PUSH_HOURLY=1), FÖRE stämpeln ----
+      // ---- 1) Timgrind, FÖRE stämpeln ----
       // En användare som hoppas över här ska ligga kvar först i kön tills hens
-      // timme kommer, inte rotera bakåt.
-      if (hourly && (await preferredPushHour(user.id)) !== currentHour) {
+      // timme kommer, inte rotera bakåt. Utan timläge har alla standardtimmen —
+      // cronen anropas ändå varje timme, och då hade alla fått sitt tips 08:00.
+      const pushHour = hourly ? await preferredPushHour(user.id) : defaultHour();
+      if (!isWithinPushHour(pushHour, currentHour)) {
         hourSkipped++;
         return;
       }

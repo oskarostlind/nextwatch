@@ -7,9 +7,10 @@
 // Ett eget val i notisfrågan (profiles.push_hour, nya flödet 2026-10-15)
 // vinner över typvärdet.
 //
-// Per-användar-tid är AV som standard. Slå på med NW_PUSH_HOURLY=1 — då måste
-// cronen anropas varje timme (se .github/workflows/push-cron.yml), annars
-// träffar ingen sin timme.
+// Per-användar-tid är AV som standard. Slå på med NW_PUSH_HOURLY=1. Cronen
+// anropas varje timme 06–21 UTC av Vercel (vercel.json, en post per timme —
+// Hobby tillåter bara dagliga scheman). GitHub Actions användes först men kör
+// schemalagda jobb var 4–6:e timme i praktiken, så nästan alla fick 19.
 
 import { prisma } from "@/lib/prisma";
 
@@ -26,7 +27,19 @@ const MIN_DATA_POINTS = 8;
 const WINDOW_FROM = 8;
 const WINDOW_TO = 22;
 
-function defaultHour(): number {
+/**
+ * Hur många timmar EFTER sin timme en användare fortfarande får sitt tips.
+ * Cronen är inte punktlig (Vercel Hobby: "någon gång inom timmen", och ett
+ * enstaka anrop kan utebli) — utan marginal blir en missad körning en missad
+ * dag. Dubbla pushar hindras av tempospärren (NW_REC_PUSH_MIN_HOURS).
+ */
+const CATCHUP_HOURS = 2;
+/** Senaste timmen (inklusive) en filmtips- eller släpp-push får gå ut. */
+const LATEST_SEND_HOUR = 22;
+/** Tidigaste timmen för släpp-/bevakningsnotiser (de har ingen egen timme). */
+const EARLIEST_SWEEP_HOUR = 9;
+
+export function defaultHour(): number {
   const raw = process.env.NW_PUSH_DEFAULT_HOUR;
   if (raw == null || raw.trim() === "") return 19;
   const n = Number(raw);
@@ -82,6 +95,23 @@ export function modeHour(dates: Date[], fallback: number = defaultHour()): numbe
     }
   }
   return best;
+}
+
+/**
+ * Är det dags för en användare med timmen `preferred`? Sant från den timmen
+ * och CATCHUP_HOURS framåt, men aldrig efter LATEST_SEND_HOUR.
+ */
+export function isWithinPushHour(preferred: number, currentHour: number): boolean {
+  const last = Math.min(preferred + CATCHUP_HOURS, Math.max(preferred, LATEST_SEND_HOUR));
+  return currentHour >= preferred && currentHour <= last;
+}
+
+/**
+ * Får släpp-/bevakningssvepen skicka nu? De körs vid varje cronanrop, och
+ * utan grind gick "nu har den släppts" ut klockan tre på natten.
+ */
+export function isSweepHour(currentHour: number): boolean {
+  return currentHour >= EARLIEST_SWEEP_HOUR && currentHour <= LATEST_SEND_HOUR;
 }
 
 /** Timmarna användaren kan välja i notisfrågan (PushAskSheet, nya flödet). */

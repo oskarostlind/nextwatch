@@ -70,7 +70,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     const enterApp = () => {
       setStatus("authed");
-      router.replace("/swipe");
+      // Efter utloggning (?login=1) följer önskan om inloggning med in i leken.
+      const wantsLogin = new URLSearchParams(window.location.search).get("login") === "1";
+      router.replace(wantsLogin ? "/swipe?login=1" : "/swipe");
     };
 
     /** Appens kallstart. true = på väg in i leken; false = visa startsidan. */

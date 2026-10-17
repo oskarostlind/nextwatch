@@ -348,7 +348,7 @@ function allowFsTopMatch(): boolean {
   return true;
 }
 
-function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
+function toMatchItem(card: Card, showPaidOptions: boolean, services?: string[]): MatchOverlayItem {
   const groups = providerGroupsFor(card.providers, showPaidOptions);
   const providers: { name: string; url: string }[] = [];
   for (const g of groups) {
@@ -358,6 +358,13 @@ function toMatchItem(card: Card, showPaidOptions: boolean): MatchOverlayItem {
         providers.push({ name: p.provider_name, url });
       }
     }
+  }
+  // Matchrutans hjälteknapp är providers[0] — en tjänst användaren HAR ska stå
+  // först ("Kolla nu på Amazon Prime Video" för någon med Netflix + Max var fel).
+  const mine = serviceForCard(card.providers?.flatrate, services);
+  if (mine) {
+    const i = providers.findIndex((p) => serviceForCard([{ provider_name: p.name }], [mine]) === mine);
+    if (i > 0) providers.unshift(...providers.splice(i, 1));
   }
 
   const yearNum = card.year ? Number(card.year) : NaN;
@@ -452,8 +459,9 @@ let groupRefreshAttempted = false;
 
 export default function SwipePageClient({
   needsProviders = false,
+  myServices = [],
   me = null,
-}: { needsProviders?: boolean; me?: AvatarButtonUser | null } = {}) {
+}: { needsProviders?: boolean; myServices?: string[]; me?: AvatarButtonUser | null } = {}) {
   const t = useTranslations("swipe");
   const router = useRouter();
   const { showPaidOptions, mediaFilter } = useSwipeSettings();
@@ -546,9 +554,14 @@ export default function SwipePageClient({
   useEffect(() => setSvcCardDone(servicesCardDone()), []);
   const showServicesCard =
     fsInDeck && needsProviders && svcCardDone === false && fs.swipes >= FS_SERVICES_AT;
+  // Användarens tjänster → "Finns på {tjänst}" på kortets framsida (prototypen:
+  // "därefter märks varje kort med var det finns"). Uppdateras direkt när
+  // tjänstekortet sparas, utan att sidan laddas om.
+  const [services, setServices] = useState<string[]>(myServices);
   const onServicesCardDone = useCallback(
-    (reloadDeck: boolean) => {
+    (reloadDeck: boolean, picked?: string[]) => {
       setSvcCardDone(true);
+      if (picked?.length) setServices(picked);
       // Den cachade leken byggdes utan tjänstefilter/åldersgräns — bygg om den.
       if (reloadDeck) void retrySoloDeck();
     },
@@ -1019,15 +1032,16 @@ export default function SwipePageClient({
         </div>
       </div>
 
-      {/* Bara enheter i nya flödet (de har aldrig sett startsidan och dess
-          inloggning) — befintliga gäster har haft sin väg in sedan förut. */}
-      {mode === "individual" && fs.eligible ? <GuestLoginLink /> : null}
+      {/* Alla gäster (komponenten döljer sig själv för konton). Förr bara nya
+          enheter — men efter utloggning i appen skapas en gäst tyst och då
+          fanns ingen synlig inloggning alls (2026-10-16). */}
+      {mode === "individual" ? <GuestLoginLink /> : null}
       {fsInDeck ? <FsProgress swipes={fs.swipes} likes={fs.likes.length} /> : null}
 
       <MatchOverlay
         open={soloMatch !== null}
         variant="solo"
-        item={soloMatch ? toMatchItem(soloMatch, showPaidOptions) : null}
+        item={soloMatch ? toMatchItem(soloMatch, showPaidOptions, services) : null}
         evidence={soloMatch?.topMatch?.evidence}
         onClose={() => setSoloMatch(null)}
       />
@@ -1100,6 +1114,7 @@ export default function SwipePageClient({
                 key={card.id}
                 card={card}
                 depth={idx}
+                services={services}
                 top={
                   isTop
                     ? {
@@ -1136,7 +1151,7 @@ export default function SwipePageClient({
             );
           })}
           {leaving.map((l) => (
-            <DeckCard key={l.card.id} card={l.card} depth={0} leaving={l} />
+            <DeckCard key={l.card.id} card={l.card} depth={0} leaving={l} services={services} />
           ))}
           </div>
       ) : (
@@ -1234,11 +1249,13 @@ const DeckCard = memo(function DeckCard({
   depth,
   top,
   leaving,
+  services,
 }: {
   card: Card;
   depth: number;
   top?: TopCardProps;
   leaving?: LeavingCard;
+  services?: string[];
 }) {
   const d = leaving || top ? 0 : depth;
   const scale = d === 0 ? 1 : d === 1 ? 0.95 : 0.9;
@@ -1281,6 +1298,7 @@ const DeckCard = memo(function DeckCard({
           onFlip={top?.onFlip ?? noop}
           onShare={top?.onShare}
           dockInset
+          services={services}
         />
         <div
           aria-hidden
@@ -1367,11 +1385,14 @@ export function StaticCard({
   interactive = true,
   onShare,
   dockInset = false,
+  services,
 }: {
   card: Card;
   flipped: boolean;
   interactive?: boolean;
   onFlip: () => void;
+  /** Användarens tjänster. Satt → "Finns på {tjänst}" på framsidan (bara solo-leken). */
+  services?: string[];
   /** Öppnar "Tipsa en vän" för kortet. Bara meningsfullt på toppkortet. */
   onShare?: (card: Card) => void;
   /**
@@ -1413,7 +1434,7 @@ export function StaticCard({
         style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">
-          <Front card={card} flipped={flipped} dockInset={dockInset} />
+          <Front card={card} flipped={flipped} dockInset={dockInset} services={services} />
         </div>
         {showBack ? (
           <div className="absolute inset-0 rotate-y-180 [backface-visibility:hidden] [transform:rotateY(180deg)]">
@@ -1513,10 +1534,51 @@ function UpcomingBadge({ className = "" }: { className?: string }) {
   );
 }
 
-function Front({ card, flipped, dockInset = false }: { card: Card; flipped: boolean; dockInset?: boolean }) {
+/**
+ * Vilken av användarens tjänster titeln streamas på (TMDB flatrate), eller null.
+ * Bara användarens EGNA tjänster räknas — "Finns på Netflix" för någon som bara
+ * har Max vore fel. TMDB:s namn ("Disney Plus", "Amazon Prime Video", "HBO Max",
+ * "Netflix basic with Ads") normaliseras mot profilens ("Disney+", "Prime Video", "Max").
+ */
+function normService(n: string): string {
+  return n
+    .toLowerCase()
+    .replace(/\+/g, "plus")
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/^amazon/, "")
+    .replace(/^hbomax$/, "max")
+    .replace(/(basic|standard)?withads$/, "");
+}
+function serviceForCard(
+  flatrate: { provider_name: string }[] | undefined,
+  services: string[] | undefined,
+): string | null {
+  if (!flatrate?.length || !services?.length) return null;
+  const mine = services.map((s) => ({ name: s, n: normService(s) })).filter((s) => s.n);
+  for (const f of flatrate) {
+    const fn = normService(f.provider_name);
+    if (!fn) continue;
+    const hit = mine.find((m) => fn === m.n || fn.startsWith(m.n) || m.n.startsWith(fn));
+    if (hit) return hit.name;
+  }
+  return null;
+}
+
+function Front({
+  card,
+  flipped,
+  dockInset = false,
+  services,
+}: {
+  card: Card;
+  flipped: boolean;
+  dockInset?: boolean;
+  services?: string[];
+}) {
   const t = useTranslations("swipe");
   const locale = useLocale();
   const isUpcoming = card.kind === "upcoming";
+  const availableOn = isUpcoming ? null : serviceForCard(card.providers?.flatrate, services);
   return (
     <div className="relative h-full w-full min-h-0 overflow-hidden rounded-2xl">
       {card.poster ? (
@@ -1569,17 +1631,26 @@ function Front({ card, flipped, dockInset = false }: { card: Card; flipped: bool
       {/* Med dockInset ligger knapparna över de nedersta ~30 px: titeln lyfts
           44 px (pb 16 → 60) och skrimmet blir högre och mörkare, så texten
           läses lika bra en bit upp på postern. */}
-      <div className={`pointer-events-none absolute inset-x-0 bottom-0 p-4 ${dockInset ? "pb-[3.75rem]" : ""}`}>
-        <div
-          className={`bg-gradient-to-t to-transparent ${
-            dockInset ? "h-40 from-black/95 via-black/70" : "h-28 from-black/90"
-          }`}
-        />
-        <div className="-mt-24 px-1">
+      {/* Skrimmet går kant till kant och ända ner till kortets underkant. Förr
+          låg gradienten INUTI p-4-rutan och slutade ovanför knapparna — en
+          mörk ruta med hårda kanter och postern synlig runt om (syntes tydligt
+          på ljusa postrar, Oskar 2026-10-16). */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t to-transparent px-5 pt-24 ${
+          dockInset ? "from-black/95 via-black/65 pb-[3.75rem]" : "from-black/90 via-black/45 pb-4"
+        }`}
+      >
+        {/* pr-14: betygsbrickan ligger nere till höger på samma höjd. */}
+        <div className="pr-14">
           <div className="text-lg font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
             {card.title}
             {card.year ? <span className="ml-2 opacity-80">({card.year})</span> : null}
           </div>
+          {availableOn && !flipped ? (
+            <span className="mt-1.5 inline-flex items-center rounded-full border border-emerald-400/45 bg-emerald-400/15 px-2.5 py-1 text-[12px] font-bold text-emerald-300">
+              {t("availableOn", { service: availableOn })}
+            </span>
+          ) : null}
           {isUpcoming && card.releaseDate ? (
             <div className="mt-0.5 text-xs font-medium text-amber-300/90 [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">
               {t("upcoming.premiere", { date: formatPremiereDate(card.releaseDate, locale) })}

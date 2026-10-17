@@ -529,6 +529,14 @@
     "push": {
       "rewardTitle": "Din vän swipade ✦",
       "rewardBody": "Ni fick {picks} AI-val var. Låt AI välja kvällens film!"
+    },
+    "later": {
+      "title": "Bjud in en vän med länk",
+      "inlineTitle": "Dela en länk – funkar för alla",
+      "body": "Vännen swipar direkt i webbläsaren – ingen app eller konto behövs. Dina gillade följer med, och när ni gillar samma blir det match.",
+      "reward": "Ni får båda {picks} AI-val när din vän har swipat {votes} kort.",
+      "share": "Dela länk",
+      "copy": "Kopiera"
     }
   },
   "landing": {
@@ -1485,7 +1493,8 @@
       "tap": "Tryck",
       "tapSub": "Handling & var den streamas",
       "aria": "Dra kortet åt höger för att gilla, åt vänster för nej, uppåt om du redan sett den. Tryck på kortet för att vända det och se handling och var den streamas."
-    }
+    },
+    "availableOn": "Finns på {service}"
   },
   "swipeLimit": {
     "body": "{limit} swipes per dag ingår gratis. Kom igen imorgon – eller bli Premium för obegränsat swipande.",

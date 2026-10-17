@@ -33,6 +33,11 @@ export default async function Page() {
           ProviderPromptSheet frågar efter några swipes. */}
       <Client
         needsProviders={!Array.isArray(profile.providers) || profile.providers.length === 0}
+        myServices={
+          Array.isArray(profile.providers)
+            ? profile.providers.filter((x): x is string => typeof x === "string")
+            : []
+        }
         me={{
           userId: profile.userId,
           avatarId: profile.avatarId ?? null,

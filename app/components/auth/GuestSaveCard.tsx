@@ -6,12 +6,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { isGuest } from "@/lib/accountStatus";
 
+// En gäst kan lika gärna vara någon som HAR ett konto men loggats ut (i appen
+// skapas en gäst tyst vid utloggning) — då ska inloggningen ligga här också,
+// inte bara "Skapa konto" (Oskar 2026-10-16: "att logga in var svårare nu").
+const LoginSheet = dynamic(() => import("./LoginSheet"), { ssr: false });
+
 export default function GuestSaveCard() {
   const t = useTranslations("guestConvert");
+  const tl = useTranslations("fsDeck");
   const [guest, setGuest] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -40,6 +48,14 @@ export default function GuestSaveCard() {
         {t("createAccount")}
       </Link>
       <p className="mt-2 text-center text-xs text-neutral-400">{t("card.retention")}</p>
+      <button
+        type="button"
+        onClick={() => setLoginOpen(true)}
+        className="mt-3 w-full rounded-xl border border-white/15 px-5 py-2.5 text-sm text-neutral-300 transition hover:bg-white/5"
+      >
+        {tl("haveAccount")} <span className="font-semibold text-white">{tl("signIn")}</span>
+      </button>
+      {loginOpen ? <LoginSheet open={loginOpen} onClose={() => setLoginOpen(false)} /> : null}
     </div>
   );
 }

@@ -51,7 +51,10 @@ export default function LogoutButton({ className }: Props) {
       // inte se föregående användares watchlist.
       clearClientCache();
       invalidateAccountStatus();
-      r.push("/");
+      // ?login=1: appen skapar en gäst tyst och öppnar inloggningsarket direkt
+      // i leken (AuthGate → /swipe?login=1 → GuestLoginLink); webben öppnar
+      // samma ark på startsidan (HeroDeck).
+      r.push("/?login=1");
       r.refresh();
       setBusy(false);
     }

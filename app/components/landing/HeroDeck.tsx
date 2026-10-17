@@ -46,6 +46,19 @@ export default function HeroDeck({ cards }: { cards: HeroCard[] }) {
 
   const swipes = index;
 
+  // Efter "Logga ut" (/?login=1) öppnas inloggningen direkt.
+  React.useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("login") !== "1") return;
+      url.searchParams.delete("login");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      setLoginOpen(true);
+    } catch {
+      /* ignorera */
+    }
+  }, []);
+
   // Tratt: startsidan visad / spelad (lib/funnel.ts).
   React.useEffect(() => funnel("landing_view"), []);
   React.useEffect(() => {

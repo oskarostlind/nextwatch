@@ -31,84 +31,10 @@ import { useTranslations } from "next-intl";
 import { advanceFs, type FsState } from "@/lib/firstSession";
 import { funnel } from "@/lib/funnel";
 import { notify } from "@/app/components/lib/notify";
+import { copyText, shareLink, type ShareOutcome } from "@/lib/shareLink";
 
 const REWARD_PICKS = 5; // = REFERRAL_PICKS i lib/referral.ts (servern avgör)
 const REWARD_VOTES = 10; // = REFERRAL_VOTES i lib/referral.ts
-
-type ShareVia = "native" | "webshare" | "copy";
-type ShareOutcome = { done: true; via: ShareVia } | { done: false; cancelled: boolean };
-
-type CapShare = { share: (o: { title?: string; text?: string; url?: string; dialogTitle?: string }) => Promise<unknown> };
-type CapGlobal = {
-  isNativePlatform?: () => boolean;
-  isPluginAvailable?: (name: string) => boolean;
-  Plugins?: Record<string, unknown>;
-};
-
-function capacitorShare(): CapShare | null {
-  try {
-    const cap = (window as unknown as { Capacitor?: CapGlobal }).Capacitor;
-    if (!cap?.isNativePlatform?.() || !cap.isPluginAvailable?.("Share")) return null;
-    const plugin = cap.Plugins?.Share as CapShare | undefined;
-    return plugin && typeof plugin.share === "function" ? plugin : null;
-  } catch {
-    return null;
-  }
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* faller till textarea */
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-function isAbort(e: unknown): boolean {
-  const name = (e as { name?: string } | null)?.name ?? "";
-  const msg = e instanceof Error ? e.message : String(e ?? "");
-  return name === "AbortError" || /cancel|abort/i.test(msg);
-}
-
-async function shareLink(url: string, title: string, text: string): Promise<ShareOutcome> {
-  const native = capacitorShare();
-  if (native) {
-    try {
-      await native.share({ title, text, url, dialogTitle: title });
-      return { done: true, via: "native" };
-    } catch (e) {
-      if (isAbort(e)) return { done: false, cancelled: true };
-    }
-  }
-  const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
-  if (typeof nav.share === "function") {
-    try {
-      await nav.share({ title, text, url });
-      return { done: true, via: "webshare" };
-    } catch (e) {
-      if (isAbort(e)) return { done: false, cancelled: true };
-      // NotAllowedError m.fl. → kopiera i stället.
-    }
-  }
-  return (await copyText(url)) ? { done: true, via: "copy" } : { done: false, cancelled: false };
-}
 
 function posterSrc(p: string | null | undefined): string | null {
   if (!p) return null;

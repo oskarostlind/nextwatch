@@ -8,6 +8,7 @@ import {
   LIKED_EVENT,
   PUSH_ASK_AFTER_LIKES,
   RELEASE_ASK_EVENT,
+  type ReleaseAskKind,
   blockingSheetOpen,
   likeCount,
 } from "@/lib/engagement";
@@ -148,7 +149,7 @@ function reportPushOpened(pid: string | undefined, actionId: string | undefined)
  *  - settings: OS har nekat för gott → bara Inställningar kan slå på notiser
  *  - done:     behörighet finns redan → kort bekräftelse, ingen fråga
  */
-type ReleaseAsk = { title: string; mode: "ask" | "settings" | "done" };
+type ReleaseAsk = { title: string; mode: "ask" | "settings" | "done"; kind?: ReleaseAskKind };
 
 export default function PushRegistration() {
   const t = useTranslations("push");
@@ -295,7 +296,7 @@ export default function PushRegistration() {
         //  - denied → OS-dialogen kan aldrig visas igen. iOS: knapp till appens
         //    sida i Inställningar. Android: instruktion (att öppna inställningarna
         //    kräver native-kod som inte finns i appen än).
-        const askForRelease = async (title: string) => {
+        const askForRelease = async (title: string, kind: ReleaseAskKind) => {
           let state = "prompt";
           try {
             state = (await PushNotifications.checkPermissions()).receive;
@@ -310,16 +311,17 @@ export default function PushRegistration() {
                 /* försöker igen vid nästa förgrund */
               }
             }
-            setReleaseAsk({ title, mode: "done" });
+            // "Bevaka" har redan bekräftat med en toast.
+            if (kind !== "stream") setReleaseAsk({ title, mode: "done" });
             return;
           }
           if (state === "denied") {
-            setReleaseAsk({ title, mode: "settings" });
+            setReleaseAsk({ title, mode: "settings", kind });
             funnel("push_release_denied_shown");
             return;
           }
-          setReleaseAsk({ title, mode: "ask" });
-          funnel("push_release_ask");
+          setReleaseAsk({ title, mode: "ask", kind });
+          funnel("push_release_ask", { kind });
         };
         releaseYes.current = async () => {
           const perm = await requestPushPermissionAndRegister();
@@ -337,7 +339,9 @@ export default function PushRegistration() {
         const RELEASE_WAIT_MAX_MS = 3 * 60 * 1000;
         let releaseTimer: number | null = null;
         const onReleaseAsk = (e: Event) => {
-          const title = (e as CustomEvent<{ title?: string }>).detail?.title?.trim() || "";
+          const detail = (e as CustomEvent<{ title?: string; kind?: ReleaseAskKind }>).detail;
+          const title = detail?.title?.trim() || "";
+          const kind: ReleaseAskKind = detail?.kind === "stream" ? "stream" : "release";
           if (!title) return;
           const deadline = Date.now() + RELEASE_WAIT_MAX_MS;
           const tryAsk = () => {
@@ -346,7 +350,7 @@ export default function PushRegistration() {
               if (Date.now() < deadline) releaseTimer = window.setTimeout(tryAsk, RELEASE_WAIT_STEP_MS);
               return;
             }
-            void askForRelease(title);
+            void askForRelease(title, kind);
           };
           if (releaseTimer !== null) window.clearTimeout(releaseTimer);
           releaseTimer = window.setTimeout(tryAsk, 450);
@@ -418,6 +422,7 @@ export default function PushRegistration() {
 
   if (releaseAsk) {
     const values = { title: releaseAsk.title };
+    const stream = releaseAsk.kind === "stream";
     return (
       <div
         data-blocking-sheet
@@ -425,20 +430,26 @@ export default function PushRegistration() {
       >
         <div className="mx-auto max-w-sm rounded-2xl border border-white/15 bg-neutral-900 p-4 shadow-2xl">
           {releaseAsk.mode === "done" ? (
-            <p className="text-sm font-semibold text-white">{t("releaseAsk.done", values)}</p>
+            <p className="text-sm font-semibold text-white">
+              {stream ? t("streamAsk.done", values) : t("releaseAsk.done", values)}
+            </p>
           ) : releaseAsk.mode === "ask" ? (
             <>
-              <p className="text-sm font-semibold text-white">{t("releaseAsk.title", values)}</p>
-              <p className="mt-1 text-sm leading-relaxed text-white/60">{t("releaseAsk.body")}</p>
+              <p className="text-sm font-semibold text-white">
+                {stream ? t("streamAsk.title", values) : t("releaseAsk.title", values)}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-white/60">
+                {stream ? t("streamAsk.body") : t("releaseAsk.body")}
+              </p>
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    const title = releaseAsk.title;
+                    const { title, kind } = releaseAsk;
                     setReleaseAsk(null);
                     funnel("push_release_yes");
                     void releaseYes.current?.().then((ok) => {
-                      if (ok) setReleaseAsk({ title, mode: "done" });
+                      if (ok) setReleaseAsk({ title, mode: "done", kind });
                     });
                   }}
                   className="flex-1 rounded-xl bg-cyan-500 py-2.5 text-sm font-semibold text-black transition hover:bg-cyan-400"
@@ -464,7 +475,13 @@ export default function PushRegistration() {
             <>
               <p className="text-sm font-semibold text-white">{t("releaseAsk.settingsTitle")}</p>
               <p className="mt-1 text-sm leading-relaxed text-white/60">
-                {isIos ? t("releaseAsk.settingsBodyIos", values) : t("releaseAsk.settingsBodyAndroid", values)}
+                {stream
+                  ? isIos
+                    ? t("streamAsk.settingsBodyIos", values)
+                    : t("streamAsk.settingsBodyAndroid", values)
+                  : isIos
+                    ? t("releaseAsk.settingsBodyIos", values)
+                    : t("releaseAsk.settingsBodyAndroid", values)}
               </p>
               <div className="mt-3 flex gap-2">
                 {isIos ? (

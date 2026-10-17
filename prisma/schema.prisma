@@ -308,6 +308,10 @@ model ReleaseFollow {
   notifiedAt  DateTime? @map("notified_at")
   /// Senaste gången releaseDate slogs upp mot TMDB igen.
   checkedAt   DateTime? @map("checked_at")
+  /// "release" = gillat "Kommer snart"-kort, pling vid premiär.
+  /// "stream" = "Bevaka" på en titel som inte går att se (WatchNowButton),
+  /// pling när den finns på någon av användarens tjänster.
+  kind        String    @default("release")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -318,6 +322,7 @@ model ReleaseFollow {
   // Cronens svep: "aktiva bevakningar vars premiär passerat". notifiedAt först
   // eftersom den filtrerar bort merparten av raderna (allt redan notifierat).
   @@index([notifiedAt, releaseDate], map: "idx_release_follows_notified_release")
+  @@index([kind, notifiedAt], map: "idx_release_follows_kind_notified")
   @@map("release_follows")
 }
 

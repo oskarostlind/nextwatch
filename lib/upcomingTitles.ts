@@ -250,6 +250,7 @@ export async function refreshPendingReleaseDates(limit = REFRESH_BATCH): Promise
 
   const rows = await prisma.releaseFollow.findMany({
     where: {
+      kind: "release",
       notifiedAt: null,
       createdAt: { lte: minAge },
       OR: [{ releaseDate: null }, { releaseDate: { gt: now } }],

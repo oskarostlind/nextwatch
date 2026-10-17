@@ -1289,6 +1289,17 @@
       "later": "Inte nu",
       "ok": "Okej",
       "done": "Klart! Vi säger till när {title} släpps 🔔"
+    },
+    "streamAsk": {
+      "title": "Får vi skicka en notis när {title} finns att streama? 🔔",
+      "body": "Då säger vi till så fort den dyker upp på någon av dina tjänster.",
+      "settingsBodyIos": "För att vi ska kunna säga till när {title} går att streama behöver du slå på notiser för NextWatch i Inställningar.",
+      "settingsBodyAndroid": "För att vi ska kunna säga till när {title} går att streama: öppna Inställningar → Appar → NextWatch → Aviseringar och slå på dem.",
+      "done": "Klart! Vi säger till när {title} finns att streama 🔔"
+    },
+    "streamAvailable": {
+      "title": "Nu kan du streama den! 🍿",
+      "body": "{title} finns nu på {service} – du bevakade den."
     }
   },
   "pushAsk": {
@@ -1612,7 +1623,15 @@
     },
     "paidOnly": "Endast att hyra eller köpa",
     "unavailable": "Ej tillgänglig",
-    "watchNow": "Kolla nu"
+    "watchNow": "Kolla nu",
+    "follow": {
+      "follow": "Bevaka",
+      "following": "Bevakas",
+      "done": "Bevakas! Vi säger till när {title} finns på dina tjänster.",
+      "failed": "Kunde inte spara bevakningen. Försök igen.",
+      "hint": "Få en notis när titeln går att streama på dina tjänster",
+      "hintOn": "Tryck för att sluta bevaka"
+    }
   },
   "watchlist": {
     "cancel": "Avbryt",

@@ -192,7 +192,10 @@ export default function MatchesTab({
               </div>
 
               <div className="mt-5">
-                <WatchNowButton url={watchUrl} />
+                <WatchNowButton
+                  url={watchUrl}
+                  follow={{ tmdbId: active.tmdbId, mediaType: active.tmdbType, title: active.title }}
+                />
               </div>
             </div>
           </div>

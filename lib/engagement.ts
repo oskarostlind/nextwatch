@@ -57,9 +57,16 @@ export function blockingSheetOpen(): boolean {
  */
 export const RELEASE_ASK_EVENT = "nw:release-ask";
 
-export function requestReleasePushAsk(title: string): void {
+/**
+ * kind "stream" = "Bevaka" på en titel som inte går att se än (WatchNowButton):
+ * egna texter ("…när X finns på dina tjänster"), och ingen bekräftelse om
+ * notiser redan är på — knappen har redan bekräftat.
+ */
+export type ReleaseAskKind = "release" | "stream";
+
+export function requestReleasePushAsk(title: string, kind: ReleaseAskKind = "release"): void {
   try {
-    window.dispatchEvent(new CustomEvent(RELEASE_ASK_EVENT, { detail: { title } }));
+    window.dispatchEvent(new CustomEvent(RELEASE_ASK_EVENT, { detail: { title, kind } }));
   } catch {
     /* SSR */
   }

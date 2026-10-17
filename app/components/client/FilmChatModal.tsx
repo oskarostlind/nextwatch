@@ -492,7 +492,14 @@ export default function FilmChatModal({
               )}
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <WatchNowButton url={bestWatchUrl(detailProviders, detailItem.title, showPaidOptions)} />
+                <WatchNowButton
+                  url={bestWatchUrl(detailProviders, detailItem.title, showPaidOptions)}
+                  follow={
+                    detailLoading
+                      ? undefined
+                      : { tmdbId: detailItem.tmdbId, mediaType: detailItem.mediaType, title: detailItem.title }
+                  }
+                />
                 {!detailItem.fromMe && !addedIds.has(detailItem.id) && (
                   <button
                     type="button"

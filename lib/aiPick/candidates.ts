@@ -2278,7 +2278,11 @@ export function toPickProviders(c: PickCandidate, services: UserServices): PickP
   if (!c.providers) return [];
   const pool = services.names.length > 0 ? services : offered();
   const allowed = (p: CandidateProvider) => pool.ids.has(p.id) || nameMatchesService(p.name, pool);
-  const sorted = c.providers.filter(allowed);
+  // "HBO Max Amazon Channel" o.d. är en separat prenumeration via en annan butik —
+  // visa den bara om tjänsten inte finns direkt.
+  const isChannel = (p: CandidateProvider) => /\bchannel\b/i.test(p.name);
+  const matching = c.providers.filter(allowed);
+  const sorted = matching.some((p) => !isChannel(p)) ? matching.filter((p) => !isChannel(p)) : matching;
   const seen = new Set<string>();
   const out: PickProvider[] = [];
   for (const p of sorted) {

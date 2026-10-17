@@ -22,6 +22,7 @@ import ProfileAvatarButton, { type AvatarButtonUser } from "@/app/components/nav
 import { Button } from "@/app/components/ui/kit";
 import { useSoloSwipeDeck } from "@/app/recs/SwipeDeckProvider";
 import type { SwipeCard, SwipeProviders, Trailer } from "@/lib/swipeDeck";
+import { PROVIDERS } from "@/lib/providers";
 import { hideFor7Days, markSeen, unhide, unmarkSeen } from "@/lib/swipeDeck";
 import { getSoloDeckSnapshot, hasSoloCard, pinSoloCard } from "@/lib/swipeDeckStore";
 import { adsenseClientId, adsenseSlotId } from "@/lib/ads";
@@ -600,6 +601,11 @@ export default function SwipePageClient({
 
   // lazy hydrering av details på topp- och nästa korten i stacken (parallellt)
   const fetched = useRef<Set<string>>(new Set());
+  // Läses i hydreringen utan att effekten körs om när de ändras.
+  const servicesRef = useRef<string[]>(services);
+  servicesRef.current = services;
+  const flippedRef = useRef<string | null>(flippedId);
+  flippedRef.current = flippedId;
   useEffect(() => {
     const cur = cards[0];
     const nxt = cards[1];
@@ -650,8 +656,20 @@ export default function SwipePageClient({
                     trailer: c.trailer ?? det.trailer,
                   }
                 : { ...c };
-              if (next.providers === undefined) next.providers = r.providers;
+              if (next.providers === undefined) next.providers = offeredOnly(r.providers);
               return next;
+            })
+            // Kortleken hämtas via TMDB /discover, vars tjänsteregister kan
+            // ligga efter /watch/providers. Säger de aktuella uppgifterna att
+            // titeln inte finns på någon av användarens tjänster ska kortet
+            // inte visas (CSI "bara Tele2 Play" för någon med Netflix + Prime
+            // Video, 2026-10-17). Kortet man läser baksidan på rörs inte.
+            .filter((c) => {
+              const r = byId.get(c.id);
+              const mine = servicesRef.current;
+              if (!r?.providers || mine.length === 0 || c.kind === "upcoming") return true;
+              if (c.id === flippedRef.current) return true;
+              return serviceForCard(r.providers.flatrate ?? [], mine) !== null;
             })
           )
         );
@@ -1549,6 +1567,17 @@ function normService(n: string): string {
     .replace(/^hbomax$/, "max")
     .replace(/(basic|standard)?withads$/, "");
 }
+/** Tjänsterna appen erbjuder (lib/providers.ts), normaliserade som ovan. */
+const OFFERED_SERVICES = PROVIDERS.map((p) => p.label);
+/**
+ * Bara streamingtjänster appen erbjuder visas under "Streama" (Tele2 Play m.fl.
+ * går inte att välja i appen). Hyr/köp lämnas orört.
+ */
+function offeredOnly(p: SwipeProviders | null): SwipeProviders | null {
+  if (!p?.flatrate) return p;
+  return { ...p, flatrate: p.flatrate.filter((f) => serviceForCard([f], OFFERED_SERVICES) !== null) };
+}
+
 function serviceForCard(
   flatrate: { provider_name: string }[] | undefined,
   services: string[] | undefined,

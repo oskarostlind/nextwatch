@@ -326,6 +326,7 @@ export function candidateLine(
   if (tier) extras.push(`quality ${tier}`);
   if (c.originalLanguage && c.originalLanguage !== "en") extras.push(`lang:${c.originalLanguage}`);
   if (c.onUserServices === true) extras.push("on their services");
+  else if (c.onUserServices === false) extras.push("NOT on their services");
   const overview = c.overview ? clean(c.overview, 140) : "";
   return [c.key, tag, type, title, genres, length, rating, extras.join(", ") || "-", overview]
     .filter((x, i) => i < 8 || x)

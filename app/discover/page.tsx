@@ -501,7 +501,10 @@ export default function DiscoverPage() {
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                <WatchNowButton url={watchUrl} />
+                <WatchNowButton
+                  url={watchUrl}
+                  follow={modalLoading ? undefined : { tmdbId: active.id, mediaType: active.mediaType, title: active.title }}
+                />
                 <button
                   type="button"
                   onClick={() => {

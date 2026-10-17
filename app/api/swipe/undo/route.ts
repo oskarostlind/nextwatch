@@ -50,8 +50,9 @@ export async function POST(req: Request) {
       // man liken ska man inte få ett pling om ett halvår. deleteMany är no-op när
       // titeln inte var bevakad, så ingen extra gren behövs — och swipar man om
       // återskapas raden av upserten i /api/watchlist/like.
+      // Bara släpp-bevakningar — en "Bevaka" (kind="stream") är ett eget val.
       await prisma.releaseFollow.deleteMany({
-        where: { userId: uid, tmdbId, mediaType },
+        where: { userId: uid, tmdbId, mediaType, kind: "release" },
       });
     }
 

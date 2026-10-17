@@ -31,6 +31,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendLocalizedPushToUser, sendPushToUser } from "@/lib/push";
 import { refreshPendingReleaseDates } from "@/lib/upcomingTitles";
+import { sweepStreamFollows } from "@/lib/streamFollows";
 import { getTranslations } from "next-intl/server";
 import { normalizeLocale } from "@/lib/i18nConfig";
 import { fetchTitleBrief } from "@/lib/tmdbTitleBrief";
@@ -179,7 +180,7 @@ async function sweepReleaseNotifications(): Promise<{
     refreshed = await refreshPendingReleaseDates().catch(() => 0);
 
     const due = await prisma.releaseFollow.findMany({
-      where: { notifiedAt: null, releaseDate: { not: null, lte: new Date() } },
+      where: { kind: "release", notifiedAt: null, releaseDate: { not: null, lte: new Date() } },
       select: { id: true, userId: true, tmdbId: true, mediaType: true, title: true },
       orderBy: { releaseDate: "asc" },
       take: RELEASE_SWEEP_MAX,
@@ -268,6 +269,9 @@ export async function GET(req: Request) {
   // från startedAt), så en långsam sweep betyder färre filmtips den här
   // körningen — inte en kapad funktion: kön roterar på lastDailyRecAt.
   const release = await sweepReleaseNotifications();
+  // "Bevaka": titlar som inte gick att streama när användaren tryckte —
+  // pling när de finns på någon av hens tjänster (lib/streamFollows.ts).
+  const stream = await sweepStreamFollows();
 
   // Bara användare som faktiskt kan ta emot push (registrerad enhet) och har
   // en profil (krävs av rekommendationsmotorn). Samma urval gäller båda
@@ -478,5 +482,8 @@ export async function GET(req: Request) {
     releaseNotified: release.sent,
     releaseDatesRefreshed: release.refreshed,
     releaseFailed: release.failed,
+    streamFollowsChecked: stream.checked,
+    streamFollowsNotified: stream.sent,
+    streamFollowsFailed: stream.failed,
   });
 }

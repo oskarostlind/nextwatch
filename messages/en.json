@@ -1289,6 +1289,17 @@
       "later": "Not now",
       "ok": "OK",
       "done": "Done! We'll let you know when {title} comes out 🔔"
+    },
+    "streamAsk": {
+      "title": "Can we notify you when {title} is streaming? 🔔",
+      "body": "We'll let you know as soon as it lands on one of your services.",
+      "settingsBodyIos": "To tell you when {title} is streaming, turn on notifications for NextWatch in Settings.",
+      "settingsBodyAndroid": "To tell you when {title} is streaming: open Settings → Apps → NextWatch → Notifications and turn them on.",
+      "done": "Done! We'll tell you when {title} is streaming 🔔"
+    },
+    "streamAvailable": {
+      "title": "Now streaming! 🍿",
+      "body": "{title} is now on {service} – you were following it."
     }
   },
   "pushAsk": {
@@ -1612,7 +1623,15 @@
     },
     "paidOnly": "Rent or buy only",
     "unavailable": "Unavailable",
-    "watchNow": "Watch now"
+    "watchNow": "Watch now",
+    "follow": {
+      "follow": "Notify me",
+      "following": "Following",
+      "done": "Following! We'll tell you when {title} is on your services.",
+      "failed": "Couldn't save. Please try again.",
+      "hint": "Get a notification when it's streaming on your services",
+      "hintOn": "Tap to stop following"
+    }
   },
   "watchlist": {
     "cancel": "Cancel",

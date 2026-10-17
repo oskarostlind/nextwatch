@@ -670,7 +670,10 @@ export default function WatchlistClient({ items: initial }: { items?: WatchItem[
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                <WatchNowButton url={watchUrl} />
+                <WatchNowButton
+                  url={watchUrl}
+                  follow={loading ? undefined : { tmdbId: active.id, mediaType: active.tmdbType, title: active.title }}
+                />
                 <button
                   type="button"
                   onClick={() => {

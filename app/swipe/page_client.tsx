@@ -45,6 +45,7 @@ import { useSwipeSettings } from "@/app/components/client/SwipeSettingsProvider"
 import { saveSwipeSettings } from "@/lib/swipeSettingsStore";
 import type { SwipeMediaFilter } from "@/lib/swipeMediaFilter";
 import WatchNowButton from "@/app/components/watch/WatchNowButton";
+import { matchService } from "@/lib/serviceMatch";
 import TrailerButton from "@/app/components/watch/TrailerButton";
 import type { GroupMatchItem as MatchOverlayItem } from "@/app/components/ui/MatchOverlay";
 import { maybeTriggerAdUpsell, openPremiumUpsell } from "@/lib/adUpsellEvent";
@@ -286,7 +287,11 @@ export async function fetchWatchProviders(
     });
     if (!res.ok) return null;
     const j = (await res.json()) as ProvidersResp;
-    if (!j.ok || !j.providers) return null;
+    if (!j.ok) return null;
+    // ok men inga uppgifter för regionen = titeln går inte att se här. Skilj
+    // det från ett fel (null): leken släpper kort som bevisligen inte går att
+    // streama, men aldrig för att ett anrop råkade fallera.
+    if (!j.providers) return {};
     return {
       link: j.providers.link,
       flatrate: j.providers.flatrate,
@@ -663,13 +668,17 @@ export default function SwipePageClient({
             // ligga efter /watch/providers. Säger de aktuella uppgifterna att
             // titeln inte finns på någon av användarens tjänster ska kortet
             // inte visas (CSI "bara Tele2 Play" för någon med Netflix + Prime
-            // Video, 2026-10-17). Kortet man läser baksidan på rörs inte.
+            // Video, 2026-10-17). Samma sak för titlar som inte streamas
+            // någonstans alls — ett kort med en grå "Ej tillgänglig" är inte
+            // värt att visa (Oskar 2026-10-17). Utan valda tjänster räcker det
+            // att titeln finns på någon tjänst appen erbjuder. Kortet man läser
+            // baksidan på rörs inte, och ett fel (null) släpper aldrig ett kort.
             .filter((c) => {
               const r = byId.get(c.id);
-              const mine = servicesRef.current;
-              if (!r?.providers || mine.length === 0 || c.kind === "upcoming") return true;
+              if (!r?.providers || c.kind === "upcoming" || c.kind === "ad") return true;
               if (c.id === flippedRef.current) return true;
-              return serviceForCard(r.providers.flatrate ?? [], mine) !== null;
+              const mine = servicesRef.current;
+              return serviceForCard(r.providers.flatrate ?? [], mine.length ? mine : OFFERED_SERVICES) !== null;
             })
           )
         );
@@ -1552,22 +1561,7 @@ function UpcomingBadge({ className = "" }: { className?: string }) {
   );
 }
 
-/**
- * Vilken av användarens tjänster titeln streamas på (TMDB flatrate), eller null.
- * Bara användarens EGNA tjänster räknas — "Finns på Netflix" för någon som bara
- * har Max vore fel. TMDB:s namn ("Disney Plus", "Amazon Prime Video", "HBO Max",
- * "Netflix basic with Ads") normaliseras mot profilens ("Disney+", "Prime Video", "Max").
- */
-function normService(n: string): string {
-  return n
-    .toLowerCase()
-    .replace(/\+/g, "plus")
-    .replace(/[^a-z0-9]/g, "")
-    .replace(/^amazon/, "")
-    .replace(/^hbomax$/, "max")
-    .replace(/(basic|standard)?withads$/, "");
-}
-/** Tjänsterna appen erbjuder (lib/providers.ts), normaliserade som ovan. */
+/** Tjänsterna appen erbjuder (lib/providers.ts). */
 const OFFERED_SERVICES = PROVIDERS.map((p) => p.label);
 /**
  * Bara streamingtjänster appen erbjuder visas under "Streama" (Tele2 Play m.fl.
@@ -1578,19 +1572,18 @@ function offeredOnly(p: SwipeProviders | null): SwipeProviders | null {
   return { ...p, flatrate: p.flatrate.filter((f) => serviceForCard([f], OFFERED_SERVICES) !== null) };
 }
 
+/**
+ * Vilken av användarens tjänster titeln streamas på (TMDB flatrate), eller null.
+ * Bara användarens EGNA tjänster räknas — "Finns på Netflix" för någon som bara
+ * har Max vore fel. Normaliseringen ligger i lib/serviceMatch.ts (delas med
+ * bevakningscronen).
+ */
 function serviceForCard(
   flatrate: { provider_name: string }[] | undefined,
   services: string[] | undefined,
 ): string | null {
   if (!flatrate?.length || !services?.length) return null;
-  const mine = services.map((s) => ({ name: s, n: normService(s) })).filter((s) => s.n);
-  for (const f of flatrate) {
-    const fn = normService(f.provider_name);
-    if (!fn) continue;
-    const hit = mine.find((m) => fn === m.n || fn.startsWith(m.n) || m.n.startsWith(fn));
-    if (hit) return hit.name;
-  }
-  return null;
+  return matchService(flatrate.map((f) => f.provider_name), services);
 }
 
 function Front({
@@ -1862,8 +1855,11 @@ function Back({
         className={`flex shrink-0 flex-wrap gap-2 px-3 pt-1 ${dockInset ? "pb-14" : "pb-3"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {!isUpcoming && card.providers !== undefined && !paidOnly ? (
-          <WatchNowButton url={watchUrl} />
+        {!isUpcoming && card.providers !== undefined ? (
+          <WatchNowButton
+            url={paidOnly ? undefined : watchUrl}
+            follow={{ tmdbId: card.tmdbId, mediaType: card.mediaType, title: card.title }}
+          />
         ) : null}
         <TrailerButton trailer={card.trailer} title={card.title} variant="ghost" />
         {onShare ? (

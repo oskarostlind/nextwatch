@@ -5,9 +5,9 @@
 // som app/api/recs/unified/route.ts (se lib/unifiedRecs.ts).
 //
 // Trots namnet är utskicket inte längre dagligt per användare. Cron-schemat
-// ligger i vercel.json: en post per timme 06–21 UTC (Hobby tillåter bara
-// dagliga scheman, så varje timme är en egen post). Takten per användare
-// bestäms här inne, av två skäl:
+// ligger i vercel.json: varje timme 06–21 UTC ("0 6-21 * * *", täcker 08–22
+// svensk tid både sommar- och vintertid). Takten per användare bestäms här
+// inne, av två skäl:
 //   1. En push om dagen är för mycket. lastRecPushSentAt hindrar en ny
 //      recs-push inom NW_REC_PUSH_MIN_HOURS (default 60 h → 2–3 per vecka).
 //   2. Den som slutat använda appen ska inte ha ett filmtips utan en

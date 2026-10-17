@@ -8,9 +8,9 @@
 // vinner över typvärdet.
 //
 // Per-användar-tid är AV som standard. Slå på med NW_PUSH_HOURLY=1. Cronen
-// anropas varje timme 06–21 UTC av Vercel (vercel.json, en post per timme —
-// Hobby tillåter bara dagliga scheman). GitHub Actions användes först men kör
-// schemalagda jobb var 4–6:e timme i praktiken, så nästan alla fick 19.
+// anropas varje timme 06–21 UTC av Vercel Cron (vercel.json, Pro-planen).
+// GitHub Actions användes först men kör schemalagda jobb var 4–6:e timme i
+// praktiken, så nästan alla fick 19.
 
 import { prisma } from "@/lib/prisma";
 
@@ -29,9 +29,8 @@ const WINDOW_TO = 22;
 
 /**
  * Hur många timmar EFTER sin timme en användare fortfarande får sitt tips.
- * Cronen är inte punktlig (Vercel Hobby: "någon gång inom timmen", och ett
- * enstaka anrop kan utebli) — utan marginal blir en missad körning en missad
- * dag. Dubbla pushar hindras av tempospärren (NW_REC_PUSH_MIN_HOURS).
+ * Ett enstaka cronanrop kan utebli eller time:a ut — utan marginal blir en
+ * missad körning en missad dag. Dubbla pushar hindras av tempospärren (NW_REC_PUSH_MIN_HOURS).
  */
 const CATCHUP_HOURS = 2;
 /** Senaste timmen (inklusive) en filmtips- eller släpp-push får gå ut. */

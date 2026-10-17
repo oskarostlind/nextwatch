@@ -3,7 +3,7 @@
 # Schemat är BORTTAGET med flit (2026-10-17). GitHub kör schemalagda jobb
 # "best effort": i praktiken var 4–6:e timme och ibland inte på ett dygn, så
 # nästan alla användare fick sitt tips vid Vercels 19-körning. Timanropen ligger
-# nu i vercel.json (en daglig post per timme 06–21 UTC). Två schemalagda källor
+# nu i vercel.json ("0 6-21 * * *", Vercel Pro). Två schemalagda källor
 # samtidigt hade dessutom kunnat krocka i samma timme.
 #
 # Kräver repo-hemligheten CRON_SECRET (samma värde som i Vercel).

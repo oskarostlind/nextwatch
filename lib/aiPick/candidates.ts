@@ -43,6 +43,7 @@ import { parseProvidersJson } from "@/lib/groupSettings";
 import { ageFromDob, seMaxCert } from "@/lib/tasteModel";
 import { tmdbPoster } from "@/lib/tmdb";
 import { providerLogoUrl } from "@/lib/providerLogos";
+import { PROVIDERS } from "@/lib/providers";
 import type { PickChipId, PickItem, PickProvider } from "@/lib/aiPick/types";
 import {
   extractReferences,
@@ -938,8 +939,10 @@ export function fallbackScore(c: PickCandidate, opts: FallbackOptions): number {
   s -= horrorPenaltyFor(c.genreIds, opts);
   // Överraskning: utanför vanan är en fördel, inte en nackdel.
   s += (opts.surprise ? -0.8 : 0.8) * aff;
+  // Inte på användarens tjänster: en NY titel man inte kan se ikväll ska nästan
+  // aldrig vinna (−3). En egen sparad gillning får finnas kvar lite högre (−1).
   if (c.onUserServices === true) s += 0.3;
-  else if (c.onUserServices === false) s -= 1;
+  else if (c.onUserServices === false) s -= c.fromSaved ? 1 : 3;
   if (c.recRank != null) s += Math.max(0, 0.5 - c.recRank * 0.02);
   if (opts.surprise) {
     if (!c.fromSaved) s += 50;
@@ -2257,10 +2260,25 @@ async function buildTasteSummary(opts: {
 
 const TMDB_LOGO = "https://image.tmdb.org/t/p/w92";
 
+/** De 9 tjänster appen erbjuder (lib/providers.ts) — samma matchning som användarens. */
+let offeredServices: UserServices | null = null;
+function offered(): UserServices {
+  offeredServices ??= resolveUserServices(PROVIDERS.map((p) => p.label));
+  return offeredServices;
+}
+
+/**
+ * Tjänsterna som visas på förslaget ("Öppna i …"). Bara användarens EGNA tjänster
+ * när de är kända — annars bara de tjänster appen erbjuder. Förr följde TMDB:s hela
+ * lista med, så ett förslag kunde säga "Öppna i Tele2 Play" till någon som varken
+ * har Tele2 Play eller kan välja det i appen (Oskar 2026-10-16). Finns titeln inte
+ * på någon av användarens tjänster blir listan tom och knappen visas inte.
+ */
 export function toPickProviders(c: PickCandidate, services: UserServices): PickProvider[] {
   if (!c.providers) return [];
-  const own = (p: CandidateProvider) => services.ids.has(p.id) || nameMatchesService(p.name, services);
-  const sorted = c.providers.slice().sort((a, b) => Number(own(b)) - Number(own(a)));
+  const pool = services.names.length > 0 ? services : offered();
+  const allowed = (p: CandidateProvider) => pool.ids.has(p.id) || nameMatchesService(p.name, pool);
+  const sorted = c.providers.filter(allowed);
   const seen = new Set<string>();
   const out: PickProvider[] = [];
   for (const p of sorted) {

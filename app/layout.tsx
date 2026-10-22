@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import React from "react";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 import { headers } from "next/headers";
@@ -129,6 +130,7 @@ export default async function RootLayout({
           {/* Global overlay – körs endast på klienten via OverlayMount */}
           <OverlayMount />
         </NextIntlClientProvider>
+        <Analytics />
       </body>
     </html>
   );

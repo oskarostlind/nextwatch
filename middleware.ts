@@ -153,10 +153,12 @@ export async function middleware(req: NextRequest) {
 // session/restore undantas likt session/init: när cookien är helt borta skulle
 // middleware annars mynta en anonym nw_uid på SAMMA svar som restore sätter den
 // återställda — två Set-Cookie för samma namn, och fel kan vinna.
+// api/stats (Mission Control, Bearer-token) är maskin-till-maskin och ska varken
+// få cookies eller anonyma identiteter.
 // Statiska assets (bilder/ikoner/manifest m.m.) behöver ingen cookie-logik —
 // hoppa över dem via filändelse så middleware inte kör på varje asset-request.
 export const config = {
   matcher: [
-    "/((?!_next/|api/session/init|api/session/restore|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webmanifest|txt|xml|html)$).*)",
+    "/((?!_next/|api/session/init|api/session/restore|api/stats|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webmanifest|txt|xml|html)$).*)",
   ],
 };

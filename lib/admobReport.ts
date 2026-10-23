@@ -32,6 +32,8 @@ export type AdmobFormatRow = AdmobTotals & { format: string };
 export type AdmobStats = {
   days: number;
   currency: string;
+  /** AdMob-kontots rapporttidszon — dagarna i perDay är kontots dygn. */
+  timeZone: string;
   fetchedAt: string;
   totals: AdmobTotals & {
     /** Intäkt per 1000 visningar. */
@@ -53,7 +55,7 @@ export type AdmobEarnings = {
 };
 
 type RawRow = AdmobTotals & { day: string; format: string };
-type RawReport = { rows: RawRow[]; currency: string; fetchedAt: string; today: string };
+type RawReport = { rows: RawRow[]; currency: string; fetchedAt: string; today: string; timeZone: string };
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 h färskt
 const STALE_MAX_MS = 24 * 60 * 60 * 1000; // servera stale max 1 dygn
@@ -168,7 +170,7 @@ async function fetchFromApi(): Promise<RawReport> {
       matchedRequests: num(m.MATCHED_REQUESTS),
     });
   }
-  return { rows, currency, fetchedAt: now.toISOString(), today: iso(end) };
+  return { rows, currency, fetchedAt: now.toISOString(), today: iso(end), timeZone: tz };
 }
 
 async function getReport(): Promise<RawReport | null> {
@@ -229,6 +231,7 @@ export async function getAdmobStats(days: number): Promise<AdmobStats | null> {
   return {
     days: n,
     currency: r.currency,
+    timeZone: r.timeZone,
     fetchedAt: r.fetchedAt,
     totals: {
       ...totals,

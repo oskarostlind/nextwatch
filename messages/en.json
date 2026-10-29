@@ -1706,7 +1706,12 @@
     "body": "The page couldn't be shown. This is usually caused by an app update — please try again.",
     "retry": "Try again",
     "reload": "Reload",
-    "updating": "Updating the app…"
+    "updating": "Updating the app…",
+    "serverTitle": "We are having some trouble",
+    "serverBody": "NextWatch can’t reach the server right now. It’s not your fault – your swipes and your list are safe.",
+    "retryIn": "Trying again in {seconds} s",
+    "retrying": "Trying again…",
+    "retryNow": "Try now"
   },
   "api": {
     "accountGone": "The account no longer exists.",
@@ -2069,5 +2074,12 @@
       "renewsYearly": "Your subscription renews automatically every year until you cancel.",
       "trial": "Your {days}-day free trial has started. You'll only be charged when it ends – cancel at least 24 hours before if you don't want to continue."
     }
+  },
+  "notFound": {
+    "metaTitle": "Page not found",
+    "title": "This scene was cut",
+    "body": "The page you’re looking for doesn’t exist. The link may be old or mistyped.",
+    "swipe": "Start swiping",
+    "home": "Go to home"
   }
 }

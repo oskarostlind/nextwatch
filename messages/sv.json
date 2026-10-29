@@ -1706,7 +1706,12 @@
     "body": "Sidan kunde inte visas. Det beror oftast på en uppdatering av appen — försök igen.",
     "retry": "Försök igen",
     "reload": "Ladda om",
-    "updating": "Uppdaterar appen…"
+    "updating": "Uppdaterar appen…",
+    "serverTitle": "Vi har lite strul just nu",
+    "serverBody": "NextWatch får inte kontakt med servern. Det är inte ditt fel – dina swipes och din lista ligger kvar.",
+    "retryIn": "Försöker igen om {seconds} s",
+    "retrying": "Försöker igen…",
+    "retryNow": "Försök nu"
   },
   "api": {
     "accountGone": "Kontot finns inte längre.",
@@ -2069,5 +2074,12 @@
       "renewsYearly": "Prenumerationen förnyas automatiskt varje år tills du säger upp den.",
       "trial": "Din gratis provperiod på {days} dagar har börjat. Du debiteras först när den tar slut – säg upp senast 24 timmar innan om du inte vill fortsätta."
     }
+  },
+  "notFound": {
+    "metaTitle": "Sidan finns inte",
+    "title": "Den här scenen klipptes bort",
+    "body": "Sidan du letar efter finns inte. Länken kan vara gammal eller felstavad.",
+    "swipe": "Börja swipa",
+    "home": "Till startsidan"
   }
 }

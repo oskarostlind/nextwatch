@@ -1,10 +1,13 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.nextwatch.app",
       "sha256_cert_fingerprints": [
+        "8C:13:6A:93:71:70:29:42:62:A9:14:BC:91:E0:87:CB:98:1B:02:1E:42:5F:79:88:B4:6B:93:5D:F4:59:D6:88",
         "A0:0E:76:A6:98:43:7A:DE:2B:80:48:46:33:A5:D4:51:BA:51:6E:3F:1C:98:2B:4E:F3:C4:51:3C:9C:4E:10:B2"
       ]
     }

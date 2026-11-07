@@ -115,7 +115,8 @@ export default async function RootLayout({
           <MetaAppEvents />
 
           {/* Nedladdningsrad för iPhone utanför Safari (Instagram/Facebook-
-              webbläsaren, Chrome, Firefox). Renderas först efter mount. */}
+              webbläsaren, Chrome, Firefox) och för Android (Google Play).
+              Renderas först efter mount. */}
           <IphoneAppBar />
           {/* Källspårning (första besöket) — se lib/acquisition.ts. */}
           <AcquisitionBeacon />

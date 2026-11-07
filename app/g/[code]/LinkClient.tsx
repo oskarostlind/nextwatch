@@ -24,7 +24,7 @@ import InstallNudge from "./InstallNudge";
 
 const GroupSwipe = dynamic(() => import("@/app/group/swipe/_legacy"), { ssr: false });
 
-type Props = { code: string; hostName: string | null; hostLikes: number; appStoreHref: string };
+type Props = { code: string; hostName: string | null; hostLikes: number; installCampaign: string };
 
 type JoinResp =
   | { ok: true; code: string; joined: boolean }
@@ -41,7 +41,7 @@ function platform(): "ios" | "android" | "web" {
   return "web";
 }
 
-export default function LinkClient({ code, hostName, hostLikes, appStoreHref }: Props) {
+export default function LinkClient({ code, hostName, hostLikes, installCampaign }: Props) {
   const t = useTranslations("invite");
   const [state, setState] = useState<"joining" | "ready" | "error">("joining");
   const [failure, setFailure] = useState<{ reason: string; message: string } | null>(null);
@@ -150,7 +150,7 @@ export default function LinkClient({ code, hostName, hostLikes, appStoreHref }: 
         <span className="text-[13px] font-bold text-cyan-400">{hello}</span>
         <h1 className="text-[22px] font-extrabold leading-tight tracking-tight">{t("link.title")}</h1>
       </header>
-      <InstallNudge visible={voted} href={appStoreHref} />
+      <InstallNudge visible={voted} campaign={installCampaign} />
       {state === "joining" ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
           <CardSkeleton />

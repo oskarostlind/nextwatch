@@ -8,6 +8,11 @@
 // och Facebook-appen (dit Meta-annonserna skickar folk) får ingenting. Den här
 // raden täcker det hålet.
 //
+// Sedan 2026-11-07 (appen live på Google Play) visas raden även för Android-
+// besökare i vanliga webbläsare, med Play-länk. Android har ingen smart
+// banner alls (Chromes installationsbanner gäller bara PWA), så där täcker
+// raden alla webbläsare — utom vår egen Android-app, förstås.
+//
 // Medvetet INTE en popup/modal: Google straffar "intrusive interstitials" på
 // mobil och guidesidorna är SEO-spåret. Raden är en låg, fast list längst ner,
 // går att stänga, och en lika hög spacer läggs sist i sidan så att inget
@@ -25,8 +30,8 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Inter } from "next/font/google";
-import { isNativeIos } from "@/lib/premiumPurchase";
-import { appStoreUrl } from "@/lib/seo";
+import { isNativeStoreApp } from "@/lib/premiumPurchase";
+import { appStoreUrl, playStoreUrl } from "@/lib/seo";
 
 // preload: false — raden visas bara för en bråkdel av besökarna, så
 // typsnittet ska inte förladdas på varje sidvisning (desktop inräknat).
@@ -58,55 +63,61 @@ const ALLOWED_ROUTES = [
  */
 const NON_SAFARI = /CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|DuckDuckGo|Instagram|FBAN|FBAV|FB_IAB|Snapchat|musical_ly|BytedanceWebview|LinkedInApp|Pinterest/;
 
-function shouldShow(): boolean {
-  const ua = navigator.userAgent;
-  // Bara iPhone/iPod — inte iPad (iPadOS 13+ utger sig dessutom för Mac), inte
-  // Android, inte desktop.
-  if (!/iPhone|iPod/.test(ua)) return false;
+type Store = "ios" | "android" | null;
 
-  // Inne i vår egen iOS-app (Capacitor laddar www.nextwatch.se). Två
-  // oberoende kontroller: Capacitor-bryggan, och WKWebView-handlern som
-  // Capacitor registrerar ("bridge"). Den här raden får aldrig synas i appen.
-  if (isNativeIos()) return false;
+function shouldShow(): Store {
+  const ua = navigator.userAgent;
+  // iPhone/iPod (inte iPad — iPadOS 13+ utger sig dessutom för Mac) eller
+  // Android-telefon/-surfplatta. Desktop får ingen rad.
+  const store: Store = /iPhone|iPod/.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : null;
+  if (!store) return null;
+
+  // Inne i vår egen app (Capacitor laddar www.nextwatch.se). Två oberoende
+  // kontroller: Capacitor-bryggan, och WKWebView-handlern som Capacitor
+  // registrerar på iOS ("bridge"). Den här raden får aldrig synas i apparna.
+  if (isNativeStoreApp()) return null;
   const w = window as unknown as {
     webkit?: { messageHandlers?: Record<string, unknown> };
     navigator: Navigator & { standalone?: boolean };
   };
-  if (w.webkit?.messageHandlers?.bridge) return false;
+  if (w.webkit?.messageHandlers?.bridge) return null;
 
   // Installerad som webbapp på hemskärmen.
   if (window.matchMedia?.("(display-mode: standalone)").matches || w.navigator.standalone === true) {
-    return false;
+    return null;
   }
 
   // Safari på iOS sköter smart bannern själv. En in-app-WebView som inte
   // listas ovan saknar normalt "Safari/"-token — den räknas som icke-Safari.
-  const isSafari = /Safari\//.test(ua) && !NON_SAFARI.test(ua);
-  if (isSafari) return false;
+  // På Android finns ingen smart banner, så raden visas i alla webbläsare.
+  if (store === "ios") {
+    const isSafari = /Safari\//.test(ua) && !NON_SAFARI.test(ua);
+    if (isSafari) return null;
+  }
 
   // Stängd inom de senaste 30 dagarna. Privata fönster kan kasta på
   // localStorage — då visas raden (värsta fall: den kommer tillbaka).
   try {
     const until = Number(window.localStorage.getItem(DISMISS_KEY) ?? 0);
-    if (until && Date.now() < until) return false;
+    if (until && Date.now() < until) return null;
   } catch {
     /* ignorera */
   }
-  return true;
+  return store;
 }
 
 export default function IphoneAppBar() {
   const t = useTranslations("appBar");
   const pathname = usePathname() ?? "/";
   const routeAllowed = ALLOWED_ROUTES.some((rx) => rx.test(pathname));
-  const [eligible, setEligible] = React.useState(false);
+  const [store, setStore] = React.useState<Store>(null);
   const [dismissed, setDismissed] = React.useState(false);
 
   React.useEffect(() => {
-    setEligible(shouldShow());
+    setStore(shouldShow());
   }, []);
 
-  if (!eligible || dismissed || !routeAllowed) return null;
+  if (!store || dismissed || !routeAllowed) return null;
 
   const close = () => {
     setDismissed(true);
@@ -154,7 +165,7 @@ export default function IphoneAppBar() {
           </div>
 
           <a
-            href={appStoreUrl(CAMPAIGN)}
+            href={store === "android" ? playStoreUrl(CAMPAIGN) : appStoreUrl(CAMPAIGN)}
             className="shrink-0 rounded-full bg-[#38DBE0] px-4 py-1.5 text-[14px] font-bold text-[#0B0B0C] transition active:opacity-80"
           >
             {t("get")}

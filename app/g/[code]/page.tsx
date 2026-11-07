@@ -21,7 +21,6 @@ import { getTranslations } from "next-intl/server";
 import prisma from "@/lib/prisma";
 import { getGroupCapacity } from "@/lib/groupLimits";
 import { inviterSummary, normalizeGroupCode } from "@/lib/referral";
-import { appStoreUrl } from "@/lib/seo";
 import { rateLimitAllow } from "@/lib/rateLimit";
 import LinkClient from "./LinkClient";
 import AppStoreLink from "./AppStoreLink";
@@ -91,7 +90,7 @@ async function Notice({ kind, max }: { kind: "invalid" | "full"; max?: number })
       >
         {t("invalid.cta")}
       </Link>
-      <AppStoreLink href={appStoreUrl("invite-link-notice")} label={t("invalid.app")} />
+      <AppStoreLink campaign="invite-link-notice" label={t("invalid.app")} />
     </main>
   );
 }
@@ -124,7 +123,7 @@ export default async function InviteLinkPage({ params }: Params) {
 
   return (
     <main className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col">
-      <LinkClient code={code} hostName={host.name} hostLikes={host.likes} appStoreHref={appStoreUrl("invite-link")} />
+      <LinkClient code={code} hostName={host.name} hostLikes={host.likes} installCampaign="invite-link" />
     </main>
   );
 }

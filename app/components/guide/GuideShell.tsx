@@ -40,7 +40,7 @@ export default function GuideShell({ children }: { children: React.ReactNode }) 
         <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
           <p className="text-sm leading-relaxed text-neutral-400">
             <span className="font-semibold text-white">NextWatch</span> är en gratis svensk app för
-            iPhone. Alla i sällskapet swipar samtidigt och appen visar bara det ni är överens om —
+            iPhone och Android. Alla i sällskapet swipar samtidigt och appen visar bara det ni är överens om —
             på streamingtjänsterna ni faktiskt har.
           </p>
           <div className="mt-5">

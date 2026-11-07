@@ -3,12 +3,12 @@
 // Lugn, stängbar ruta för vännen på webben: "Ladda ner NextWatch så sparas er
 // grupp". Ingen spärr, ingen modal — en låg rad ovanför leken som dyker upp
 // först efter första swipen (då har hen fått prova). Visas aldrig i våra appar
-// och aldrig på Android (Google Play är inte live än). Stängd = borta i 14 dagar.
+// (iPhone → App Store, Android → Google Play). Stängd = borta i 14 dagar.
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { funnel } from "@/lib/funnel";
-import { canShowAppStore } from "./AppStoreLink";
+import { canShowAppStore, storeHref } from "./AppStoreLink";
 
 const DISMISS_KEY = "nw_g_install_dismissed_until";
 const DISMISS_DAYS = 14;
@@ -21,16 +21,16 @@ function dismissedNow(): boolean {
   }
 }
 
-export default function InstallNudge({ visible, href }: { visible: boolean; href: string }) {
+export default function InstallNudge({ visible, campaign }: { visible: boolean; campaign: string }) {
   const t = useTranslations("invite");
-  const [eligible, setEligible] = useState(false);
+  const [href, setHref] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
 
   useEffect(() => {
-    setEligible(canShowAppStore() && !dismissedNow());
-  }, []);
+    setHref(canShowAppStore() && !dismissedNow() ? storeHref(campaign) : null);
+  }, [campaign]);
 
-  if (!visible || !eligible || closed) return null;
+  if (!visible || !href || closed) return null;
 
   function close() {
     setClosed(true);

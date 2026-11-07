@@ -1,19 +1,18 @@
 "use client";
 
-// App Store-länk som bara visas för webbbesökare som kan installera iOS-appen
-// (iPhone/iPad/desktop) — aldrig inne i våra appar och aldrig på Android
-// (Google Play är inte live än). Avgörs efter mount: userAgent och
-// Capacitor-bryggan finns inte under SSR.
+// Butikslänk som bara visas för webbbesökare — aldrig inne i våra appar.
+// iPhone/iPad/desktop får App Store, Android får Google Play (live sedan
+// 2026-11-07; dessförinnan fick Android ingen länk alls). Avgörs efter mount:
+// userAgent och Capacitor-bryggan finns inte under SSR.
 
 import { useEffect, useState } from "react";
 import { isNativeStoreApp } from "@/lib/premiumPurchase";
+import { appStoreUrl, playStoreUrl } from "@/lib/seo";
 import { funnel } from "@/lib/funnel";
 
 export function canShowAppStore(): boolean {
   try {
     if (isNativeStoreApp()) return false;
-    const ua = navigator.userAgent;
-    if (/Android/i.test(ua)) return false;
     // WKWebView-bryggan (iOS-appen) — dubbelkoll utöver Capacitor.
     const w = window as unknown as { webkit?: { messageHandlers?: Record<string, unknown> } };
     if (w.webkit?.messageHandlers?.bridge) return false;
@@ -23,10 +22,20 @@ export function canShowAppStore(): boolean {
   }
 }
 
-export default function AppStoreLink({ href, label }: { href: string; label: string }) {
-  const [show, setShow] = useState(false);
-  useEffect(() => setShow(canShowAppStore()), []);
-  if (!show) return null;
+/** Rätt butik för besökarens enhet. Bara på klienten (läser userAgent). */
+export function storeHref(campaign: string): string {
+  try {
+    if (/Android/i.test(navigator.userAgent)) return playStoreUrl(campaign);
+  } catch {
+    /* SSR */
+  }
+  return appStoreUrl(campaign);
+}
+
+export default function AppStoreLink({ campaign, label }: { campaign: string; label: string }) {
+  const [href, setHref] = useState<string | null>(null);
+  useEffect(() => setHref(canShowAppStore() ? storeHref(campaign) : null), [campaign]);
+  if (!href) return null;
   return (
     <a
       href={href}

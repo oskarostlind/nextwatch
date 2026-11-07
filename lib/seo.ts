@@ -39,6 +39,20 @@ export function appStoreUrl(campaign: string): string {
   return `https://apps.apple.com/se/app/nextwatch/id${APP_STORE_ID}?ct=${encodeURIComponent(campaign)}&pt=&mt=8`;
 }
 
+/** Paketnamnet i Google Play (samma som Capacitor-appens appId). */
+export const PLAY_PACKAGE_NAME = "com.nextwatch.app";
+
+/**
+ * Google Play-länk med kampanjkod (appen är live på Play sedan 2026-11-07).
+ * `referrer` följer med installationen och syns i Play Console under
+ * Statistik → Användarförvärv (utm_source/utm_campaign), så webbtrafiken
+ * kan mätas per sidtyp precis som App Store-länkens `ct`.
+ */
+export function playStoreUrl(campaign: string): string {
+  const referrer = `utm_source=nextwatch.se&utm_medium=web&utm_campaign=${campaign}`;
+  return `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE_NAME}&referrer=${encodeURIComponent(referrer)}`;
+}
+
 /** Sidor som är privata appytor — de ska aldrig indexeras. */
 export const PRIVATE_PATHS = [
   "/api/",

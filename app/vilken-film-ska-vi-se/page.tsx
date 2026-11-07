@@ -9,7 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OCCASIONS, COMPANIONS, COMBINATIONS, guidePath } from "@/lib/guides/content";
-import { appStoreUrl, SITE_URL } from "@/lib/seo";
+import { appStoreUrl, SITE_URL, playStoreUrl } from "@/lib/seo";
 import GuideShell from "@/app/components/guide/GuideShell";
 
 export const revalidate = 86400;
@@ -117,14 +117,22 @@ export default function HubPage() {
         <p className="text-lg font-semibold text-white">Eller hoppa över förhandlingen</p>
         <p className="mt-2 text-sm leading-relaxed text-neutral-300">
           NextWatch låter alla i sällskapet swipa samtidigt, utan att se varandras svar. Appen
-          visar bara titlar ni är överens om, filtrerat på era streamingtjänster. Gratis för iPhone.
+          visar bara titlar ni är överens om, filtrerat på era streamingtjänster. Gratis för iPhone och Android.
         </p>
-        <a
-          href={appStoreUrl("web-hub")}
-          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-200"
-        >
-          Ladda ner gratis i App Store
-        </a>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a
+            href={appStoreUrl("web-hub")}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-200"
+          >
+            Ladda ner gratis i App Store
+          </a>
+          <a
+            href={playStoreUrl("web-hub")}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+          >
+            Ladda ner gratis på Google Play
+          </a>
+        </div>
       </div>
 
       {GROUPS.map((group) => (

@@ -6,7 +6,7 @@ Klickbar prototyp (referens för utseende och beteende, läs markupen):
 (steglistan i `stepsData()` beskriver varje steg i text).
 
 ## Flödet för en NY enhet
-1. **Kallstart** – appen (iOS/Android) öppnar direkt på ett riktigt filmkort. Gästprofil skapas tyst. Ingen startsida, inget gäst/konto-val. "Har du konto? Logga in" som diskret länk. Webben: startsidan finns kvar för SEO, men huvudknappen går rakt in i leken (ingen spärr efter 4 demokort).
+1. **Kallstart** – appen (iOS/Android) öppnar direkt på ett riktigt filmkort. Gästprofil skapas tyst. Ingen startsida, inget gäst/konto-val. "Logga in" i toppraden bredvid avataren (sedan 2026-11-09 — som egen rad ovanför kortet, tillsammans med en tre-raders progress, krympte den kortet så baksidans text inte syntes; progressen är nu en rad). Webben: startsidan finns kvar för SEO, men huvudknappen går rakt in i leken (ingen spärr efter 4 demokort).
 2. **Leken lär sig** – efter 3 gilla en chip "N gillade – vi lär oss din smak"; progress "N av 10 – sedan väljer AI kvällens film".
 3. **Tjänster + ålder som ett kort i leken** (efter 5 swipes, inte en modal): 9 tjänster + åldersknappar (under 15 / 15–17 / 18+) på samma kort. Ersätter `ProviderPromptSheet` för nya enheter.
 4. **✦ AI väljer kvällens film** – vid 10 swipes öppnas Välj åt mig av sig själv med ett FÄRDIGT förslag (förberäknat, gratis, räknas inte mot kvoten). Ny futuristisk look (glasark, cyan/violett kant, synlig "tänker", svaret skrivs fram). Chips: Lättare / Kortare / Överraska mig. Knapp "Spara kvällens film".

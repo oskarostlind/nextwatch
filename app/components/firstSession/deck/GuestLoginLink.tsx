@@ -1,12 +1,16 @@
 "use client";
 
-// "Har du konto? Logga in" — diskret länk högst upp i leken för ALLA gäster
+// "Logga in" — diskret knapp i toppraden (bredvid avataren) för ALLA gäster
 // (inte bara nya enheter: efter utloggning i appen skapas en gäst tyst, och
 // utan länken fanns ingen synlig väg tillbaka till kontot).
 // Sedan kallstarten (docs/nya-flodet.md) visar appen aldrig startsidan, så den
 // här länken är vägen in för den som redan har ett konto (t.ex. efter en
 // ominstallation eller utloggning). Inloggning byter nw_uid, och då avslutar
 // leken första sessionen (syncFsOwner i ./fsDeck.ts).
+//
+// 2026-11-09: flyttad från en egen rad ovanför kortet ("Har du konto? Logga in",
+// ~30 px) in i toppraden — raden krympte kortet så att baksidans text inte
+// syntes. Renderar bara knappen; föräldern placerar den.
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -49,15 +53,14 @@ export default function GuestLoginLink() {
 
   return (
     <>
-      <div className="flex shrink-0 justify-center px-4 pt-1">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="rounded-full px-3 py-1 text-[12.5px] text-neutral-400 transition hover:text-neutral-200"
-        >
-          {t("haveAccount")} <span className="font-semibold text-neutral-100">{t("signIn")}</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`${t("haveAccount")} ${t("signIn")}`}
+        className="-mr-1 flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-1.5 text-[12px] font-semibold text-neutral-200 transition hover:text-white active:scale-95"
+      >
+        {t("signIn")}
+      </button>
       {open ? <LoginSheet open={open} onClose={() => setOpen(false)} /> : null}
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -1054,15 +1054,16 @@ export default function SwipePageClient({
             onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
           />
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center">
+          {/* "Logga in" för alla gäster (komponenten döljer sig själv för
+              konton). Bor i toppraden sedan 2026-11-09 — som egen rad tog den
+              ~30 px från kortet. Efter utloggning i appen skapas en gäst tyst,
+              så det här är den synliga vägen tillbaka (2026-10-16). */}
+          {mode === "individual" ? <GuestLoginLink /> : null}
           <ProfileAvatarButton me={me} />
         </div>
       </div>
 
-      {/* Alla gäster (komponenten döljer sig själv för konton). Förr bara nya
-          enheter — men efter utloggning i appen skapas en gäst tyst och då
-          fanns ingen synlig inloggning alls (2026-10-16). */}
-      {mode === "individual" ? <GuestLoginLink /> : null}
       {fsInDeck ? <FsProgress swipes={fs.swipes} likes={fs.likes.length} /> : null}
 
       <MatchOverlay
@@ -1697,6 +1698,34 @@ function Front({
   );
 }
 
+/**
+ * Baksidans scrollyta. Kortet ligger i en dragbar motion.div med touch-none, så
+ * utan det här går baksidan inte att scrolla på mobilen: framer-motion tar
+ * pekaren och kortet dras i stället. När innehållet faktiskt är högre än ytan
+ * stoppas pointerdown här (nativt, före framer-motions lyssnare på förfadern)
+ * och touch-pan-y släpper igenom vertikal scroll. Får allt plats beter sig
+ * ytan som förut — man kan swipa kortet var som helst.
+ */
+function BackScroll({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onDown = (e: PointerEvent) => {
+      if (el.scrollHeight > el.clientHeight + 1) e.stopPropagation();
+    };
+    el.addEventListener("pointerdown", onDown);
+    return () => el.removeEventListener("pointerdown", onDown);
+  }, []);
+  return (
+    // overscroll-contain: iOS studs-scroll ska stanna här och inte kedjas
+    // vidare till body när texten tar slut.
+    <div ref={ref} className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain">
+      {children}
+    </div>
+  );
+}
+
 function Back({
   card,
   onShare,
@@ -1722,7 +1751,7 @@ function Back({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-neutral-950">
-      <div className="relative h-32 shrink-0 overflow-hidden">
+      <div className="relative h-[clamp(5.5rem,24%,8rem)] shrink-0 overflow-hidden">
         {heroSrc ? (
           <Image
             src={heroSrc}
@@ -1758,8 +1787,13 @@ function Back({
         </div>
       </div>
 
+      {/* Allt mellan bilden och knapparna scrollar som EN yta (2026-11-09). Förr
+          var bara beskrivningen flex-1 — på ett lågt kort (litet skärm, eller
+          första sessionens progress-rad) krympte den till 0 px medan genrer,
+          "Därför" och tjänster behöll sin höjd, och texten syntes inte alls. */}
+      <BackScroll>
       {card.genres && card.genres.length > 0 ? (
-        <div className="flex shrink-0 flex-wrap gap-1.5 px-3 pt-2">
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2">
           {card.genres.slice(0, 5).map((g) => (
             <span
               key={g}
@@ -1772,7 +1806,7 @@ function Back({
       ) : null}
 
       {card.reasons && card.reasons.length > 0 ? (
-        <div className="mx-3 mt-2 shrink-0 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+        <div className="mx-3 mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-300/80">
             {t("whyThis")}
           </div>
@@ -1782,14 +1816,12 @@ function Back({
         </div>
       ) : null}
 
-      {/* overscroll-contain: iOS studs-scroll ska stanna i beskrivningen och inte
-          kedjas vidare till body när texten tar slut. */}
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
+      <div className="px-3 py-2 text-sm leading-relaxed text-neutral-200/90">
         {card.overview || t("noDescription")}
       </div>
 
       {card.providers !== undefined && providerGroups.length > 0 ? (
-        <div className="shrink-0 space-y-2 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-2 border-t border-white/5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
           {providerGroups.map(({ labelKey, list }) => (
             <div key={labelKey}>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-cyan-400/70">
@@ -1840,14 +1872,16 @@ function Back({
       ) : null}
 
       {paidOnly ? (
-        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] text-white/40">{tw("paidOnly")}</div>
+        <div className="px-3 pb-1 pt-1 text-[11px] text-white/40">{tw("paidOnly")}</div>
       ) : null}
 
       {isUpcoming ? (
-        <div className="shrink-0 px-3 pb-1 pt-1 text-[11px] leading-relaxed text-amber-300/70">
+        <div className="px-3 pb-1 pt-1 text-[11px] leading-relaxed text-amber-300/70">
           {t("upcoming.followHint")}
         </div>
       ) : null}
+
+      </BackScroll>
 
       {/* pb-14 med dockInset: "Kolla nu"/trailer/tipsa får inte hamna under
           swipe-knapparna, som grenslar kortets underkant. */}

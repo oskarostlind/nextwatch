@@ -410,7 +410,7 @@ function MediaFilterPill({
     <div
       role="radiogroup"
       aria-label={t("filterAria")}
-      className="absolute left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/10 bg-white/[0.06] p-0.5"
+      className="flex items-center gap-0.5 rounded-full border border-white/10 bg-white/[0.06] p-0.5"
     >
       {options.map((o) => (
         <button
@@ -1041,20 +1041,24 @@ export default function SwipePageClient({
           styr förslagen (tjänster, genrer) finns — och sedan 2026-10-13 är den
           vägen dit på mobilen, eftersom Profil inte längre är en flik. I gruppläge
           styr gruppens egna inställningar, så pillen visas bara solo.
-          Pillen är absolut centrerad, så sidornas bredd påverkar inte den. */}
-      <div className="relative flex shrink-0 items-center px-3 pt-2">
+          Grid 1fr·auto·1fr: pillen är centrerad så länge sidorna får plats, och
+          trycks hellre åt sidan än överlappar när högersidan är bred (gäster har
+          "Logga in" + avatar — på 360 px krockade den med en absolut pill). */}
+      <div className="relative grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-1.5 px-3 pt-2">
         {/* 40×40-platsen till vänster: tom ruta reserverar bredden även när
             knappen inte renderas (utrullningen avstängd), så raden inte hoppar. */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center">
           <PickLauncher />
         </div>
-        {mode === "individual" && (
+        {mode === "individual" ? (
           <MediaFilterPill
             value={mediaFilter}
             onChange={(next) => void saveSwipeSettings({ mediaFilter: next })}
           />
+        ) : (
+          <div />
         )}
-        <div className="ml-auto flex items-center">
+        <div className="flex items-center justify-self-end">
           {/* "Logga in" för alla gäster (komponenten döljer sig själv för
               konton). Bor i toppraden sedan 2026-11-09 — som egen rad tog den
               ~30 px från kortet. Efter utloggning i appen skapas en gäst tyst,
